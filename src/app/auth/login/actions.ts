@@ -10,7 +10,7 @@ function value(formData: FormData, key: string) {
 export async function signIn(formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email: value(formData, "email"), password: value(formData, "password") });
-  if (error) redirect(`/auth/login?error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
   redirect("/cockpit");
 }
 
@@ -22,6 +22,6 @@ export async function signUp(formData: FormData) {
     password: value(formData, "password"),
     options: { emailRedirectTo: `${value(formData, "origin")}/auth/confirm` },
   });
-  if (error) redirect(`/auth/login?error=${encodeURIComponent(error.message)}`);
-  redirect(`/auth/login?message=${encodeURIComponent(`Bestätigungslink wurde an ${email} gesendet.`)}`);
+  if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
+  redirect(`/login?message=${encodeURIComponent(`Bestätigungslink wurde an ${email} gesendet.`)}`);
 }

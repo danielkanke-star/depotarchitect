@@ -25,7 +25,7 @@ export async function getUserId() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
-  if (!userId) redirect("/auth/login");
+  if (!userId) redirect("/login");
   return userId;
 }
 
