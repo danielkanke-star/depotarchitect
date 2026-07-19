@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+:root {
+  --background: #07100e;
+  --foreground: #f4f7f5;
+  --panel: #10201b;
+  --sidebar: #07110e;
+  --border: #244139;
+  --muted: #8fa69e;
+  --accent: #79e6b4;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-sidebar: var(--sidebar);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--background); }
+body { min-height: 100vh; background: var(--background); color: var(--foreground); }
+button, input, select, textarea { font: inherit; }
+input, select, textarea { width: 100%; border: 1px solid var(--border); border-radius: .75rem; background: #091511; color: var(--foreground); padding: .7rem .8rem; outline: none; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(121 230 180 / 10%); }
+label { display: grid; gap: .4rem; color: var(--muted); font-size: .78rem; }
+button { cursor: pointer; }
