@@ -1,12 +1,9 @@
-import { redirect } from "next/navigation";
+import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { Portfolio, PortfolioCategory, PortfolioSettings, Position } from "@/lib/database.types";
 
 export async function getUserId() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  const userId = data?.claims?.sub;
-  if (!userId) redirect("/login");
+  const { userId } = await requireUser();
   return userId;
 }
 
@@ -15,7 +12,7 @@ export async function getOrCreatePortfolio() {
   await getUserId();
 
   const { data: portfolioId, error: initializationError } = await supabase.rpc("initialize_default_portfolio");
-  if (initializationError) throw new Error(initializationError.message);
+  if (initializationError) throw new Error("Das Portfolio konnte nicht initialisiert werden.");
 
   const { data: portfolio, error: portfolioError } = await supabase
     .from("portfolios")
@@ -23,7 +20,7 @@ export async function getOrCreatePortfolio() {
     .eq("id", portfolioId)
     .single();
 
-  if (portfolioError) throw new Error(portfolioError.message);
+  if (portfolioError) throw new Error("Das Portfolio konnte nicht geladen werden.");
 
   return portfolio;
 }
@@ -43,9 +40,9 @@ export async function getPortfolioData(): Promise<{
     supabase.from("positions").select("*").eq("portfolio_id", portfolio.id).neq("status", "closed").order("market_value", { ascending: false }),
   ]);
 
-  if (settingsError) throw new Error(settingsError.message);
-  if (categoriesError) throw new Error(categoriesError.message);
-  if (positionsError) throw new Error(positionsError.message);
+  if (settingsError) throw new Error("Die Einstellungen konnten nicht geladen werden.");
+  if (categoriesError) throw new Error("Die Kategorien konnten nicht geladen werden.");
+  if (positionsError) throw new Error("Die Positionen konnten nicht geladen werden.");
 
   return { portfolio, settings, categories, positions };
 }

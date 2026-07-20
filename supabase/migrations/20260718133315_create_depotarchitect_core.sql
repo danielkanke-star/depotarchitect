@@ -62,7 +62,6 @@ create table if not exists public.positions (
 
 create index if not exists portfolios_user_id_idx on public.portfolios(user_id);
 create index if not exists portfolio_categories_user_id_idx on public.portfolio_categories(user_id);
-create index if not exists portfolio_settings_user_id_idx on public.portfolio_settings(user_id);
 create index if not exists positions_user_id_idx on public.positions(user_id);
 create index if not exists positions_portfolio_id_idx on public.positions(portfolio_id);
 create index if not exists positions_category_id_idx on public.positions(category_id);
