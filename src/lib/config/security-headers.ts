@@ -11,10 +11,11 @@ function supabaseOrigins(configuredUrl: string | undefined) {
 }
 
 export function buildSecurityHeaders(env: SecurityEnvironment) {
-  const isProduction = env.VERCEL_ENV === "production";
+  const isProductionDeployment = env.VERCEL_ENV === "production";
+  const isProductionBuild = env.NODE_ENV === "production";
   const contentSecurityPolicy = [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
+    `script-src 'self' 'unsafe-inline'${isProductionBuild ? "" : " 'unsafe-eval'"}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
@@ -23,7 +24,7 @@ export function buildSecurityHeaders(env: SecurityEnvironment) {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    ...(isProduction ? ["upgrade-insecure-requests"] : []),
+    ...(isProductionDeployment ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
 
   return [
@@ -32,7 +33,7 @@ export function buildSecurityHeaders(env: SecurityEnvironment) {
     { key: "X-Content-Type-Options", value: "nosniff" },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
     { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()" },
-    ...(isProduction
+    ...(isProductionDeployment
       ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" }]
       : []),
   ];

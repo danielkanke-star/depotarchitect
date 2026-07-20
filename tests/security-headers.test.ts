@@ -15,4 +15,11 @@ describe("security headers", () => {
     expect(buildSecurityHeaders({ VERCEL_ENV: "preview" }).some((header) => header.key === "Strict-Transport-Security")).toBe(false);
     expect(buildSecurityHeaders({ VERCEL_ENV: "production" }).some((header) => header.key === "Strict-Transport-Security")).toBe(true);
   });
+
+  it("allows unsafe-eval only for local development builds", () => {
+    const previewBuild = buildSecurityHeaders({ VERCEL_ENV: "preview", NODE_ENV: "production" });
+    const localDevelopment = buildSecurityHeaders({ NODE_ENV: "development" });
+    expect(previewBuild.find((header) => header.key === "Content-Security-Policy")?.value).not.toContain("'unsafe-eval'");
+    expect(localDevelopment.find((header) => header.key === "Content-Security-Policy")?.value).toContain("'unsafe-eval'");
+  });
 });
