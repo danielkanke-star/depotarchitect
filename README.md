@@ -24,7 +24,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 
-Alle weiteren Variablen sind in `.env.example` dokumentiert. Production bleibt bis zur rechtlichen und betrieblichen Freigabe im Registrierungsmodus `closed`. Der Modus muss zusätzlich bewusst in `public.app_runtime_settings` synchronisiert werden.
+Alle weiteren Variablen sind in `.env.example` dokumentiert. Production bleibt bis zur rechtlichen und betrieblichen Freigabe im Registrierungsmodus `closed` und im öffentlichen Modus `private`. Der Registrierungsmodus muss zusätzlich bewusst in `public.app_runtime_settings` synchronisiert werden. `PUBLIC_SITE_MODE=preview` ist ausschließlich für kontrollierte Preview-Abnahmen vorgesehen; `public` wird bei fehlender rechtlicher Freigabe serverseitig auf `private` zurückgestuft.
 
 ## Aktueller Stand
 
@@ -50,6 +50,6 @@ Nur lokal oder in einer geschützten Serverumgebung ausführen. `SUPABASE_SECRET
 npm run grant-admin -- --email konkrete-adresse@example.com
 ```
 
-Anschließend muss dieser Benutzer unter `/mfa/setup` Supabase TOTP einrichten. Datenschutz- und Betriebsarbeitsstände liegen unter `docs/privacy/`.
+Das Skript prüft den vorhandenen Supabase-Auth-Benutzer und vergibt Rolle plus Audit-Eintrag atomar. Eine Wiederholung erzeugt weder eine zweite Rolle noch einen zweiten Vergabe-Audit. Anschließend muss dieser Benutzer unter `/mfa/setup` Supabase TOTP einrichten. Datenschutz- und Betriebsarbeitsstände liegen unter `docs/privacy/`.
 
 Die anfänglichen Positionen sind Beispieldaten und werden später durch Google-Sheets- oder Brokerdaten ersetzt.

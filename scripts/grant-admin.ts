@@ -36,22 +36,16 @@ async function main() {
   }
   if (!userId) throw new Error("No Auth user exists for the supplied email address.");
 
-  const { error: roleError } = await supabase.from("user_roles").upsert(
-    { user_id: userId, role: "admin" },
-    { onConflict: "user_id,role", ignoreDuplicates: true },
-  );
-  if (roleError) throw new Error("The admin role could not be granted.");
-
   const requestId = randomUUID();
-  const { error: auditError } = await supabase.from("admin_audit_log").insert({
-    admin_user_id: userId,
-    action: "role.grant.bootstrap",
-    target_user_id: userId,
-    target_type: "user_role",
-    request_id: requestId,
-    metadata: { role: "admin", source: "scripts/grant-admin.ts" },
+  const { data: granted, error: grantError } = await supabase.rpc("bootstrap_grant_admin", {
+    target_user: userId,
+    audit_request_id: requestId,
   });
-  if (auditError) throw new Error("The role was granted, but the audit entry failed. Inspect the database before retrying.");
+  if (grantError) throw new Error("The atomic admin role grant failed.");
+  if (!granted) {
+    console.info("Admin role was already present; no duplicate role or audit entry was created.");
+    return;
+  }
 
   console.info(`Admin role granted. User ID: ${userId}. Audit request ID: ${requestId}.`);
   console.info("The administrator must enroll Supabase TOTP before opening /admin.");

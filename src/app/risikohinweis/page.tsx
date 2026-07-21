@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { LegalPage, LegalSection } from "@/components/legal-page";
 
-export const metadata: Metadata = { title: "Risikohinweis | DepotArchitect" };
+export const metadata: Metadata = {
+  title: "Risikohinweis | DepotArchitect",
+  robots: { index: false, follow: false },
+};
 
 export default function RiskNoticePage() {
   return (

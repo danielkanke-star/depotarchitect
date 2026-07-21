@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import {
   AlertTriangle,
   ArrowRight,
@@ -10,6 +11,7 @@ import {
   Target,
 } from "lucide-react";
 import { PublicPage } from "@/components/public-shell";
+import { getPublicSiteConfig } from "@/lib/config/public-site";
 import { getRegistrationConfig } from "@/lib/config/registration";
 
 const features = [
@@ -21,7 +23,28 @@ const features = [
   [AlertTriangle, "Warnsystem", "Objektive Schwellenüberschreitungen sichtbar machen."],
 ] as const;
 
+export function generateMetadata(): Metadata {
+  const publicSite = getPublicSiteConfig();
+
+  return {
+    title: "DepotArchitect",
+    description: publicSite.effectiveMode === "private"
+      ? "Private Entwicklungs- und Testumgebung"
+      : "Portfolio-, Margin- und Risikomanagement",
+    robots: {
+      index: publicSite.indexable,
+      follow: publicSite.indexable,
+    },
+  };
+}
+
 export default function Home() {
+  const publicSite = getPublicSiteConfig();
+
+  if (publicSite.effectiveMode === "private") {
+    return <PrivateBetaHome />;
+  }
+
   const registration = getRegistrationConfig();
   const registrationLabel = registration.effectiveMode === "open"
     ? "Registrieren"
@@ -101,6 +124,28 @@ export default function Home() {
         </section>
       </main>
     </PublicPage>
+  );
+}
+
+function PrivateBetaHome() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_70%_10%,#16382d_0,transparent_35%)] px-4 py-12">
+      <section className="w-full max-w-xl rounded-3xl border border-border bg-panel/95 p-8 text-center shadow-2xl sm:p-12">
+        <div className="text-xl font-semibold tracking-tight">
+          Depot<span className="text-accent">Architect</span>
+        </div>
+        <div className="mx-auto mt-6 inline-flex rounded-full border border-border px-3 py-1 text-xs text-muted">
+          Private Beta
+        </div>
+        <h1 className="mt-5 text-3xl font-semibold tracking-tight">Private Entwicklungs- und Testumgebung</h1>
+        <p className="mt-4 leading-7 text-muted">
+          DepotArchitect ist noch nicht öffentlich freigeschaltet. Bestehende Testkonten können sich weiterhin anmelden.
+        </p>
+        <Link href="/login" className="mt-8 inline-flex rounded-xl bg-accent px-5 py-3 font-medium text-[#062218]">
+          Anmelden
+        </Link>
+      </section>
+    </main>
   );
 }
 

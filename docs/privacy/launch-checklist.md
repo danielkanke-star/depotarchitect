@@ -1,6 +1,6 @@
 # Launch-Checkliste für eine spätere Kundenöffnung
 
-Der Meilenstein 1.1 eröffnet **keine** öffentliche Registrierung. Production bleibt `REGISTRATION_MODE=closed`. Die Texte sind Arbeitsunterlagen und keine Rechtsberatung.
+Der Meilenstein 1.1 eröffnet **keine** öffentliche Registrierung und keine öffentliche Marketingseite. Production bleibt `REGISTRATION_MODE=closed` und `PUBLIC_SITE_MODE=private`. Die Texte sind Arbeitsunterlagen und keine Rechtsberatung.
 
 ## Harte technische Freigabebedingungen
 
@@ -8,8 +8,10 @@ Der Meilenstein 1.1 eröffnet **keine** öffentliche Registrierung. Production b
 - [ ] Kontakt-E-Mail gesetzt.
 - [ ] `LEGAL_PRIVACY_APPROVED=true`, `LEGAL_IMPRINT_APPROVED=true` und `LEGAL_PROCESSORS_REVIEWED=true` erst nach tatsächlicher Freigabe gesetzt.
 - [ ] App-Variable und `app_runtime_settings.registration_mode` bewusst und übereinstimmend auf `invite` oder `open` gestellt.
+- [ ] `PUBLIC_SITE_MODE=public` erst nach vollständiger rechtlicher Freigabe setzen; der serverseitige Guard muss dann `public` tatsächlich erlauben.
 - [ ] Einladungsablauf beziehungsweise offene Registrierung einschließlich E-Mail-Bestätigung getestet.
 - [ ] Adminrolle ausschließlich über dokumentiertes Verfahren vergeben und TOTP/AAL2 getestet.
+- [ ] Supabase-Tarif auf Pro oder höher umstellen und Leaked Password Protection unter Authentication → Providers → Email → Password Security aktivieren; Advisor-Warnung anschließend erneut prüfen.
 - [ ] Sämtliche RLS-Cross-User-Tests und Supabase Security Advisors ohne ungeklärte kritische Hinweise.
 - [ ] Preview-Build, CSP, Cookies, Server Actions, Eigendatenexport und Löschantrag getestet.
 - [ ] Vercel-Deploymentmetadaten bestätigen `fra1` statt `iad1`.

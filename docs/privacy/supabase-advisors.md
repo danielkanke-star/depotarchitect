@@ -10,15 +10,39 @@ Prüfstand nach Meilenstein-1.1-Migration. Arbeitsunterlage.
 
 ## Bewusst verbleibend
 
-Der Security Advisor meldet ausführbare `SECURITY DEFINER`-Funktionen als Warnung. Diese RPCs sind für das aktuelle Supabase-/Next.js-Modell absichtlich erreichbar, aber auf einen engen Zweck begrenzt:
+Der Security Advisor meldet ausführbare `SECURITY DEFINER`-Funktionen als Warnung. Jede Funktion verwendet `SET search_path = ''`, qualifizierte Tabellenbezüge und explizit entzogene Standardrechte. Die direkte RPC-Abnahme umfasst `anon`, normalen Benutzer, Admin mit AAL1 und Admin mit AAL2.
 
-- Selbstabfragen/-aktionen verwenden ausschließlich `auth.uid()`.
-- Admin-RPCs prüfen intern Rolle und JWT-AAL2 und brechen sonst mit `42501` ab.
-- `validate_invitation` liefert nur einen booleschen Wert für die Kombination aus normalisierter E-Mail, 256-Bit-Token-Hash, Modus, Ablauf und Nichtverwendung; es gibt keine Einladung aus.
-- Jede `SECURITY DEFINER`-Funktion verwendet einen festen leeren `search_path`; Tabellen werden qualifiziert referenziert und Ausführungsrechte sind explizit begrenzt.
+| Funktion | Ausführbar durch | Interne Prüfung | Minimale Rückgabe |
+| --- | --- | --- | --- |
+| `is_admin` | `authenticated` | `auth.uid()` und vorhandene Adminrolle | Boolean |
+| `is_admin_aal2` | `authenticated` | `is_admin()` und JWT-Claim `aal2` | Boolean |
+| `get_my_role` | `authenticated` | ausschließlich Rollen zu `auth.uid()` | einzelne Rolle |
+| `get_my_account_status` | `authenticated` | ausschließlich Profil zu `auth.uid()` | einzelner Status |
+| `touch_user_profile` | `authenticated` | ausschließlich `auth.uid()`, zeitlich gedrosselt | keine Daten |
+| `request_account_deletion` | `authenticated` | ausschließlich `auth.uid()` | eigene Anfrage-ID |
+| `validate_invitation` | nur `anon` | Modus `invite`, normalisierte E-Mail, exakt 64-stelliger hexadezimaler SHA-256-Hash, Ablauf und Nichtverwendung müssen gemeinsam stimmen | ausschließlich Boolean |
+| `get_admin_summary` | `authenticated` | Adminrolle und JWT-AAL2 | ausschließlich aggregierte Zähler |
+| `get_admin_user_directory` | `authenticated` | Adminrolle und JWT-AAL2 | fest definierte Konto-Metadaten, keine Depotfelder |
+| `get_admin_user_detail` | `authenticated` | Adminrolle und JWT-AAL2; Öffnen wird auditiert | fest definierte Konto- und Löschanfrage-Metadaten |
+| `admin_set_account_status` | `authenticated` | Adminrolle und JWT-AAL2; zulässiger Status; kein Selbstsperren | keine Daten; Änderung und Audit atomar |
+| `admin_set_role` | `authenticated` | Adminrolle und JWT-AAL2; nur Adminrolle; letzte Adminrolle geschützt | keine Daten; Änderung und Audit atomar |
+| `admin_process_deletion_request` | `authenticated` | Adminrolle und JWT-AAL2; nur offene Anfrage | keine Daten; Status und Audit atomar |
+| `bootstrap_grant_admin` | ausschließlich `service_role` | vorhandener Auth-Benutzer; eindeutige Rolle | Boolean; Rollenvergabe und Audit atomar |
+| `handle_new_user` | kein API-Rollenrecht, nur Auth-Trigger | Registrierungsmodus und gegebenenfalls einmalige Einladung | Triggerdatensatz |
+
+`anon` besitzt kein Ausführungsrecht auf Admin-RPCs. Normale Benutzer und AAL1-Admins erreichen zwar die für `authenticated` freigegebenen Endpunkte, werden aber innerhalb der Funktion vor jedem Lesen oder Schreiben mit SQLSTATE `42501` abgewiesen. Dadurch entsteht auch bei einem direkten REST-RPC-Aufruf keine Umgehung.
 
 Diese Warnungen sind daher geprüft, nicht ignoriert. Eine spätere Härtung kann interne Definer-Funktionen in ein nicht exponiertes Schema verschieben und schmale Invoker-Wrapper einsetzen.
 
-Der Auth-Advisor meldet außerdem deaktivierte „Leaked Password Protection“. Diese Supabase-Auth-Projekteinstellung ist vor Kundenstart zu aktivieren und anschließend mit Registrierung und Passwortänderung zu testen: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
+Der Auth-Advisor meldet außerdem deaktivierte „Leaked Password Protection“. Das Projekt verwendet derzeit den Free-Tarif; die Funktion ist laut Supabase erst ab Pro verfügbar. Der PR ist deshalb nicht mergebereit.
+
+Exakter manueller Schritt:
+
+1. Supabase Dashboard → Organization Settings → Billing/Subscription → auf Pro oder höher wechseln.
+2. Projekt `jpvbqcfppsalpgvmpdnm` → Authentication → Providers → Email.
+3. Im Bereich Password Security „Leaked Password Protection“ aktivieren und speichern.
+4. Security Advisor erneut ausführen und normale Anmeldung, falsches Passwort, Passwortregeln, geschlossene Registrierung und Betreiberkonto prüfen.
+
+Dokumentation: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
 
 Hinweise zu unbenutzten Indizes sind bei neu angelegten Tabellen erwartbar und nach realer Nutzung erneut zu bewerten; sicherheits- und FK-relevante Indizes werden nicht vorschnell entfernt.

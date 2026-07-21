@@ -66,13 +66,110 @@ begin
   exception when insufficient_privilege then
     null;
   end;
+  begin
+    perform public.get_admin_user_directory();
+    raise exception 'Normal user unexpectedly accessed admin directory';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.get_admin_user_detail(
+      '22222222-2222-4222-8222-222222222222',
+      'aaaaaaaa-0000-4000-8000-000000000020'
+    );
+    raise exception 'Normal user unexpectedly accessed admin detail';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.admin_set_account_status(
+      '22222222-2222-4222-8222-222222222222', 'suspended',
+      'aaaaaaaa-0000-4000-8000-000000000021'
+    );
+    raise exception 'Normal user unexpectedly changed account status';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.admin_set_role(
+      '22222222-2222-4222-8222-222222222222', 'admin', true,
+      'aaaaaaaa-0000-4000-8000-000000000022'
+    );
+    raise exception 'Normal user unexpectedly changed a role';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.admin_process_deletion_request(
+      'aaaaaaaa-0000-4000-8000-000000000099',
+      'aaaaaaaa-0000-4000-8000-000000000023'
+    );
+    raise exception 'Normal user unexpectedly processed a deletion request';
+  exception when insufficient_privilege then
+    null;
+  end;
 end;
 $$;
 
 reset role;
 
-insert into public.user_roles (user_id, role)
-values ('11111111-1111-4111-8111-111111111111', 'admin');
+do $$
+begin
+  if exists (
+    select 1
+    from pg_catalog.pg_proc as functions
+    join pg_catalog.pg_namespace as schemas on schemas.oid = functions.pronamespace
+    where schemas.nspname = 'public'
+      and functions.proname in (
+        'get_admin_summary',
+        'get_admin_user_directory',
+        'get_admin_user_detail',
+        'admin_set_account_status',
+        'admin_set_role',
+        'admin_process_deletion_request',
+        'bootstrap_grant_admin'
+      )
+      and pg_catalog.has_function_privilege('anon', functions.oid, 'execute')
+  ) then
+    raise exception 'Anon can execute an admin RPC';
+  end if;
+end;
+$$;
+
+set local role service_role;
+do $$
+declare
+  first_grant boolean;
+  repeated_grant boolean;
+begin
+  select public.bootstrap_grant_admin(
+    '11111111-1111-4111-8111-111111111111',
+    'aaaaaaaa-0000-4000-8000-000000000010'
+  ) into first_grant;
+  select public.bootstrap_grant_admin(
+    '11111111-1111-4111-8111-111111111111',
+    'aaaaaaaa-0000-4000-8000-000000000011'
+  ) into repeated_grant;
+
+  if not first_grant or repeated_grant then
+    raise exception 'Atomic bootstrap role grant is not idempotent';
+  end if;
+  if (select count(*) from public.user_roles where role = 'admin') <> 1 then
+    raise exception 'Atomic bootstrap did not create exactly one admin role';
+  end if;
+  if not exists (
+    select 1 from public.admin_audit_log
+    where request_id = 'aaaaaaaa-0000-4000-8000-000000000010'
+      and action = 'role.grant.bootstrap'
+  ) or exists (
+    select 1 from public.admin_audit_log
+    where request_id = 'aaaaaaaa-0000-4000-8000-000000000011'
+  ) then
+    raise exception 'Atomic bootstrap audit contract failed';
+  end if;
+end;
+$$;
+reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal1"}', true);
@@ -81,6 +178,48 @@ begin
   begin
     perform public.get_admin_summary();
     raise exception 'AAL1 admin unexpectedly accessed admin summary';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.get_admin_user_directory();
+    raise exception 'AAL1 admin unexpectedly accessed admin directory';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.get_admin_user_detail(
+      '22222222-2222-4222-8222-222222222222',
+      'aaaaaaaa-0000-4000-8000-000000000012'
+    );
+    raise exception 'AAL1 admin unexpectedly accessed admin detail';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.admin_set_account_status(
+      '22222222-2222-4222-8222-222222222222', 'suspended',
+      'aaaaaaaa-0000-4000-8000-000000000013'
+    );
+    raise exception 'AAL1 admin unexpectedly changed account status';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.admin_set_role(
+      '22222222-2222-4222-8222-222222222222', 'admin', true,
+      'aaaaaaaa-0000-4000-8000-000000000014'
+    );
+    raise exception 'AAL1 admin unexpectedly changed a role';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.admin_process_deletion_request(
+      'aaaaaaaa-0000-4000-8000-000000000099',
+      'aaaaaaaa-0000-4000-8000-000000000015'
+    );
+    raise exception 'AAL1 admin unexpectedly processed a deletion request';
   exception when insufficient_privilege then
     null;
   end;
@@ -96,6 +235,17 @@ begin
   if pg_catalog.pg_get_function_result('public.get_admin_user_directory()'::regprocedure)
     ~* '(ticker|instrument_name|market_value|net_liquidity|risk_amount)' then
     raise exception 'Admin directory exposes portfolio data';
+  end if;
+  perform public.get_admin_user_detail(
+    '22222222-2222-4222-8222-222222222222',
+    'aaaaaaaa-0000-4000-8000-000000000016'
+  );
+  if not exists (
+    select 1 from public.admin_audit_log
+    where request_id = 'aaaaaaaa-0000-4000-8000-000000000016'
+      and action = 'user_detail.open'
+  ) then
+    raise exception 'Opening admin user detail was not audited';
   end if;
 end;
 $$;
@@ -165,6 +315,15 @@ begin
   end if;
   if public.validate_invitation('expired@example.invalid', repeat('b', 64)) then
     raise exception 'Expired invitation accepted';
+  end if;
+  if public.validate_invitation('invite@example.invalid', repeat('a', 63)) then
+    raise exception 'Short invitation hash accepted';
+  end if;
+  if public.validate_invitation('invite@example.invalid', repeat('g', 64)) then
+    raise exception 'Non-hex invitation hash accepted';
+  end if;
+  if public.validate_invitation('wrong@example.invalid', repeat('a', 64)) then
+    raise exception 'Invitation accepted without matching email and token hash';
   end if;
 end;
 $$;

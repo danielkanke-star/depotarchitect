@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { LegalPage, LegalSection } from "@/components/legal-page";
 import { getLegalConfig, legalValue } from "@/lib/config/legal";
 
-export const metadata: Metadata = { title: "Datenschutz | DepotArchitect" };
+export const metadata: Metadata = {
+  title: "Datenschutz | DepotArchitect",
+  robots: { index: false, follow: false },
+};
 
 export default function DatenschutzPage() {
   const legal = getLegalConfig();

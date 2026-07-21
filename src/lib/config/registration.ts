@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getLegalLaunchReadiness } from "@/lib/config/legal";
+import { resolvePublicSiteConfig } from "@/lib/config/public-site";
 import {
   getRegistrationDecision,
   parseRegistrationMode,
@@ -13,10 +14,12 @@ export function resolveRegistrationConfig(env: RegistrationEnvironment = process
   const requestedMode = parseRegistrationMode(env.REGISTRATION_MODE);
   const isProduction = env.VERCEL_ENV === "production";
   const readiness = getLegalLaunchReadiness(env);
+  const publicSite = resolvePublicSiteConfig(env);
   const decision = getRegistrationDecision({
     requestedMode,
     isProduction,
     legalLaunchReady: readiness.ready,
+    publicSiteMode: publicSite.effectiveMode,
   });
 
   return {
@@ -30,7 +33,7 @@ export function getRegistrationConfig() {
 
   if (config.launchGuardActive) {
     console.warn(
-      "[launch-check] Registration forced to closed because legal launch requirements are incomplete.",
+      "[launch-check] Registration forced to closed by the server-side launch guard.",
     );
   }
 

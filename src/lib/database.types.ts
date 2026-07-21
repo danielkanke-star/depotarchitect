@@ -140,6 +140,10 @@ export type Database = {
         Args: { target_user: string; target_role: AppRole; assign_role: boolean; audit_request_id: string };
         Returns: undefined;
       };
+      bootstrap_grant_admin: {
+        Args: { target_user: string; audit_request_id: string };
+        Returns: boolean;
+      };
       admin_process_deletion_request: {
         Args: { deletion_request: string; audit_request_id: string };
         Returns: undefined;

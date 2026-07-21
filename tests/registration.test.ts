@@ -12,6 +12,8 @@ describe("registration launch guard", () => {
       requestedMode: "open",
       effectiveMode: "closed",
       launchGuardActive: true,
+      legalLaunchGuardActive: true,
+      privateSiteGuardActive: false,
     });
   });
 
@@ -22,5 +24,16 @@ describe("registration launch guard", () => {
   it("allows invite/open only when the Production legal guard is ready", () => {
     expect(getRegistrationDecision({ requestedMode: "invite", isProduction: true, legalLaunchReady: true }).effectiveMode).toBe("invite");
     expect(getRegistrationDecision({ requestedMode: "open", isProduction: false, legalLaunchReady: false }).effectiveMode).toBe("open");
+  });
+
+  it("forces registration closed whenever the public site is private", () => {
+    const result = getRegistrationDecision({
+      requestedMode: "open",
+      isProduction: false,
+      legalLaunchReady: true,
+      publicSiteMode: "private",
+    });
+    expect(result.effectiveMode).toBe("closed");
+    expect(result.privateSiteGuardActive).toBe(true);
   });
 });

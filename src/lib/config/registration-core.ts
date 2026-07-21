@@ -10,16 +10,22 @@ export function getRegistrationDecision({
   requestedMode,
   isProduction,
   legalLaunchReady,
+  publicSiteMode = "preview",
 }: {
   requestedMode: RegistrationMode;
   isProduction: boolean;
   legalLaunchReady: boolean;
+  publicSiteMode?: "private" | "preview" | "public";
 }) {
-  const launchGuardActive = isProduction && requestedMode !== "closed" && !legalLaunchReady;
+  const legalLaunchGuardActive = isProduction && requestedMode !== "closed" && !legalLaunchReady;
+  const privateSiteGuardActive = publicSiteMode === "private" && requestedMode !== "closed";
+  const launchGuardActive = legalLaunchGuardActive || privateSiteGuardActive;
 
   return {
     requestedMode,
     effectiveMode: launchGuardActive ? "closed" as const : requestedMode,
     launchGuardActive,
+    legalLaunchGuardActive,
+    privateSiteGuardActive,
   };
 }
