@@ -6,11 +6,14 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const next = searchParams.get("next") ?? "/cockpit";
+  const requestedNext = searchParams.get("next") ?? "/cockpit";
+  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//")
+    ? requestedNext
+    : "/cockpit";
   if (tokenHash && type) {
     const supabase = await createClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     if (!error) return NextResponse.redirect(new URL(next, request.url));
   }
-  return NextResponse.redirect(new URL("/login?error=Bestätigung fehlgeschlagen", request.url));
+  return NextResponse.redirect(new URL("/login?error=confirmation_failed", request.url));
 }

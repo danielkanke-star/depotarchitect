@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Gauge, Menu, Settings, ShieldCheck, Table2, X } from "lucide-react";
+import { BarChart3, Gauge, Menu, Settings, ShieldCheck, Table2, UserRoundCog, X } from "lucide-react";
 import { useState } from "react";
 
 const items = [
@@ -11,18 +11,22 @@ const items = [
   { href: "/risiko", label: "Risiko", icon: ShieldCheck },
   { href: "/performance", label: "Performance", icon: BarChart3 },
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },
+  { href: "/konto/datenschutz", label: "Konto & Datenschutz", icon: ShieldCheck },
 ];
 
-export function AppShell({ children, profile }: { children: React.ReactNode; profile: string }) {
+export function AppShell({ children, profile, isAdmin = false }: { children: React.ReactNode; profile: string; isAdmin?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const navigationItems = isAdmin
+    ? [...items, { href: "/admin", label: "Administration", icon: UserRoundCog }]
+    : items;
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_75%_0%,#14352a_0,transparent_30%)] bg-background text-foreground lg:grid lg:grid-cols-[240px_1fr]">
       <aside className="hidden min-h-screen border-r border-border/80 bg-sidebar/80 p-5 lg:block">
         <Brand />
         <nav className="mt-10 space-y-1.5">
-          {items.map(({ href, label, icon: Icon }) => (
+          {navigationItems.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${pathname === href ? "border border-border bg-panel text-foreground" : "text-muted hover:bg-panel/50 hover:text-foreground"}`}>
               <Icon size={17} />{label}
             </Link>
@@ -44,7 +48,7 @@ export function AppShell({ children, profile }: { children: React.ReactNode; pro
             <aside className="h-full w-72 bg-sidebar p-5" onClick={(event) => event.stopPropagation()}>
               <div className="flex items-center justify-between"><Brand /><button onClick={() => setOpen(false)}><X size={20} /></button></div>
               <nav className="mt-8 space-y-2">
-                {items.map(({ href, label, icon: Icon }) => (
+                {navigationItems.map(({ href, label, icon: Icon }) => (
                   <Link key={href} href={href} onClick={() => setOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${pathname === href ? "bg-panel text-foreground" : "text-muted"}`}><Icon size={17} />{label}</Link>
                 ))}
               </nav>

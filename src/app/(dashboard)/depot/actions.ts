@@ -32,7 +32,7 @@ export async function savePosition(formData: FormData) {
   };
 
   const result = id ? await supabase.from("positions").update(payload).eq("id", id) : await supabase.from("positions").insert(payload);
-  if (result.error) throw new Error(result.error.message);
+  if (result.error) throw new Error("Die Position konnte nicht gespeichert werden.");
   revalidatePath("/depot");
   revalidatePath("/cockpit");
   redirect("/depot");
@@ -42,7 +42,7 @@ export async function deletePosition(formData: FormData) {
   const supabase = await createClient();
   const id = text(formData, "id");
   const { error } = await supabase.from("positions").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("Die Position konnte nicht gelöscht werden.");
   revalidatePath("/depot");
   revalidatePath("/cockpit");
 }
