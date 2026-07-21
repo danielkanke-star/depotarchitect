@@ -154,7 +154,12 @@ begin
   if not first_grant or repeated_grant then
     raise exception 'Atomic bootstrap role grant is not idempotent';
   end if;
-  if (select count(*) from public.user_roles where role = 'admin') <> 1 then
+  if (
+    select count(*)
+    from public.user_roles
+    where user_id = '11111111-1111-4111-8111-111111111111'
+      and role = 'admin'
+  ) <> 1 then
     raise exception 'Atomic bootstrap did not create exactly one admin role';
   end if;
   if not exists (

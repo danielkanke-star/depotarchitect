@@ -34,7 +34,7 @@ Der Security Advisor meldet ausführbare `SECURITY DEFINER`-Funktionen als Warnu
 
 Diese Warnungen sind daher geprüft, nicht ignoriert. Eine spätere Härtung kann interne Definer-Funktionen in ein nicht exponiertes Schema verschieben und schmale Invoker-Wrapper einsetzen.
 
-Der Auth-Advisor meldet außerdem deaktivierte „Leaked Password Protection“. Das Projekt verwendet derzeit den Free-Tarif; die Funktion ist laut Supabase erst ab Pro verfügbar. Der PR ist deshalb nicht mergebereit.
+Der Auth-Advisor meldet außerdem deaktivierte „Leaked Password Protection“. Das Projekt verwendet derzeit den Free-Tarif; die Funktion ist laut Supabase erst ab Pro verfügbar. Für den privaten Entwicklungsbetrieb mit `REGISTRATION_MODE=closed` und `PUBLIC_SITE_MODE=private` wird dieser Hinweis bewusst nicht als Merge-Blocker behandelt. Er bleibt jedoch ein zwingender Launch-Blocker: Vor jeder Aktivierung von `REGISTRATION_MODE=invite` oder `REGISTRATION_MODE=open` muss die Funktion aktiviert, erneut geprüft und dokumentiert werden.
 
 Exakter manueller Schritt:
 
