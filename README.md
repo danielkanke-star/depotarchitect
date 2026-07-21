@@ -44,7 +44,7 @@ DepotArchitect zeigt Depotstruktur, Hebel, Margin, Positionsgrößen, Risiko bis
 
 ## Einmalig einen Admin vergeben
 
-Nur lokal oder in einer geschützten Serverumgebung ausführen. `SUPABASE_SECRET_KEY` niemals committen oder als `NEXT_PUBLIC_*` konfigurieren.
+Nur lokal oder in einer geschützten Serverumgebung ausführen. Das Skript lädt `.env.local` über Next.js. `SUPABASE_SECRET_KEY` niemals committen oder als `NEXT_PUBLIC_*` konfigurieren.
 
 ```bash
 npm run grant-admin -- --email konkrete-adresse@example.com

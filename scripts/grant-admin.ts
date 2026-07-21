@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { loadEnvConfig } from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../src/lib/database.types";
+
+loadEnvConfig(process.cwd());
 
 function requiredEnvironment(name: string) {
   const value = process.env[name]?.trim();
