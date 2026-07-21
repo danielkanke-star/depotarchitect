@@ -1,6 +1,6 @@
 # Supabase Security- und Performance-Advisors
 
-Prüfstand nach Meilenstein-1.1-Migration. Arbeitsunterlage.
+Prüfstand nach Meilenstein-2A-Migration am 21. Juli 2026. Arbeitsunterlage.
 
 ## Behoben
 
@@ -20,6 +20,7 @@ Der Security Advisor meldet ausführbare `SECURITY DEFINER`-Funktionen als Warnu
 | `get_my_account_status` | `authenticated` | ausschließlich Profil zu `auth.uid()` | einzelner Status |
 | `touch_user_profile` | `authenticated` | ausschließlich `auth.uid()`, zeitlich gedrosselt | keine Daten |
 | `request_account_deletion` | `authenticated` | ausschließlich `auth.uid()` | eigene Anfrage-ID |
+| `replace_portfolio_snapshot` | `authenticated` | `auth.uid()`, Eigentum des Zielportfolios, vollständige normalisierte Nutzlast, Zähler und Kategorien | Import-ID und ausschließlich aggregierte Importzähler; Bestandsersatz und Historie atomar |
 | `validate_invitation` | nur `anon` | Modus `invite`, normalisierte E-Mail, exakt 64-stelliger hexadezimaler SHA-256-Hash, Ablauf und Nichtverwendung müssen gemeinsam stimmen | ausschließlich Boolean |
 | `get_admin_summary` | `authenticated` | Adminrolle und JWT-AAL2 | ausschließlich aggregierte Zähler |
 | `get_admin_user_directory` | `authenticated` | Adminrolle und JWT-AAL2 | fest definierte Konto-Metadaten, keine Depotfelder |
@@ -45,4 +46,12 @@ Exakter manueller Schritt:
 
 Dokumentation: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
 
-Hinweise zu unbenutzten Indizes sind bei neu angelegten Tabellen erwartbar und nach realer Nutzung erneut zu bewerten; sicherheits- und FK-relevante Indizes werden nicht vorschnell entfernt.
+Der Performance Advisor meldet derzeit ausschließlich INFO-Hinweise zu noch unbenutzten Indizes:
+
+- `positions_sector_idx`
+- `account_deletion_requests_status_idx`
+- `portfolio_imports_portfolio_imported_at_idx`
+- `positions_source_import_id_idx`
+- `positions_external_position_id_idx`
+
+Die drei neuen Importindizes sind vor dem ersten realen Import erwartungsgemäß noch unbenutzt. Hinweise zu unbenutzten Indizes werden nach realer Nutzung erneut bewertet; sicherheits-, Historien- und FK-relevante Indizes werden nicht vorschnell entfernt.

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Gauge, Menu, Settings, ShieldCheck, Table2, UserRoundCog, X } from "lucide-react";
+import { BarChart3, FileUp, Gauge, Menu, Settings, ShieldCheck, Table2, UserRoundCog, X } from "lucide-react";
 import { useState } from "react";
 
 const items = [
   { href: "/cockpit", label: "Cockpit", icon: Gauge },
   { href: "/depot", label: "Depot", icon: Table2 },
+  { href: "/import", label: "Datenimport", icon: FileUp },
   { href: "/risiko", label: "Risiko", icon: ShieldCheck },
   { href: "/performance", label: "Performance", icon: BarChart3 },
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },

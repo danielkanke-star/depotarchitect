@@ -6,6 +6,7 @@ Arbeitsunterlage, nicht anwaltlich oder datenschutzrechtlich geprüft.
 | --- | --- | --- | --- | --- |
 | Kontoregistrierung und Anmeldung | Konto bereitstellen und schützen | E-Mail, Auth-Metadaten, technisch notwendige Cookies | Next.js, Supabase Auth | `RECHTLICH ZU ERGÄNZEN`; `AUFBEWAHRUNGSFRIST VOR KUNDENSTART FESTZULEGEN` |
 | Depot- und Risikodarstellung | Vom Benutzer eingegebene Struktur und neutrale Kennzahlen darstellen | Portfolios, Positionen, Limits, Einstellungen | Vercel Functions, Supabase PostgreSQL | Vertragserfüllung vor Start konkret festlegen; Frist offen |
+| CSV-Snapshot-Import | Vom Benutzer geprüften aktuellen Depotbestand übernehmen | normalisierte Positionen; Importmetadaten ohne Rohdatei | Browser, Vercel Function `fra1`, Supabase PostgreSQL | Vertragserfüllung vor Start konkret festlegen; Frist offen |
 | Rechtliche Nachweise | Dokumentversionen nachvollziehen | Benutzer-ID, Dokumenttyp/-version, Zeitpunkt | Supabase PostgreSQL | Rechtsgrundlage und Frist vor Start festlegen |
 | Administration | Kontostatus und Löschanfragen sicher bearbeiten | E-Mail, Status, Zeitpunkte, aggregierte Anzahlen | Geschützter Adminbereich, Supabase | Berechtigung/Vertrag und Frist vor Start festlegen |
 | Sicherheitsprotokoll | Administrative Eingriffe nachvollziehen | Admin-ID, Aktion, Ziel-ID, Request-ID, nicht sensible Metadaten | Supabase PostgreSQL | Berechtigtes Interesse prüfen; Frist offen |

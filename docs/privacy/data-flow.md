@@ -1,6 +1,6 @@
 # Datenfluss – technischer Arbeitsstand
 
-Stand: Meilenstein 1.1. Dieses Dokument ist eine technische Arbeitsunterlage und keine Rechtsberatung.
+Stand: Meilenstein 2A. Dieses Dokument ist eine technische Arbeitsunterlage und keine Rechtsberatung.
 
 ## Systemgrenzen
 
@@ -10,6 +10,7 @@ Stand: Meilenstein 1.1. Dieses Dokument ist eine technische Arbeitsunterlage und
 4. Portfolios, Kategorien, Positionen, Einstellungen, Profile, rechtliche Kenntnisnahmen und Löschanfragen liegen in Supabase PostgreSQL in `eu-central-1`.
 5. Vercel Functions sind über `vercel.json` auf `fra1` begrenzt. Die tatsächliche Region ist nach jedem Preview-Deployment in den Metadaten zu prüfen.
 6. Das lokale Skript `scripts/grant-admin.ts` nutzt nur bei bewusster Ausführung einen serverseitigen Supabase Secret Key. Dieser Schlüssel wird nicht an den Browser übertragen und nicht committed.
+7. CSV-Snapshots werden im Browser eingelesen und normalisiert. Die Rohdatei wird nicht hochgeladen oder dauerhaft gespeichert. Erst die bestätigten normalisierten Positionen gelangen über eine Server Action zur transaktionalen Datenbankfunktion.
 
 ## Datenkategorien
 
@@ -19,6 +20,7 @@ Stand: Meilenstein 1.1. Dieses Dokument ist eine technische Arbeitsunterlage und
 - Risikodaten: Hebel-, Margin-, Konzentrations- und Risiko-bis-Stop-Kennzahlen sowie Warnschwellen.
 - Nachweise: Dokumenttyp, Dokumentversion und Zeitpunkt einer Kenntnisnahme beziehungsweise Annahme.
 - Betriebsdaten: nicht sensible Admin-Aktionen mit Request-ID; Vercel-/Supabase-Infrastrukturprotokolle im Umfang des jeweiligen Dienstes.
+- Importmetadaten: Dateiname, Quelle, Zeitpunkte, Zeilenzähler, Status und nicht sensible Parser-Metadaten; keine CSV-Rohzeilen.
 
 ## Bewusste Datenminimierung
 
