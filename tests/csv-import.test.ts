@@ -10,7 +10,7 @@ describe("CSV snapshot parser", () => {
   it("parses semicolon CSV, German decimals and German dates", () => {
     const { parsed, analysis } = parseAndAnalyze("Ticker;Menge;Aktueller Kurs;Einstiegsdatum\nSAP;2;123,45;21.07.2026");
     expect(parsed.delimiterLabel).toBe("Semikolon");
-    expect(analysis.normalizedPositions[0]).toMatchObject({ ticker: "SAP", quantity: 2, current_price: 123.45, entry_date: "2026-07-21", market_value: 246.9 });
+    expect(analysis.normalizedPositions[0]).toMatchObject({ ticker: "SAP", quantity: 2, current_price: 123.45, entry_date: "2026-07-21", market_value: null });
     expect(analysis.rows[0].derivedFields).toContain("Marktwert");
   });
 

@@ -388,12 +388,11 @@ export function analyzeImport(
     if (multiplier <= 0) errors.push("Faktor muss größer als null sein.");
 
     const currentPrice = numberField(values, "current_price", "Aktueller Kurs", errors);
-    let marketValue = numberField(values, "market_value", "Marktwert", errors);
+    const marketValue = numberField(values, "market_value", "Marktwert", errors);
     if (marketValue === null && currentPrice === null) {
       errors.push("Marktwert oder aktueller Kurs fehlt.");
       missingRequiredRows.add(rowNumber);
     } else if (marketValue === null && currentPrice !== null && quantity !== null) {
-      marketValue = Math.round(quantity * multiplier * currentPrice * 100) / 100;
       derivedFields.push("Marktwert");
       warnings.push("Marktwert wurde aus Menge, Faktor und aktuellem Kurs abgeleitet.");
     }

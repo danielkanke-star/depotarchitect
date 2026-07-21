@@ -7,7 +7,9 @@ import { getPortfolioData } from "@/lib/portfolio";
 export default async function CockpitPage() {
   const { portfolio, settings, categories, positions, latestImport } = await getPortfolioData();
   const marketValue = positions.reduce((sum, position) => sum + Number(position.market_value), 0);
-  const leverage = portfolio.net_liquidity ? marketValue / Number(portfolio.net_liquidity) : null;
+  const netLiquidity = portfolio.net_liquidity === null ? null : Number(portfolio.net_liquidity);
+  const hasNetLiquidity = netLiquidity !== null && netLiquidity > 0;
+  const leverage = hasNetLiquidity ? marketValue / netLiquidity : null;
   const incompletePositions = positions.filter((position) => position.risk_amount === null || position.margin_requirement === null).length;
   const categoryMap = new Map(categories.map((category) => [category.id, category.name]));
   const top = positions.slice(0, 6);
@@ -27,7 +29,7 @@ export default async function CockpitPage() {
         <Alert icon={<CheckCircle2 size={17} />} title="Depotstruktur erkannt" text={`${positions.length} Positionen in ${categories.length} Kategorien.`} tone="good" />
       </div></Card>
       <Card><div className="mb-4 flex items-center justify-between"><h2 className="font-medium">Kompakte Depotübersicht</h2><Link href="/depot" className="flex items-center gap-1 text-xs text-accent">Alle Positionen <ArrowRight size={14} /></Link></div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Ticker</th><th>Kategorie</th><th>Marktwert</th><th>NetLiq-Anteil</th><th>Status</th></tr></thead><tbody>{top.map((position) => <tr key={position.id} className="border-t border-border/60"><td className="py-3 font-medium">{position.ticker}</td><td className="text-muted">{position.category_id ? categoryMap.get(position.category_id) : "–"}</td><td>{eur.format(Number(position.market_value))}</td><td>{pct(Number(position.market_value) / Number(portfolio.net_liquidity) * 100)}</td><td><Badge tone={position.status === "high" ? "warn" : position.status === "danger" ? "danger" : "good"}>{position.status}</Badge></td></tr>)}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Ticker</th><th>Kategorie</th><th>Marktwert</th><th>NetLiq-Anteil</th><th>Status</th></tr></thead><tbody>{top.map((position) => <tr key={position.id} className="border-t border-border/60"><td className="py-3 font-medium">{position.ticker}</td><td className="text-muted">{position.category_id ? categoryMap.get(position.category_id) : "–"}</td><td>{eur.format(Number(position.market_value))}</td><td>{hasNetLiquidity ? pct(Number(position.market_value) / netLiquidity * 100) : <span className="text-muted">Daten fehlen</span>}</td><td><Badge tone={position.status === "high" ? "warn" : position.status === "danger" ? "danger" : "good"}>{position.status}</Badge></td></tr>)}</tbody></table></div>
       </Card>
     </div>
   </>;
