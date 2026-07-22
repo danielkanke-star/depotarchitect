@@ -96,7 +96,7 @@ export async function replacePortfolioSnapshot(input: SnapshotImportInput): Prom
 
   return {
     ok: true,
-    message: "Der CSV-Snapshot wurde vollständig übernommen.",
+    message: "Die benutzerdefinierte CSV wurde vollständig übernommen.",
     importId: typeof result.import_id === "string" ? result.import_id : undefined,
     replacedPositionCount: Number(result.replaced_position_count ?? 0),
     insertedPositionCount: Number(result.inserted_position_count ?? 0),

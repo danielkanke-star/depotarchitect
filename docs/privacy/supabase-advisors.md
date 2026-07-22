@@ -1,6 +1,6 @@
 # Supabase Security- und Performance-Advisors
 
-Prüfstand nach Meilenstein-2A-Migration am 21. Juli 2026. Arbeitsunterlage.
+Prüfstand nach der brokerneutralen Meilenstein-2A-Ergänzung am 22. Juli 2026. Arbeitsunterlage.
 
 ## Behoben
 
@@ -50,8 +50,7 @@ Der Performance Advisor meldet derzeit ausschließlich INFO-Hinweise zu noch unb
 
 - `positions_sector_idx`
 - `account_deletion_requests_status_idx`
-- `portfolio_imports_portfolio_imported_at_idx`
 - `positions_source_import_id_idx`
 - `positions_external_position_id_idx`
 
-Die drei neuen Importindizes sind vor dem ersten realen Import erwartungsgemäß noch unbenutzt. Hinweise zu unbenutzten Indizes werden nach realer Nutzung erneut bewertet; sicherheits-, Historien- und FK-relevante Indizes werden nicht vorschnell entfernt.
+Die beiden noch gemeldeten neuen Importindizes sind vor dem ersten dauerhaften Import erwartungsgemäß unbenutzt. Der Advisor meldet den Index für die chronologische Importhistorie nach den Preview-Abnahmen nicht mehr. Hinweise zu unbenutzten Indizes werden nach realer Nutzung erneut bewertet; sicherheits-, Historien- und FK-relevante Indizes werden nicht vorschnell entfernt.

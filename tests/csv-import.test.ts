@@ -6,7 +6,7 @@ function parseAndAnalyze(csv: string, mapping?: ColumnMapping) {
   return { parsed, analysis: analyzeImport(parsed, mapping ?? parsed.mapping, ["Kerninvestment", "Momentumtrade", "taktische Beimischung", "Hedge"]) };
 }
 
-describe("CSV snapshot parser", () => {
+describe("broker-neutral custom CSV fallback parser", () => {
   it("parses semicolon CSV, German decimals and German dates", () => {
     const { parsed, analysis } = parseAndAnalyze("Ticker;Menge;Aktueller Kurs;Einstiegsdatum\nSAP;2;123,45;21.07.2026");
     expect(parsed.delimiterLabel).toBe("Semikolon");

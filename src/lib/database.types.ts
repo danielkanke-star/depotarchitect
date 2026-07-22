@@ -48,7 +48,7 @@ export type Database = {
         margin_requirement: number | null; margin_percent: number | null; sector: string | null;
         entry_date: string | null; status: string; notes: string | null;
         external_position_id: string | null; option_type: string | null; strike_price: number | null;
-        expiration_date: string | null; source_type: "demo" | "manual" | "csv";
+        expiration_date: string | null; source_type: "demo" | "manual" | "csv" | "custom_csv";
         source_import_id: string | null; imported_at: string | null;
         created_at: string; updated_at: string;
       }, {
@@ -59,17 +59,17 @@ export type Database = {
         margin_requirement?: number | null; margin_percent?: number | null; sector?: string | null;
         entry_date?: string | null; status?: string; notes?: string | null;
         external_position_id?: string | null; option_type?: string | null; strike_price?: number | null;
-        expiration_date?: string | null; source_type?: "demo" | "manual" | "csv";
+        expiration_date?: string | null; source_type?: "demo" | "manual" | "csv" | "custom_csv";
         source_import_id?: string | null; imported_at?: string | null;
         created_at?: string; updated_at?: string;
       }>;
       portfolio_imports: Table<{
-        id: string; user_id: string; portfolio_id: string; source_type: "csv";
+        id: string; user_id: string; portfolio_id: string; source_type: "csv" | "custom_csv";
         original_filename: string; imported_at: string; total_rows: number; valid_rows: number;
         warning_rows: number; rejected_rows: number; import_status: "processing" | "completed" | "failed";
         replaced_position_count: number; inserted_position_count: number; metadata: Json; created_at: string;
       }, {
-        id?: string; user_id: string; portfolio_id: string; source_type?: "csv";
+        id?: string; user_id: string; portfolio_id: string; source_type?: "csv" | "custom_csv";
         original_filename: string; imported_at?: string; total_rows: number; valid_rows: number;
         warning_rows: number; rejected_rows: number; import_status: "processing" | "completed" | "failed";
         replaced_position_count?: number; inserted_position_count?: number; metadata?: Json; created_at?: string;

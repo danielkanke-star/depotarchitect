@@ -129,11 +129,11 @@ export function CsvImporter({ currentPositionCount, categoryNames, imports }: Pr
     <Card>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 font-medium"><FileSpreadsheet size={18} className="text-accent" />CSV-Snapshot auswählen</div>
-          <p className="mt-2 max-w-3xl text-sm text-muted">Die Rohdatei wird ausschließlich in diesem Browser eingelesen. An den Server gehen erst die normalisierten, von Ihnen geprüften Positionen; die CSV-Datei wird weder in Vercel noch in Supabase Storage gespeichert.</p>
+          <div className="flex items-center gap-2 font-medium"><FileSpreadsheet size={18} className="text-accent" />Benutzerdefinierte CSV auswählen</div>
+          <p className="mt-2 max-w-3xl text-sm text-muted">Optionaler manueller Dateiimport. Die spätere automatische Brokeranbindung ist hiervon getrennt. Die Rohdatei wird ausschließlich in diesem Browser eingelesen und nicht dauerhaft gespeichert.</p>
         </div>
         <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 font-medium text-[#062218]">
-          <Upload size={17} /> CSV auswählen
+          <Upload size={17} /> Benutzerdefinierte CSV auswählen
           <input className="sr-only" type="file" accept=".csv,text/csv,text/tab-separated-values" onChange={(event) => void selectFile(event.target.files?.[0])} />
         </label>
       </div>
@@ -201,7 +201,7 @@ export function CsvImporter({ currentPositionCount, categoryNames, imports }: Pr
     <Card>
       <h2 className="font-medium">Importhistorie</h2>
       <p className="mt-1 text-sm text-muted">Gespeichert werden nur Metadaten und Zähler, keine CSV-Rohzeilen.</p>
-      {imports.length === 0 ? <div className="mt-4 rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">Noch kein CSV-Import vorhanden.</div> : <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Datum</th><th>Dateiname</th><th>Quelle</th><th>Zeilen</th><th>Gültig</th><th>Warnungen</th><th>Abgelehnt</th><th>Status</th></tr></thead><tbody>{imports.map((entry) => <tr key={entry.id} className="border-t border-border/60"><td className="py-3">{new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.imported_at))}</td><td>{entry.original_filename}</td><td>CSV</td><td>{entry.total_rows}</td><td>{entry.valid_rows}</td><td>{entry.warning_rows}</td><td>{entry.rejected_rows}</td><td><Badge tone={entry.import_status === "completed" ? "good" : entry.import_status === "failed" ? "danger" : "warn"}>{entry.import_status}</Badge></td></tr>)}</tbody></table></div>}
+      {imports.length === 0 ? <div className="mt-4 rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">Noch kein benutzerdefinierter CSV-Import vorhanden.</div> : <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Datum</th><th>Dateiname</th><th>Quelle</th><th>Zeilen</th><th>Gültig</th><th>Warnungen</th><th>Abgelehnt</th><th>Status</th></tr></thead><tbody>{imports.map((entry) => <tr key={entry.id} className="border-t border-border/60"><td className="py-3">{new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.imported_at))}</td><td>{entry.original_filename}</td><td>Benutzerdefinierte CSV</td><td>{entry.total_rows}</td><td>{entry.valid_rows}</td><td>{entry.warning_rows}</td><td>{entry.rejected_rows}</td><td><Badge tone={entry.import_status === "completed" ? "good" : entry.import_status === "failed" ? "danger" : "warn"}>{entry.import_status}</Badge></td></tr>)}</tbody></table></div>}
     </Card>
   </div>;
 }

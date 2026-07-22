@@ -10,7 +10,7 @@ Stand: Meilenstein 2A. Dieses Dokument ist eine technische Arbeitsunterlage und 
 4. Portfolios, Kategorien, Positionen, Einstellungen, Profile, rechtliche Kenntnisnahmen und Löschanfragen liegen in Supabase PostgreSQL in `eu-central-1`.
 5. Vercel Functions sind über `vercel.json` auf `fra1` begrenzt. Die tatsächliche Region ist nach jedem Preview-Deployment in den Metadaten zu prüfen.
 6. Das lokale Skript `scripts/grant-admin.ts` nutzt nur bei bewusster Ausführung einen serverseitigen Supabase Secret Key. Dieser Schlüssel wird nicht an den Browser übertragen und nicht committed.
-7. CSV-Snapshots werden im Browser eingelesen und normalisiert. Die Rohdatei wird nicht hochgeladen oder dauerhaft gespeichert. Erst die bestätigten normalisierten Positionen gelangen über eine Server Action zur transaktionalen Datenbankfunktion.
+7. Benutzerdefinierte CSV-Dateien werden als optionaler manueller Fallback im Browser eingelesen und normalisiert. Die Rohdatei wird nicht hochgeladen oder dauerhaft gespeichert. Erst die bestätigten normalisierten Positionen gelangen über eine Server Action zur transaktionalen Datenbankfunktion. Eine spätere automatische Brokeranbindung ist hiervon getrennt.
 
 ## Datenkategorien
 

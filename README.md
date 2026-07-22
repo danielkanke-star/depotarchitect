@@ -52,4 +52,4 @@ npm run grant-admin -- --email konkrete-adresse@example.com
 
 Das Skript prüft den vorhandenen Supabase-Auth-Benutzer und vergibt Rolle plus Audit-Eintrag atomar. Eine Wiederholung erzeugt weder eine zweite Rolle noch einen zweiten Vergabe-Audit. Anschließend muss dieser Benutzer unter `/mfa/setup` Supabase TOTP einrichten. Datenschutz- und Betriebsarbeitsstände liegen unter `docs/privacy/`.
 
-Die anfänglichen Positionen sind Beispieldaten und werden später durch Google-Sheets- oder Brokerdaten ersetzt.
+Die anfänglichen Positionen sind Beispieldaten. Als spätere primäre Datenquelle ist eine gesonderte automatische Brokeranbindung vorgesehen; die benutzerdefinierte CSV bleibt ein optionaler manueller Fallback.

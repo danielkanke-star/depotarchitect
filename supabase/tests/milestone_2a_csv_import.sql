@@ -74,6 +74,30 @@ begin
   ) then
     raise exception 'Import history contains a raw CSV or depot-content column';
   end if;
+
+  if not exists (
+    select 1
+    from pg_catalog.pg_constraint
+    where conrelid = 'public.positions'::regclass
+      and conname = 'positions_source_type_check'
+      and pg_catalog.pg_get_constraintdef(oid) like '%demo%'
+      and pg_catalog.pg_get_constraintdef(oid) like '%manual%'
+      and pg_catalog.pg_get_constraintdef(oid) like '%''csv''%'
+      and pg_catalog.pg_get_constraintdef(oid) like '%custom_csv%'
+  ) then
+    raise exception 'Position source constraint does not preserve legacy csv and custom_csv';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_catalog.pg_constraint
+    where conrelid = 'public.portfolio_imports'::regclass
+      and conname = 'portfolio_imports_source_type_check'
+      and pg_catalog.pg_get_constraintdef(oid) like '%''csv''%'
+      and pg_catalog.pg_get_constraintdef(oid) like '%custom_csv%'
+  ) then
+    raise exception 'Import source constraint does not preserve legacy csv and custom_csv';
+  end if;
 end;
 $$;
 
@@ -147,14 +171,17 @@ begin
   if (select count(*) from public.positions where status = 'closed' and ticker = 'ARCHIVE') <> 1 then
     raise exception 'Snapshot removed a closed historical position';
   end if;
-  if (select count(*) from public.positions where source_type = 'csv' and source_import_id is not null and imported_at is not null) <> 2 then
-    raise exception 'CSV provenance is incomplete';
+  if (select count(*) from public.positions where source_type = 'custom_csv' and source_import_id is not null and imported_at is not null) <> 2 then
+    raise exception 'Custom CSV provenance is incomplete';
   end if;
   if (select market_value from public.positions where ticker = 'SAP') <> 200 then
     raise exception 'Server-side market value derivation failed';
   end if;
   if (select count(*) from public.portfolio_imports) <> 1 then
     raise exception 'Own import history was not recorded exactly once';
+  end if;
+  if (select count(*) from public.portfolio_imports where source_type = 'custom_csv') <> 1 then
+    raise exception 'New import history was not normalized to custom_csv';
   end if;
   if exists (
     select 1 from public.portfolio_imports
@@ -168,6 +195,45 @@ begin
       and name = 'Sondersituationen'
   ) then
     raise exception 'Confirmed new category was not created';
+  end if;
+end;
+$$;
+
+select public.replace_portfolio_snapshot(
+  '2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'synthetic-reimport.csv',
+  '[
+    {
+      "ticker":"SAP",
+      "instrument_name":"SAP SE reimport",
+      "category_name":"Kerninvestment",
+      "status":"active",
+      "direction":"long",
+      "instrument_type":"stock",
+      "quantity":3,
+      "multiplier":1,
+      "current_price":105,
+      "market_value":315
+    }
+  ]'::jsonb,
+  array[]::text[],
+  1, 0, 0,
+  '{"delimiter":"Komma","encoding":"UTF-8","header_detected":true}'::jsonb
+);
+
+do $$
+begin
+  if (select count(*) from public.positions where status <> 'closed') <> 1 then
+    raise exception 'Reimport did not replace the previous active snapshot';
+  end if;
+  if (select count(*) from public.positions where ticker = 'SAP' and quantity = 3 and source_type = 'custom_csv') <> 1 then
+    raise exception 'Reimport did not persist the expected custom CSV position';
+  end if;
+  if (select count(*) from public.portfolio_imports where source_type = 'custom_csv') <> 2 then
+    raise exception 'Reimport history was not recorded';
+  end if;
+  if (select count(*) from public.portfolio_categories where portfolio_id = '2aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and name = 'Kerninvestment') <> 1 then
+    raise exception 'Reimport changed an existing category unexpectedly';
   end if;
 end;
 $$;

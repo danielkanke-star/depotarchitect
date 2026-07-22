@@ -8,7 +8,7 @@ import { useState } from "react";
 const items = [
   { href: "/cockpit", label: "Cockpit", icon: Gauge },
   { href: "/depot", label: "Depot", icon: Table2 },
-  { href: "/import", label: "Datenimport", icon: FileUp },
+  { href: "/import", label: "Benutzerdefinierte CSV", icon: FileUp },
   { href: "/risiko", label: "Risiko", icon: ShieldCheck },
   { href: "/performance", label: "Performance", icon: BarChart3 },
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },

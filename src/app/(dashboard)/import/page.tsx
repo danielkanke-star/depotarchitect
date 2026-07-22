@@ -17,9 +17,9 @@ export default async function ImportPage() {
 
   return <>
     <PageHeader
-      eyebrow="Datenimport"
-      title="CSV-Snapshot importieren"
-      description="CSV aus Google Sheets prüfen, Spalten zuordnen und den aktuellen aktiven Depotbestand erst nach ausdrücklicher Bestätigung vollständig ersetzen."
+      eyebrow="Optionaler Dateiimport"
+      title="Benutzerdefinierte CSV"
+      description="Optionaler manueller Dateiimport. Die spätere automatische Brokeranbindung ist hiervon getrennt."
     />
     <CsvImporter
       currentPositionCount={positions.length}
