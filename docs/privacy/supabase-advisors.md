@@ -1,6 +1,6 @@
 # Supabase Security- und Performance-Advisors
 
-Prüfstand nach der brokerneutralen Meilenstein-2A-Ergänzung am 22. Juli 2026. Arbeitsunterlage.
+Prüfstand nach der Meilenstein-2B-Migration am 23. Juli 2026. Arbeitsunterlage.
 
 ## Behoben
 
@@ -21,6 +21,7 @@ Der Security Advisor meldet ausführbare `SECURITY DEFINER`-Funktionen als Warnu
 | `touch_user_profile` | `authenticated` | ausschließlich `auth.uid()`, zeitlich gedrosselt | keine Daten |
 | `request_account_deletion` | `authenticated` | ausschließlich `auth.uid()` | eigene Anfrage-ID |
 | `replace_portfolio_snapshot` | `authenticated` | `auth.uid()`, Eigentum des Zielportfolios, vollständige normalisierte Nutzlast, Zähler und Kategorien | Import-ID und ausschließlich aggregierte Importzähler; Bestandsersatz und Historie atomar |
+| `replace_portfolio_snapshot_v2` | `authenticated` | `auth.uid()`, Eigentum des Zielportfolios, vollständige Quellen-/Cache-Nutzlast, Zähler und Kategorien | Import-ID und ausschließlich aggregierte Importzähler; neuer Engine-Import atomar |
 | `validate_invitation` | nur `anon` | Modus `invite`, normalisierte E-Mail, exakt 64-stelliger hexadezimaler SHA-256-Hash, Ablauf und Nichtverwendung müssen gemeinsam stimmen | ausschließlich Boolean |
 | `get_admin_summary` | `authenticated` | Adminrolle und JWT-AAL2 | ausschließlich aggregierte Zähler |
 | `get_admin_user_directory` | `authenticated` | Adminrolle und JWT-AAL2 | fest definierte Konto-Metadaten, keine Depotfelder |

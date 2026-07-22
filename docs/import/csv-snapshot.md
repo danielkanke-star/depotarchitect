@@ -14,10 +14,11 @@ Es gibt keine MDSD-Spezialisierung, kein festes Google-Sheets-Format und kein Im
 2. Der Parser erkennt Semikolon, Komma oder Tabulator und versucht die Kopfzeile zu erkennen.
 3. Jede Spalte wird automatisch vorgeschlagen und kann manuell umgeordnet oder ignoriert werden.
 4. Alle Datenzeilen werden normalisiert und mit konkreten Warnungen beziehungsweise Fehlern angezeigt.
-5. Die Server Action prüft Sicherheitsbestätigung, Zeilenzähler, Dateiname und Authentifizierung erneut.
-6. Die Datenbankfunktion prüft `auth.uid()`, Portfolio-Eigentum, Zähler, Kategorien und jede normalisierte Position erneut.
-7. Die Datenbankfunktion ersetzt den aktiven Bestand in einer Transaktion und schreibt ausschließlich Importmetadaten in `portfolio_imports`.
-8. CSV-Rohzeilen, Depotinhalte und E-Mail-Adressen werden nicht geloggt.
+5. Die zentrale Berechnungsengine berechnet verfügbare Markt-, Risiko- und Marginwerte erneut. Importierte Ergebniswerte dienen nur dem Abweichungsvergleich.
+6. Die Server Action prüft Sicherheitsbestätigung, Zeilenzähler, Dateiname und Authentifizierung erneut und wiederholt die Berechnung serverseitig.
+7. Die Datenbankfunktion `replace_portfolio_snapshot_v2` prüft `auth.uid()`, Portfolio-Eigentum, Zähler, Kategorien und jede normalisierte Position erneut.
+8. Die Datenbankfunktion ersetzt den aktiven Bestand in einer Transaktion und schreibt ausschließlich Importmetadaten in `portfolio_imports`.
+9. CSV-Rohzeilen, Depotinhalte und E-Mail-Adressen werden nicht geloggt.
 
 Die Dateigröße ist auf 2 MB und die Anzahl gültiger Positionen auf 2.000 begrenzt. Die Vorschau zeigt höchstens 50 Zeilen, verarbeitet werden jedoch alle Zeilen innerhalb dieser Grenze.
 
@@ -29,7 +30,7 @@ Die Herkunft beschreibt nur, wie der aktuelle DepotArchitect-Datensatz angelegt 
 
 ## Transaktion und Rollback
 
-`replace_portfolio_snapshot` führt unter einer portfolio-spezifischen Transaktionssperre aus:
+`replace_portfolio_snapshot_v2` führt unter einer portfolio-spezifischen Transaktionssperre aus. Die 2A-Funktion bleibt ausschließlich für Rückwärtskompatibilität erhalten:
 
 1. `auth.uid()` und Eigentum des Zielportfolios prüfen
 2. vollständige JSON-Nutzlast prüfen
@@ -37,7 +38,7 @@ Die Herkunft beschreibt nur, wie der aktuelle DepotArchitect-Datensatz angelegt 
 4. bestätigte neue Kategorien anlegen
 5. bisherigen Bestand mit Status ungleich `closed` entfernen
 6. normalisierte Positionen mit Quelle `custom_csv` einfügen
-7. nicht aus der CSV ableitbare Portfolio-Kennzahlen auf `NULL` setzen
+7. von der TypeScript-Engine berechnete Kompatibilitäts-Caches speichern; NetLiq und andere Depotquellen nicht überschreiben
 8. Importhistorie auf `completed` setzen
 
 Jede Exception rollt die gesamte Transaktion zurück. Dadurch bleiben der vorherige Bestand und die vorherige Importhistorie unverändert. Ein fehlgeschlagener Status kann nicht innerhalb derselben zurückgerollten Transaktion dauerhaft gespeichert werden; die Oberfläche zeigt deshalb eine neutrale Rollback-Meldung, ohne Nutzlastdaten zu loggen.

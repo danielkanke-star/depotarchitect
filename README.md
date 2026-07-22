@@ -39,6 +39,8 @@ Alle weiteren Variablen sind in `.env.example` dokumentiert. Production bleibt b
 - geschlossenes, einladungsbasiertes oder offenes Registrierungsmodell mit Production-Launch-Guard
 - versionierte Kenntnisnahmen, Rollenmodell und Admin-TOTP
 - Eigendatenexport und manuell geprüfte Löschanfragen
+- brokerneutraler benutzerdefinierter CSV-Snapshot
+- zentrale, dezimalgenaue Positions- und Portfolioberechnung mit sichtbarer Datenvollständigkeit
 
 DepotArchitect zeigt Depotstruktur, Hebel, Margin, Positionsgrößen, Risiko bis Stop, Konzentrationen und selbst gesetzte Warnschwellen. Es erteilt keine individuellen Kauf-/Verkaufsempfehlungen, trifft keine Orderentscheidungen, führt keine Orders aus und ersetzt keine Anlageberatung.
 

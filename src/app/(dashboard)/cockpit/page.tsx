@@ -1,46 +1,68 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight, CircleAlert, Database, Sigma } from "lucide-react";
 import { Badge, Card, PageHeader } from "@/components/ui";
-import { eur, pct } from "@/lib/format";
+import { calculationExplanation } from "@/lib/calculations/calculation-provenance";
+import { calculatePortfolio } from "@/lib/calculations/portfolio-calculations";
+import { positionToCalculationInput } from "@/lib/calculations/position-adapter";
+import type { CalculationMetric } from "@/lib/calculations/calculation-types";
+import { pct } from "@/lib/format";
 import { getPortfolioData } from "@/lib/portfolio";
 
 export default async function CockpitPage() {
-  const { portfolio, settings, categories, positions, latestImport } = await getPortfolioData();
-  const marketValue = positions.reduce((sum, position) => sum + Number(position.market_value), 0);
-  const netLiquidity = portfolio.net_liquidity === null ? null : Number(portfolio.net_liquidity);
-  const hasNetLiquidity = netLiquidity !== null && netLiquidity > 0;
-  const leverage = hasNetLiquidity ? marketValue / netLiquidity : null;
-  const incompletePositions = positions.filter((position) => position.risk_amount === null || position.margin_requirement === null).length;
-  const categoryMap = new Map(categories.map((category) => [category.id, category.name]));
-  const top = positions.slice(0, 6);
+  const { portfolio, categories, positions, latestImport } = await getPortfolioData();
+  const calculation = calculatePortfolio({
+    netLiquidity: portfolio.net_liquidity,
+    positions: positions.map((position) => positionToCalculationInput(position, portfolio, categories)),
+  });
+  const money = new Intl.NumberFormat("de-DE", { style: "currency", currency: portfolio.currency, maximumFractionDigits: 2 });
+  const top = [...calculation.positions].sort((a, b) => (b.positionValueBase.value ?? -1) - (a.positionValueBase.value ?? -1)).slice(0, 6);
 
   return <>
-    <PageHeader eyebrow="Portfolio-Cockpit" title="DepotArchitect" description="Risiko und Depot auf einen Blick – mit klaren Kennzahlen, Warnungen und direktem Zugriff auf die Positionsdetails." action={latestImport ? <div className="text-right"><Badge tone="good">Benutzerdefinierte CSV</Badge><div className="mt-1 text-xs text-muted">{formatImportDate(latestImport.imported_at)} · {latestImport.inserted_position_count} Positionen</div><Link href="/import" className="text-xs text-accent">Importhistorie</Link></div> : <Badge>Beispieldaten</Badge>} />
+    <PageHeader eyebrow="Portfolio-Cockpit" title="DepotArchitect" description="Quelldaten und zentral berechnete Depotkennzahlen – mit sichtbarer Datenvollständigkeit statt erfundener Nullwerte." action={latestImport ? <div className="text-right"><Badge tone="good">Benutzerdefinierte CSV</Badge><div className="mt-1 text-xs text-muted">{formatImportDate(latestImport.imported_at)} · {latestImport.inserted_position_count} Teilpositionen</div><Link href="/import" className="text-xs text-accent">Importhistorie</Link></div> : <Badge>Beispieldaten</Badge>} />
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <Kpi label="Nettoliquidität" value={portfolio.net_liquidity === null ? "Daten fehlen" : eur.format(Number(portfolio.net_liquidity))} note={portfolio.net_liquidity === null ? "Nicht im manuellen Dateiimport enthalten" : "Kapitalbasis"} />
-      <Kpi label="Hebel auf Nettoliquidität" value={leverage === null ? "nicht berechenbar" : `${leverage.toFixed(2).replace(".", ",")}×`} note={`Marktwert ${eur.format(marketValue)}`} />
-      <Kpi label="Margin-Auslastung" value={portfolio.margin_used_pct === null ? "nicht berechenbar" : pct(Number(portfolio.margin_used_pct))} note={portfolio.margin_used_pct === null ? `${incompletePositions} unvollständige Positionen` : `Zielgrenze ${pct(Number(settings.max_margin_pct), 0)}`} tone="warn" />
-      <Kpi label="Risiko-Budgetauslastung" value={portfolio.risk_budget_used_pct === null ? "nicht berechenbar" : pct(Number(portfolio.risk_budget_used_pct), 0)} note={portfolio.risk_budget_used_pct === null ? "Komplexe Berechnung folgt in Meilenstein 2B" : `${pct(Number(portfolio.risk_budget_used_pct) - 100, 0)} über Budget`} tone="danger" />
+      <SourceKpi label="Nettoliquidität" value={portfolio.net_liquidity === null ? "Daten fehlen" : money.format(Number(portfolio.net_liquidity))} note={portfolio.data_as_of ? `Quelldatum · ${formatImportDate(portfolio.data_as_of)}` : "Quelldatum · Zeitpunkt fehlt"} />
+      <MetricKpi label="Brutto-Exposure" metric={calculation.grossExposure} format={(value) => money.format(value)} />
+      <MetricKpi label="Long-Exposure" metric={calculation.longExposure} format={(value) => money.format(value)} />
+      <MetricKpi label="Short-Exposure" metric={calculation.shortExposure} format={(value) => money.format(value)} />
+      <MetricKpi label="Netto-Exposure" metric={calculation.netExposure} format={(value) => money.format(value)} />
+      <MetricKpi label="Depot-Hebel" metric={calculation.leverage} format={(value) => `${value.toFixed(2).replace(".", ",")}×`} />
+      <MetricKpi label="Margin Requirement" metric={calculation.totalMarginRequirement} format={(value) => money.format(value)} note={`${calculation.missingMarginPositionCount} Teilpositionen ohne Marginwert`} />
+      <MetricKpi label="Margin-Auslastung" metric={calculation.marginUtilization} format={(value) => pct(value * 100)} />
+      <MetricKpi label="Berechenbares Stopprisiko" metric={calculation.totalCalculableStopRisk} format={(value) => money.format(value)} note={`${calculation.calculableRiskPositionCount} von ${calculation.activePositionRowCount} Teilpositionen berechenbar`} />
+      <MetricKpi label="Risikoabdeckung nach Marktwert" metric={calculation.riskValueCoverage} format={(value) => pct(value * 100)} note={calculation.riskIsComplete ? "vollständig" : "unvollständig"} />
+      <SourceKpi label="Aktive Teilpositionen" value={String(calculation.activePositionRowCount)} note="Positionszeilen" />
+      <SourceKpi label="Unterschiedliche Instrumente" value={String(calculation.distinctInstrumentCount)} note="Ticker / Instrumente" />
     </div>
     <div className="mt-4 grid gap-4 xl:grid-cols-[.9fr_1.6fr]">
-      <Card><h2 className="mb-4 font-medium">Handlungsbedarf</h2><div className="space-y-3">
-        {portfolio.risk_budget_used_pct === null ? <Alert icon={<AlertTriangle size={17} />} title="Risiko-Budget nicht berechenbar" text="Für die vollständige Berechnung fehlen Daten; fehlende Werte werden nicht als null vorgetäuscht." tone="warn" /> : <Alert icon={<AlertTriangle size={17} />} title="Risiko-Budget überschritten" text="Das Gesamtrisiko liegt über der festgelegten Zielgröße." tone="danger" />}
-        {portfolio.margin_used_pct === null ? <Alert icon={<AlertTriangle size={17} />} title="Margin-Auslastung nicht berechenbar" text={`${incompletePositions} Positionen enthalten noch keine vollständigen Risiko- oder Marginangaben.`} tone="warn" /> : <Alert icon={<AlertTriangle size={17} />} title="Margin nahe Zielgrenze" text={`${pct(Number(settings.max_margin_pct) - Number(portfolio.margin_used_pct))} Puffer bis zum Limit.`} tone="warn" />}
-        <Alert icon={<CheckCircle2 size={17} />} title="Depotstruktur erkannt" text={`${positions.length} Positionen in ${categories.length} Kategorien.`} tone="good" />
+      <Card><h2 className="mb-4 font-medium">Datenvollständigkeit</h2><div className="space-y-3">
+        <Info icon={<CircleAlert size={17} />} title="Stopprisiko" text={calculation.riskIsComplete ? "Alle aktiven Teilpositionen besitzen einen gültigen, berechenbaren Stopp." : `${calculation.missingStopPositionCount} ohne Stopp, ${calculation.invalidStopPositionCount} mit ungültigem Stopp. Die ausgewiesene Risikosumme ist deshalb unvollständig.`} />
+        <Info icon={<Database size={17} />} title="Marginquellen" text={`${calculation.missingMarginPositionCount} Teilpositionen ohne direktes oder schätzbares Margin Requirement.`} />
+        <Info icon={<Sigma size={17} />} title="Saubere Kennzahlenabgrenzung" text="Risiko in % der NetLiq und Anteil am berechenbaren Gesamtrisiko werden berechnet. Eine Risikobudget-Auslastung wird in diesem Meilenstein bewusst nicht erfunden." />
       </div></Card>
-      <Card><div className="mb-4 flex items-center justify-between"><h2 className="font-medium">Kompakte Depotübersicht</h2><Link href="/depot" className="flex items-center gap-1 text-xs text-accent">Alle Positionen <ArrowRight size={14} /></Link></div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Ticker</th><th>Kategorie</th><th>Marktwert</th><th>NetLiq-Anteil</th><th>Status</th></tr></thead><tbody>{top.map((position) => <tr key={position.id} className="border-t border-border/60"><td className="py-3 font-medium">{position.ticker}</td><td className="text-muted">{position.category_id ? categoryMap.get(position.category_id) : "–"}</td><td>{eur.format(Number(position.market_value))}</td><td>{hasNetLiquidity ? pct(Number(position.market_value) / netLiquidity * 100) : <span className="text-muted">Daten fehlen</span>}</td><td><Badge tone={position.status === "high" ? "warn" : position.status === "danger" ? "danger" : "good"}>{position.status}</Badge></td></tr>)}</tbody></table></div>
+      <Card><div className="mb-4 flex items-center justify-between"><h2 className="font-medium">Kompakte Depotübersicht</h2><Link href="/depot" className="flex items-center gap-1 text-xs text-accent">Alle Teilpositionen <ArrowRight size={14} /></Link></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Ticker</th><th>Kategorie</th><th>Positionswert</th><th>NetLiq-Anteil</th><th>Stopprisiko</th><th>Datenstatus</th></tr></thead><tbody>{top.map((position) => <tr key={position.id} className="border-t border-border/60 align-top"><td className="py-3 font-medium">{position.ticker}</td><td className="text-muted">{position.categoryName ?? "Nicht zugeordnet"}</td><td><CompactMetric metric={position.positionValueBase} format={(value) => money.format(value)} /></td><td><CompactMetric metric={position.netLiquidityShare} format={(value) => pct(value * 100)} /></td><td><CompactMetric metric={position.stopRisk} format={(value) => money.format(value)} /></td><td><Badge tone={position.stopRisk.status === "calculated" ? "good" : "warn"}>{position.stopRisk.status === "calculated" ? "vollständig" : "unvollständig"}</Badge></td></tr>)}</tbody></table></div>
       </Card>
     </div>
+    <Card className="mt-4"><div className="mb-4"><h2 className="font-medium">Kategorienaufteilung</h2><p className="mt-1 text-xs text-muted">Keine Grenzwerte oder Ampelfarben – ausschließlich rechnerische Struktur.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Kategorie</th><th>Teilpositionen</th><th>Marktwert</th><th>Anteil NetLiq</th><th>Anteil Brutto-Exposure</th></tr></thead><tbody>{calculation.categories.map((category) => <tr key={category.categoryId ?? category.categoryName} className="border-t border-border/60"><td className="py-3 font-medium">{category.categoryName}</td><td>{category.positionRowCount}</td><td><CompactMetric metric={category.marketValue} format={(value) => money.format(value)} /></td><td><CompactMetric metric={category.netLiquidityShare} format={(value) => pct(value * 100)} /></td><td><CompactMetric metric={category.grossExposureShare} format={(value) => pct(value * 100)} /></td></tr>)}</tbody></table></div></Card>
   </>;
 }
 
-function Kpi({ label, value, note, tone = "normal" }: { label: string; value: string; note: string; tone?: "normal" | "warn" | "danger" }) {
-  return <Card><div className="text-xs text-muted">{label}</div><div className={`mt-2 text-2xl font-semibold tracking-tight sm:text-3xl ${tone === "warn" ? "text-amber-300" : tone === "danger" ? "text-red-300" : ""}`}>{value}</div><div className="mt-2 text-[11px] text-muted/80">{note}</div></Card>;
+function SourceKpi({ label, value, note }: { label: string; value: string; note: string }) {
+  return <Card><div className="flex items-center justify-between text-xs text-muted"><span>{label}</span><span className="text-[10px] uppercase tracking-wide">Quelldatum</span></div><div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div><div className="mt-2 text-[11px] text-muted/80">{note}</div></Card>;
 }
-function Alert({ icon, title, text, tone }: { icon: React.ReactNode; title: string; text: string; tone: "good" | "warn" | "danger" }) {
-  const toneClass = tone === "good" ? "text-emerald-300" : tone === "warn" ? "text-amber-300" : "text-red-300";
-  return <div className="flex gap-3 rounded-xl border border-border/70 bg-background/40 p-3"><div className={toneClass}>{icon}</div><div><div className="text-sm font-medium">{title}</div><div className="mt-1 text-xs text-muted">{text}</div></div></div>;
+
+function MetricKpi({ label, metric, format, note }: { label: string; metric: CalculationMetric; format: (value: number) => string; note?: string }) {
+  return <Card><div className="flex items-center justify-between text-xs text-muted"><span>{label}</span><span className="text-[10px] uppercase tracking-wide text-emerald-300">Berechnet</span></div><div className="mt-2 text-2xl font-semibold tracking-tight">{metric.value === null ? "Nicht berechenbar" : format(metric.value)}</div><div className="mt-2 text-[11px] text-muted/80">{note ?? calculationExplanation(metric.status, metric.reasons)}</div></Card>;
+}
+
+function CompactMetric({ metric, format }: { metric: CalculationMetric; format: (value: number) => string }) {
+  return metric.value === null
+    ? <span className="text-xs text-muted" title={calculationExplanation(metric.status, metric.reasons)}>Nicht berechenbar</span>
+    : <span title={calculationExplanation(metric.status, metric.reasons)}>{format(metric.value)}</span>;
+}
+
+function Info({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+  return <div className="flex gap-3 rounded-xl border border-border/70 bg-background/40 p-3"><div className="text-amber-300">{icon}</div><div><div className="text-sm font-medium">{title}</div><div className="mt-1 text-xs text-muted">{text}</div></div></div>;
 }
 
 function formatImportDate(value: string) {

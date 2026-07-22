@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { Json } from "@/lib/database.types";
 import type { NormalizedPosition } from "@/lib/csv-import";
+import { calculatePosition } from "@/lib/calculations/position-calculations";
 import { getOrCreatePortfolio } from "@/lib/portfolio";
 import { requireUser } from "@/lib/auth";
 
@@ -67,10 +68,35 @@ export async function replacePortfolioSnapshot(input: SnapshotImportInput): Prom
 
   const { supabase } = await requireUser();
   const portfolio = await getOrCreatePortfolio();
-  const { data, error } = await supabase.rpc("replace_portfolio_snapshot", {
+  const normalizedPositions = input.positions.map((position, index) => {
+    const instrumentCurrency = position.instrument_currency?.trim().toUpperCase() || null;
+    const fxToBase = position.fx_to_base ?? (instrumentCurrency === portfolio.currency.trim().toUpperCase() ? 1 : null);
+    const calculation = calculatePosition({
+      id: `${index}`,
+      ticker: position.ticker,
+      direction: position.direction,
+      quantity: position.quantity,
+      multiplier: position.multiplier,
+      entryPrice: position.entry_price,
+      currentPrice: position.current_price,
+      fxToBase,
+      netLiquidity: portfolio.net_liquidity,
+      effectiveStopPrice: position.stop_price,
+      directMarginRequirement: position.margin_requirement,
+      marginPercent: position.margin_percent,
+    });
+    return {
+      ...position,
+      instrument_currency: instrumentCurrency,
+      fx_to_base: fxToBase,
+      market_value: calculation.positionValueBase.value,
+      risk_amount: calculation.stopRisk.value,
+    };
+  });
+  const { data, error } = await supabase.rpc("replace_portfolio_snapshot_v2", {
     target_portfolio: portfolio.id,
     original_filename: filename,
-    normalized_positions: input.positions as unknown as Json,
+    normalized_positions: normalizedPositions as unknown as Json,
     new_categories: [...new Set(input.newCategories.map((name) => name.trim()).filter(Boolean))],
     total_rows: totalRows,
     warning_rows: warningRows,

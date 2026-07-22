@@ -91,4 +91,18 @@ describe("broker-neutral custom CSV fallback parser", () => {
     expect(parsed.mapping[3]).toBe("ignore");
     expect(parsed.mapping[4]).toBe("ignore");
   });
+
+  it("normalizes fx_to_base and instrument currency", () => {
+    const { analysis } = parseAndAnalyze("Ticker;Menge;Einstand;Aktueller Kurs;Währung;FX to Base\nMSFT;20;45;50;usd;0,90");
+    expect(analysis.normalizedPositions[0]).toMatchObject({ instrument_currency: "USD", fx_to_base: 0.9 });
+    expect(analysis.rows[0].derivedFields).toContain("Marktwert in Basiswährung");
+  });
+
+  it("warns when imported result fields differ from central calculations", () => {
+    const { analysis } = parseAndAnalyze("Ticker;Menge;Einstand;Aktueller Kurs;Stop;Währung;FX to Base;Marktwert;Risiko bis Stop\nMSFT;20;45;50;47;USD;0,90;999;999");
+    expect(analysis.rows[0].warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining("Importierter Marktwert"),
+      expect.stringContaining("Importiertes Risiko"),
+    ]));
+  });
 });

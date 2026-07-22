@@ -1,6 +1,6 @@
 # Zielbild für Brokerpositionen und DepotArchitect-Teilpositionen
 
-Status: Architekturentwurf für einen späteren, getrennten Meilenstein. In Meilenstein 2A werden die beschriebenen Tabellen, Synchronisationsprozesse und Zuordnungsregeln **nicht** implementiert.
+Status: Architekturentwurf für Meilenstein 2C. Auch Meilenstein 2B implementiert die beschriebenen Tabellen, Synchronisationsprozesse und Zuordnungsregeln **nicht**. Die Berechnungsengine arbeitet bereits korrekt auf einzelnen DepotArchitect-Teilpositionszeilen und setzt nie voraus, dass ein Ticker nur einmal vorkommt.
 
 ## Abgrenzung zu Meilenstein 2A
 
@@ -49,3 +49,5 @@ Eine Orderzuordnung verbindet eine Brokerorder mit einer bestimmten DepotArchite
 ## Noch nicht implementiert
 
 Dieser Entwurf führt weder neue Datenbanktabellen noch eine Broker-API, Ordersynchronisierung, automatische Tranchenzuordnung oder Stoppauswahl ein. Vor einer Implementierung sind Identitäten, Reconciliation, Historisierung, Fehlerzustände, RLS, Auditierung und Löschregeln separat zu spezifizieren und zu testen.
+
+Ein späterer Estably-/IBKR-Jahresbericht kann eine historische Importquelle für Transaktionen, Stichtagspositionen, Gebühren und Ergebnisse werden. Aktuelle offene Orders und Stoporders benötigen voraussichtlich eine getrennte, zeitnahe Brokerquelle.

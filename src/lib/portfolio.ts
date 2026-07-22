@@ -38,7 +38,7 @@ export async function getPortfolioData(): Promise<{
   const [{ data: settings, error: settingsError }, { data: categories, error: categoriesError }, { data: positions, error: positionsError }, { data: latestImport, error: importError }] = await Promise.all([
     supabase.from("portfolio_settings").select("*").eq("portfolio_id", portfolio.id).single(),
     supabase.from("portfolio_categories").select("*").eq("portfolio_id", portfolio.id).order("sort_order"),
-    supabase.from("positions").select("*").eq("portfolio_id", portfolio.id).neq("status", "closed").order("market_value", { ascending: false }),
+    supabase.from("positions").select("*").eq("portfolio_id", portfolio.id).neq("status", "closed").order("created_at", { ascending: true }),
     supabase.from("portfolio_imports").select("*").eq("portfolio_id", portfolio.id).eq("import_status", "completed").order("imported_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
@@ -49,3 +49,4 @@ export async function getPortfolioData(): Promise<{
 
   return { portfolio, settings, categories, positions, latestImport };
 }
+import "server-only";

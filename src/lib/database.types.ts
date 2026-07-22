@@ -17,10 +17,12 @@ export type Database = {
     Tables: {
       portfolios: Table<{
         id: string; user_id: string; name: string; currency: string; net_liquidity: number | null;
+        cash_balance: number | null; data_as_of: string | null;
         margin_used_pct: number | null; risk_budget_used_pct: number | null; risk_profile: string;
         created_at: string; updated_at: string;
       }, {
         id?: string; user_id: string; name?: string; currency?: string; net_liquidity?: number | null;
+        cash_balance?: number | null; data_as_of?: string | null;
         margin_used_pct?: number | null; risk_budget_used_pct?: number | null; risk_profile?: string;
         created_at?: string; updated_at?: string;
       }>;
@@ -44,9 +46,10 @@ export type Database = {
         id: string; portfolio_id: string; user_id: string; category_id: string | null;
         ticker: string; instrument_name: string | null; instrument_type: string; direction: string;
         quantity: number; multiplier: number; entry_price: number; current_price: number | null;
-        stop_price: number | null; market_value: number; risk_amount: number | null;
+        instrument_currency: string | null; fx_to_base: number | null; data_as_of: string | null;
+        stop_price: number | null; market_value: number | null; risk_amount: number | null;
         margin_requirement: number | null; margin_percent: number | null; sector: string | null;
-        entry_date: string | null; status: string; notes: string | null;
+        strategy: string | null; entry_date: string | null; status: string; notes: string | null;
         external_position_id: string | null; option_type: string | null; strike_price: number | null;
         expiration_date: string | null; source_type: "demo" | "manual" | "csv" | "custom_csv";
         source_import_id: string | null; imported_at: string | null;
@@ -55,9 +58,10 @@ export type Database = {
         id?: string; portfolio_id: string; user_id: string; category_id?: string | null;
         ticker: string; instrument_name?: string | null; instrument_type?: string; direction?: string;
         quantity?: number; multiplier?: number; entry_price?: number; current_price?: number | null;
-        stop_price?: number | null; market_value?: number; risk_amount?: number | null;
+        instrument_currency?: string | null; fx_to_base?: number | null; data_as_of?: string | null;
+        stop_price?: number | null; market_value?: number | null; risk_amount?: number | null;
         margin_requirement?: number | null; margin_percent?: number | null; sector?: string | null;
-        entry_date?: string | null; status?: string; notes?: string | null;
+        strategy?: string | null; entry_date?: string | null; status?: string; notes?: string | null;
         external_position_id?: string | null; option_type?: string | null; strike_price?: number | null;
         expiration_date?: string | null; source_type?: "demo" | "manual" | "csv" | "custom_csv";
         source_import_id?: string | null; imported_at?: string | null;
@@ -139,6 +143,19 @@ export type Database = {
       };
       request_account_deletion: { Args: Record<PropertyKey, never>; Returns: string };
       replace_portfolio_snapshot: {
+        Args: {
+          target_portfolio: string;
+          original_filename: string;
+          normalized_positions: Json;
+          new_categories: string[];
+          total_rows: number;
+          warning_rows: number;
+          rejected_rows: number;
+          import_metadata?: Json;
+        };
+        Returns: Json;
+      };
+      replace_portfolio_snapshot_v2: {
         Args: {
           target_portfolio: string;
           original_filename: string;

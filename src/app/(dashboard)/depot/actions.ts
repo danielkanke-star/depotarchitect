@@ -2,46 +2,134 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { calculatePosition } from "@/lib/calculations/position-calculations";
+import type { Direction } from "@/lib/calculations/calculation-types";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
 
+const DIRECTIONS = new Set<Direction>(["long", "short", "long_put", "long_call", "short_put", "short_call"]);
+const INSTRUMENT_TYPES = new Set(["stock", "etf", "option", "cash", "other"]);
+const STATUSES = new Set(["active", "watch", "high", "danger"]);
+
 const text = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim();
-const num = (formData: FormData, key: string) => Number(String(formData.get(key) ?? "0").replace(",", ".")) || 0;
+const nullableNumber = (formData: FormData, key: string) => {
+  const raw = text(formData, key);
+  if (!raw) return null;
+  const value = Number(raw.replace(",", "."));
+  return Number.isFinite(value) ? value : null;
+};
 
 export async function savePosition(formData: FormData) {
   const supabase = await createClient();
   const userId = await getUserId();
   const portfolio = await getOrCreatePortfolio();
   const id = text(formData, "id");
+  const ticker = text(formData, "ticker").toUpperCase();
+  const direction = text(formData, "direction") as Direction;
+  const instrumentType = text(formData, "instrument_type") || "stock";
+  const status = text(formData, "status") || "active";
+  const quantity = nullableNumber(formData, "quantity");
+  const multiplier = nullableNumber(formData, "multiplier");
+  const entryPrice = nullableNumber(formData, "entry_price");
+  const currentPrice = nullableNumber(formData, "current_price");
+  const stopPrice = nullableNumber(formData, "stop_price");
+  const marginPercent = nullableNumber(formData, "margin_percent");
+  const directMarginRequirement = nullableNumber(formData, "margin_requirement");
+  const strikePrice = nullableNumber(formData, "strike_price");
+  const optionType = text(formData, "option_type") || null;
+  const expirationDate = text(formData, "expiration_date") || null;
+  const instrumentCurrency = (text(formData, "instrument_currency") || portfolio.currency).toUpperCase();
+  const enteredFx = nullableNumber(formData, "fx_to_base");
+  const fxToBase = enteredFx ?? (instrumentCurrency === portfolio.currency.toUpperCase() ? 1 : null);
+  const categoryId = text(formData, "category_id") || null;
+
+  if (!ticker || ticker.length > 40 || !DIRECTIONS.has(direction) || !INSTRUMENT_TYPES.has(instrumentType) || !STATUSES.has(status)) {
+    throw new Error("Die Positionsangaben sind ungültig.");
+  }
+  if (quantity === null || quantity <= 0 || multiplier === null || multiplier <= 0 || entryPrice === null || entryPrice < 0) {
+    throw new Error("Menge, Multiplikator und Einstandskurs sind ungültig.");
+  }
+  if ((currentPrice !== null && currentPrice < 0) || (stopPrice !== null && stopPrice < 0) || (marginPercent !== null && marginPercent < 0) || (directMarginRequirement !== null && directMarginRequirement < 0)) {
+    throw new Error("Preis-, Stopp- oder Marginangaben dürfen nicht negativ sein.");
+  }
+  if (!/^[A-Z]{3}$/.test(instrumentCurrency) || (fxToBase !== null && fxToBase <= 0)) {
+    throw new Error("Währung oder Wechselkurs ist ungültig.");
+  }
+  if (instrumentType === "option" && (!optionType || !new Set(["call", "put"]).has(optionType) || strikePrice === null || strikePrice < 0 || !expirationDate)) {
+    throw new Error("Für Optionen sind Optionsart, Ausübungspreis und Verfallsdatum erforderlich.");
+  }
+  if (categoryId) {
+    const { data: category } = await supabase.from("portfolio_categories").select("id").eq("id", categoryId).eq("portfolio_id", portfolio.id).maybeSingle();
+    if (!category) throw new Error("Die Kategorie gehört nicht zu diesem Depot.");
+  }
+
+  const calculation = calculatePosition({
+    id: id || "new",
+    ticker,
+    direction,
+    quantity,
+    multiplier,
+    entryPrice,
+    currentPrice,
+    fxToBase,
+    netLiquidity: portfolio.net_liquidity,
+    effectiveStopPrice: stopPrice,
+    directMarginRequirement,
+    marginPercent,
+  });
   const payload = {
     portfolio_id: portfolio.id,
     user_id: userId,
-    category_id: text(formData, "category_id") || null,
-    ticker: text(formData, "ticker").toUpperCase(),
+    category_id: categoryId,
+    ticker,
     instrument_name: text(formData, "instrument_name") || null,
-    instrument_type: text(formData, "instrument_type") || "stock",
-    direction: text(formData, "direction") || "long",
-    quantity: num(formData, "quantity"),
-    entry_price: num(formData, "entry_price"),
-    stop_price: num(formData, "stop_price") || null,
-    market_value: num(formData, "market_value"),
-    risk_amount: num(formData, "risk_amount"),
+    instrument_type: instrumentType,
+    direction,
+    quantity,
+    multiplier,
+    entry_price: entryPrice,
+    current_price: currentPrice,
+    instrument_currency: instrumentCurrency,
+    fx_to_base: fxToBase,
+    data_as_of: normalizedDateTime(formData, "data_as_of"),
+    stop_price: stopPrice,
+    market_value: calculation.positionValueBase.value,
+    risk_amount: calculation.stopRisk.value,
+    margin_requirement: directMarginRequirement,
+    margin_percent: marginPercent,
+    option_type: instrumentType === "option" ? optionType : null,
+    strike_price: instrumentType === "option" ? strikePrice : null,
+    expiration_date: instrumentType === "option" ? expirationDate : null,
     sector: text(formData, "sector") || null,
-    status: text(formData, "status") || "active",
+    strategy: text(formData, "strategy") || null,
+    notes: text(formData, "notes") || null,
+    entry_date: text(formData, "entry_date") || null,
+    status,
     updated_at: new Date().toISOString(),
   };
 
-  const result = id ? await supabase.from("positions").update(payload).eq("id", id) : await supabase.from("positions").insert(payload);
+  const result = id
+    ? await supabase.from("positions").update(payload).eq("id", id).eq("portfolio_id", portfolio.id)
+    : await supabase.from("positions").insert(payload);
   if (result.error) throw new Error("Die Position konnte nicht gespeichert werden.");
   revalidatePath("/depot");
   revalidatePath("/cockpit");
   redirect("/depot");
 }
 
+function normalizedDateTime(formData: FormData, key: string) {
+  const raw = text(formData, key);
+  if (!raw) return null;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) throw new Error("Der Datenzeitpunkt ist ungültig.");
+  return date.toISOString();
+}
+
 export async function deletePosition(formData: FormData) {
   const supabase = await createClient();
+  const portfolio = await getOrCreatePortfolio();
   const id = text(formData, "id");
-  const { error } = await supabase.from("positions").delete().eq("id", id);
+  const { error } = await supabase.from("positions").delete().eq("id", id).eq("portfolio_id", portfolio.id);
   if (error) throw new Error("Die Position konnte nicht gelöscht werden.");
   revalidatePath("/depot");
   revalidatePath("/cockpit");
