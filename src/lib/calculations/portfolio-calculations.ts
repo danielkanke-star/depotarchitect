@@ -81,8 +81,9 @@ function attachRiskShares(positions: PositionCalculation[], totalRisk: Calculati
 
 export function calculatePortfolio(input: PortfolioCalculationInput): PortfolioCalculation {
   const basePositions = input.positions.map(calculatePosition);
-  const longExposure = exposureMetric(basePositions, 1);
-  const shortExposure = exposureMetric(basePositions, -1);
+  const securityPositions = basePositions.filter((position) => position.instrumentType !== "cash");
+  const longExposure = exposureMetric(securityPositions, 1);
+  const shortExposure = exposureMetric(securityPositions, -1);
   const exposureReasons = unique([...longExposure.reasons, ...shortExposure.reasons]);
   const exposureStatus = longExposure.status === "invalid" || shortExposure.status === "invalid"
     ? "invalid"
@@ -97,11 +98,16 @@ export function calculatePortfolio(input: PortfolioCalculationInput): PortfolioC
   const netExposure = longExposure.value === null || shortExposure.value === null
     ? incomplete(...exposureReasons)
     : metricWithValue(new Decimal(longExposure.value).sub(shortExposure.value), exposureStatus, exposureReasons);
-  const totalMarginRequirement = partialAggregate(basePositions.map((position) => position.marginRequirement));
-  const totalCalculableStopRisk = partialAggregate(basePositions.map((position) => position.stopRisk));
-  const positions = attachRiskShares(basePositions, totalCalculableStopRisk);
-  const totalMarketValue = partialAggregate(basePositions.map((position) => position.positionValueBase));
-  const riskCoveredMarketValue = partialAggregate(basePositions
+  const totalMarginRequirement = partialAggregate(securityPositions.map((position) => position.marginRequirement));
+  const totalCalculableStopRisk = partialAggregate(securityPositions.map((position) => position.stopRisk));
+  const positionsWithRiskShares = attachRiskShares(securityPositions, totalCalculableStopRisk);
+  const riskShareById = new Map(positionsWithRiskShares.map((position) => [position.id, position.riskShareOfCalculableTotal]));
+  const positions = basePositions.map((position) => position.instrumentType === "cash"
+    ? { ...position, riskShareOfCalculableTotal: incomplete("legacy_cash_position_excluded") }
+    : { ...position, riskShareOfCalculableTotal: riskShareById.get(position.id) ?? position.riskShareOfCalculableTotal });
+  const calculatedSecurityPositions = positions.filter((position) => position.instrumentType !== "cash");
+  const totalMarketValue = partialAggregate(securityPositions.map((position) => position.positionValueBase));
+  const riskCoveredMarketValue = partialAggregate(securityPositions
     .filter((position) => position.stopRisk.value !== null)
     .map((position) => position.positionValueBase));
   const riskValueCoverage = totalMarketValue.value === null || riskCoveredMarketValue.value === null
@@ -109,27 +115,29 @@ export function calculatePortfolio(input: PortfolioCalculationInput): PortfolioC
     : totalMarketValue.value === 0
       ? invalid("market_value_total_zero")
       : calculated(new Decimal(riskCoveredMarketValue.value).div(totalMarketValue.value));
-  const missingStopPositionCount = basePositions.filter((position) => position.stopRisk.reasons.includes("stop_missing")).length;
-  const invalidStopPositionCount = basePositions.filter((position) => position.stopRisk.reasons.includes("stop_invalid")).length;
+  const missingStopPositionCount = securityPositions.filter((position) => position.stopRisk.reasons.includes("stop_missing")).length;
+  const invalidStopPositionCount = securityPositions.filter((position) => position.stopRisk.reasons.includes("stop_invalid")).length;
 
   return {
     positions,
+    securityPositions: calculatedSecurityPositions,
     longExposure,
     shortExposure,
     grossExposure,
     netExposure,
-    leverage: portfolioRatio(grossExposure, input.netLiquidity),
+    netLiquidityLeverage: portfolioRatio(grossExposure, input.netLiquidity),
     totalMarginRequirement,
     marginUtilization: portfolioRatio(totalMarginRequirement, input.netLiquidity),
     totalCalculableStopRisk,
     riskValueCoverage,
-    calculableRiskPositionCount: basePositions.filter((position) => position.stopRisk.value !== null).length,
+    calculableRiskPositionCount: securityPositions.filter((position) => position.stopRisk.value !== null).length,
     missingStopPositionCount,
     invalidStopPositionCount,
-    missingMarginPositionCount: basePositions.filter((position) => position.marginRequirement.value === null).length,
-    riskIsComplete: missingStopPositionCount === 0 && invalidStopPositionCount === 0 && basePositions.every((position) => position.stopRisk.value !== null),
-    activePositionRowCount: basePositions.length,
-    distinctInstrumentCount: new Set(input.positions.map((position) => position.ticker.trim().toUpperCase())).size,
-    categories: categoryCalculations(positions, input.netLiquidity, grossExposure),
+    missingMarginPositionCount: securityPositions.filter((position) => position.marginRequirement.value === null).length,
+    riskIsComplete: missingStopPositionCount === 0 && invalidStopPositionCount === 0 && securityPositions.every((position) => position.stopRisk.value !== null),
+    activePositionRowCount: securityPositions.length,
+    distinctInstrumentCount: new Set(input.positions.filter((position) => position.instrumentType !== "cash").map((position) => position.ticker.trim().toUpperCase())).size,
+    legacyCashPositionCount: basePositions.length - securityPositions.length,
+    categories: categoryCalculations(calculatedSecurityPositions, input.netLiquidity, grossExposure),
   };
 }

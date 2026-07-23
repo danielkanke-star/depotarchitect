@@ -8,9 +8,12 @@ export const CALCULATION_STATUS_LABELS: Record<CalculationStatus, string> = {
 };
 
 export const MARGIN_PROVENANCE_LABELS: Record<MarginProvenance, string> = {
-  broker_or_imported: "Broker/importiert",
+  broker: "Broker",
+  imported_direct: "Direkt importiert",
+  manual_direct: "Manuell bestätigt",
   estimated: "Geschätzt",
   missing: "Nicht verfügbar",
+  legacy_untrusted: "Legacywert nicht bestätigt",
 };
 
 export const CALCULATION_REASON_LABELS: Record<CalculationReason, string> = {
@@ -30,9 +33,12 @@ export const CALCULATION_REASON_LABELS: Record<CalculationReason, string> = {
   stop_invalid: "Stopp liegt auf der falschen Seite des aktuellen Kurses",
   margin_information_missing: "Margininformation fehlt",
   margin_requirement_invalid: "direktes Margin Requirement ist ungültig",
-  margin_percent_invalid: "Margin-Prozentsatz ist ungültig",
+  margin_rate_invalid: "Marginquote muss zwischen 0 und 1 liegen",
   legacy_market_value_used: "gespeicherter Legacy-Marktwert wird vorübergehend verwendet",
   direct_margin_requirement_used: "direktes Broker-/Import-Margin Requirement wird verwendet",
+  legacy_cash_position_excluded: "Legacy-Cashposition wird aus Wertpapieraggregaten ausgeschlossen",
+  cash_fx_missing: "Wechselkurs für den Cashbestand fehlt",
+  cash_fx_invalid: "Wechselkurs für den Cashbestand ist ungültig",
   portfolio_contains_incomplete_positions: "Portfolio enthält Positionen mit fehlenden Ausgangsdaten",
   portfolio_contains_invalid_positions: "Portfolio enthält Positionen mit ungültigen Ausgangsdaten",
   gross_exposure_zero: "Brutto-Exposure ist null",

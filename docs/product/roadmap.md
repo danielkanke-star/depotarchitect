@@ -8,3 +8,13 @@
 - **Meilenstein 2F – Automatische IBKR-/Introducing-Broker-Datenquellen:** geplant für aktuelle Positionen, Kontowerte, Trades und Orders.
 
 Aktuelle offene Orders und Stoporders benötigen voraussichtlich eine von historischen Jahresberichten getrennte Brokerquelle. Es werden keine echten PDFs, Kontonummern oder Depotdaten im Repository abgelegt.
+
+## Zukünftige Hauptnavigation
+
+- Cockpit
+- Depot
+- Risiko
+- Historie
+- Einstellungen
+
+Unter **Depot** sind Depotübersicht, Positionen, Cash, Datenquellen und Import sowie Brokerkonten vorgesehen. Der Import ist eine Hilfsfunktion des Depots, kein eigenständiger Produktbereich. Die vorhandene Route `/import` bleibt bis zum Layout-Meilenstein bestehen; Meilenstein 2B.1 baut die Navigation nicht umfassend um.

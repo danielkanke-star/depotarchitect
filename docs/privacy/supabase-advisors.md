@@ -1,6 +1,6 @@
 # Supabase Security- und Performance-Advisors
 
-Prüfstand nach der Meilenstein-2B-Migration am 23. Juli 2026. Arbeitsunterlage.
+Prüfstand nach der additiven Meilenstein-2B.1-Migration `20260723080014` am 23. Juli 2026. Arbeitsunterlage.
 
 ## Behoben
 
@@ -22,6 +22,7 @@ Der Security Advisor meldet ausführbare `SECURITY DEFINER`-Funktionen als Warnu
 | `request_account_deletion` | `authenticated` | ausschließlich `auth.uid()` | eigene Anfrage-ID |
 | `replace_portfolio_snapshot` | `authenticated` | `auth.uid()`, Eigentum des Zielportfolios, vollständige normalisierte Nutzlast, Zähler und Kategorien | Import-ID und ausschließlich aggregierte Importzähler; Bestandsersatz und Historie atomar |
 | `replace_portfolio_snapshot_v2` | `authenticated` | `auth.uid()`, Eigentum des Zielportfolios, vollständige Quellen-/Cache-Nutzlast, Zähler und Kategorien | Import-ID und ausschließlich aggregierte Importzähler; neuer Engine-Import atomar |
+| `replace_portfolio_snapshot_v3` | `authenticated` | `auth.uid()`, Eigentum des Zielportfolios, kanonische Margin-/FX-Nutzlast, Statuswerte, Zähler und Kategorien | Import-ID und ausschließlich aggregierte Importzähler; 2B.1-Import atomar |
 | `validate_invitation` | nur `anon` | Modus `invite`, normalisierte E-Mail, exakt 64-stelliger hexadezimaler SHA-256-Hash, Ablauf und Nichtverwendung müssen gemeinsam stimmen | ausschließlich Boolean |
 | `get_admin_summary` | `authenticated` | Adminrolle und JWT-AAL2 | ausschließlich aggregierte Zähler |
 | `get_admin_user_directory` | `authenticated` | Adminrolle und JWT-AAL2 | fest definierte Konto-Metadaten, keine Depotfelder |
@@ -51,7 +52,7 @@ Der Performance Advisor meldet derzeit ausschließlich INFO-Hinweise zu noch unb
 
 - `positions_sector_idx`
 - `account_deletion_requests_status_idx`
-- `positions_source_import_id_idx`
+- `portfolio_cash_balances_user_id_idx`
 - `positions_external_position_id_idx`
 
-Die beiden noch gemeldeten neuen Importindizes sind vor dem ersten dauerhaften Import erwartungsgemäß unbenutzt. Der Advisor meldet den Index für die chronologische Importhistorie nach den Preview-Abnahmen nicht mehr. Hinweise zu unbenutzten Indizes werden nach realer Nutzung erneut bewertet; sicherheits-, Historien- und FK-relevante Indizes werden nicht vorschnell entfernt.
+Der neue Cash-User-Index ist unmittelbar nach der Migration erwartungsgemäß noch unbenutzt und unterstützt Datenschutzexporte sowie benutzerbezogene Löschvorgänge. Hinweise zu unbenutzten Indizes werden nach realer Nutzung erneut bewertet; sicherheits-, Historien- und FK-relevante Indizes werden nicht vorschnell entfernt.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeImport, parseCsvText, type ColumnMapping } from "../src/lib/csv-import";
+import { analyzeImport, normalizeMarginRate, parseCsvText, type ColumnMapping } from "../src/lib/csv-import";
 
 function parseAndAnalyze(csv: string, mapping?: ColumnMapping) {
   const parsed = parseCsvText(csv);
@@ -92,10 +92,38 @@ describe("broker-neutral custom CSV fallback parser", () => {
     expect(parsed.mapping[4]).toBe("ignore");
   });
 
-  it("normalizes fx_to_base and instrument currency", () => {
+  it("normalizes current_fx_to_base and instrument currency", () => {
     const { analysis } = parseAndAnalyze("Ticker;Menge;Einstand;Aktueller Kurs;Währung;FX to Base\nMSFT;20;45;50;usd;0,90");
-    expect(analysis.normalizedPositions[0]).toMatchObject({ instrument_currency: "USD", fx_to_base: 0.9 });
+    expect(analysis.normalizedPositions[0]).toMatchObject({ instrument_currency: "USD", current_fx_to_base: 0.9 });
     expect(analysis.rows[0].derivedFields).toContain("Marktwert in Basiswährung");
+  });
+
+  it("does not automatically map ambiguous exchange-rate headers", () => {
+    const parsed = parseCsvText("Ticker;Menge;Aktueller Kurs;Wechselkurs;exchange rate\nMSFT;2;100;0,9;0,9");
+    expect(parsed.mapping[3]).toBe("ignore");
+    expect(parsed.mapping[4]).toBe("ignore");
+  });
+
+  it("normalizes percent and explicitly quoted margin columns", () => {
+    expect(normalizeMarginRate({ margin_rate: "25,00%", margin_percent: "" })).toMatchObject({ rate: 0.25, error: null });
+    expect(normalizeMarginRate({ margin_rate: "25.00%", margin_percent: "" })).toMatchObject({ rate: 0.25, error: null });
+    expect(normalizeMarginRate({ margin_rate: "0,25", margin_percent: "" })).toMatchObject({ rate: 0.25, error: null });
+    expect(normalizeMarginRate({ margin_rate: "0.25", margin_percent: "" })).toMatchObject({ rate: 0.25, error: null });
+    expect(normalizeMarginRate({ margin_rate: "", margin_percent: "25,00%" })).toMatchObject({ rate: 0.25, error: null });
+  });
+
+  it("rejects ambiguous bare margin-rate values instead of guessing percent", () => {
+    expect(normalizeMarginRate({ margin_rate: "25", margin_percent: "" })).toMatchObject({ rate: null });
+  });
+
+  it("shows original, normalized and calculated margin values in preview", () => {
+    const { analysis } = parseAndAnalyze("Ticker;Menge;Aktueller Kurs;Währung;FX zur Basiswährung;Marginquote\nSAP;10;100;EUR;1;25,00%");
+    expect(analysis.rows[0].marginPreview).toMatchObject({
+      original: "25,00%",
+      normalizedRate: 0.25,
+      calculatedRequirement: 250,
+    });
+    expect(analysis.normalizedPositions[0]).toMatchObject({ margin_rate: 0.25, margin_source: "estimated" });
   });
 
   it("warns when imported result fields differ from central calculations", () => {

@@ -1,55 +1,64 @@
 # Zentraler Formelkatalog
 
-Status: Meilenstein 2B. Fachliche Quelle ist die pure TypeScript-Bibliothek unter `src/lib/calculations/`. Geldwerte werden mit `decimal.js` ohne Zwischenrundung berechnet. Gerundet wird erst in Anzeige oder Export.
+Status: Meilenstein 2B.1. Fachliche Quelle ist die pure TypeScript-Bibliothek unter `src/lib/calculations/`. Geldwerte werden mit `decimal.js` ohne Zwischenrundung berechnet; gerundet wird erst in Anzeige oder Export.
 
-## Kanonische Einheiten und Richtungen
+## Kanonische Definitionen
 
-- `fx_to_base` ist der Wert einer Einheit der Instrumentwährung in der Depotbasiswährung. Umrechnung erfolgt immer durch Multiplikation: `Betrag Instrumentwährung × fx_to_base`.
+- `current_fx_to_base` ist der aktuelle Wert **einer Einheit der Instrumentwährung in der Depotbasiswährung**. Umrechnung erfolgt immer durch Multiplikation.
+- `entry_fx_to_base` ist ein historischer Referenzkurs beim Positionsaufbau. Bei Marginfinanzierung ist er nicht zwingend ein ausgeführter Währungstausch.
+- `margin_rate` ist ausschließlich eine Dezimalquote zwischen `0` und `1`: 25 % werden als `0.25` gespeichert.
 - `direction_factor` ist `1` für Long, Long Call und Long Put sowie `-1` für Short, Short Call und Short Put.
-- `quantity_abs` ist der Absolutbetrag der Menge.
-- `multiplier` ist bei Aktien üblicherweise `1`, bei Optionen der Kontraktmultiplikator, typischerweise `100`.
-- NetLiq, aktuelle Kurse und Wechselkurse bleiben Quelldaten. NetLiq wird nicht aus Positionen rekonstruiert.
+- NetLiq, Cashsalden, aktuelle Kurse und aktuelle Wechselkurse sind voneinander getrennte Quelldaten. NetLiq wird nicht aus Cash und Positionen rekonstruiert.
+
+Eine Ausgangsquote `1 EUR = 0,929275 CHF` wird im Quellenadapter für ein EUR-Depot und ein CHF-Instrument invertiert: `1 CHF = 1 / 0,929275 EUR`.
 
 ## Positionskennzahlen
 
-| Fachlich | Technisch | Ausgangsdaten | Formel / Einheit | Long, Short, Option, FX | Fehlende Daten / Status | Spätere Quelle |
-|---|---|---|---|---|---|---|
-| Positionswert Instrumentwährung | `positionValueInstrument` | Menge, Multiplikator, aktueller Kurs | `quantity_abs × multiplier × current_price`; Instrumentwährung | Immer positiv; Option nutzt Kontraktmultiplikator | fehlender Wert `incomplete`, ungültiger Wert `invalid` | Brokerposition + Kursfeed |
-| Positionswert Basiswährung | `positionValueBase` | Positionswert Instrumentwährung, `fx_to_base` | `positionValueInstrument × fx_to_base`; Basiswährung | Long/Short gleich positiv; FX immer Multiplikation | Legacy-Marktwert vorübergehend `source_fallback`, sonst `incomplete` | Broker/Kurs-/FX-Feed |
-| Vorzeichenbehaftetes Engagement | `signedExposure` | Positionswert Basiswährung, Richtung | `direction_factor × positionValueBase`; Basiswährung | Short negativ, Long positiv | Status folgt Positionswert | Brokerposition |
-| Unrealisiertes Ergebnis | `unrealizedPnl` | Richtung, Einstand, Kurs, Menge, Multiplikator, FX | `direction_factor × (current_price − entry_price) × quantity_abs × multiplier × fx_to_base`; Basiswährung | Fallender Kurs ist für Short positiv; Optionen nutzen Multiplikator | kein Legacy-Fallback; fehlend `incomplete` | Broker/Kursfeed |
-| Anteil NetLiq | `netLiquidityShare` | Positionswert Basiswährung, NetLiq | `positionValueBase ÷ net_liquidity`; Quote | Kann summiert über 100 % liegen | NetLiq fehlt: `incomplete`; NetLiq ≤ 0: `invalid` | Broker-Kontosnapshot |
-| Risiko bis Stopp | `stopRisk` | Richtung, Kurs, effektiver Stopp, Menge, Multiplikator, FX | Long: `(current − stop) × quantity_abs × multiplier × fx`; Short: `(stop − current) × …`; Basiswährung | Long-Stopp muss ≤ Kurs, Short-Stopp ≥ Kurs sein; Option nutzt Multiplikator | Stopp fehlt: `incomplete`; falsche Marktseite: `invalid`; niemals künstlich `0` | mentaler Stopp, später Brokerorder |
-| Risiko / NetLiq | `riskToNetLiquidity` | Stopprisiko, NetLiq | `stopRisk ÷ net_liquidity`; Quote | richtungsneutral nach gültiger Stopprisikoformel | Status folgt Risiko/NetLiq | abgeleitet |
-| Anteil am berechenbaren Gesamtrisiko | `riskShareOfCalculableTotal` | Positionsrisiko, Summe berechenbarer Risiken | `stopRisk ÷ totalCalculableStopRisk`; Quote | nur Positionen mit gültigem Risiko | fehlender/ungültiger Stopp bleibt unberechenbar; Gesamtrisiko 0 ist `invalid` | abgeleitet |
-| Margin Requirement | `marginRequirement` | direkter Marginwert oder Positionswert + Margin-% | Priorität 1: direkter Wert; Priorität 2: `positionValueBase × marginPercent ÷ 100`; Basiswährung | Long/Short gleich nach jeweiligem absoluten Positionswert | Quelle `broker_or_imported`, `estimated` oder `missing` | Broker-Kontosnapshot |
-
-## Portfoliokennzahlen
-
-| Fachlich | Technisch | Formel / Einheit | Unvollständigkeit |
+| Fachlich | Technisch | Formel / Einheit | Hinweise |
 |---|---|---|---|
-| Long-Exposure | `longExposure` | Summe Long-Positionswerte; Basiswährung | verfügbare Teilsumme mit Status `incomplete`/`invalid` |
-| Short-Exposure | `shortExposure` | Summe absoluter Short-Positionswerte; Basiswährung | wie Long-Exposure |
-| Brutto-Exposure | `grossExposure` | `longExposure + shortExposure`; Basiswährung | Status der Eingangssummen |
-| Netto-Exposure | `netExposure` | `longExposure − shortExposure`; Basiswährung | Status der Eingangssummen |
-| Depot-Hebel | `leverage` | `grossExposure ÷ net_liquidity`; Faktor | NetLiq fehlt/ungültig oder Exposure unvollständig wird sichtbar |
-| Gesamtmargin | `totalMarginRequirement` | Summe direkter und geschätzter Marginwerte; Basiswährung | Teilsumme plus Anzahl fehlender Positionen |
-| Margin-Auslastung | `marginUtilization` | `totalMarginRequirement ÷ net_liquidity`; Quote | Status folgt Gesamtmargin und NetLiq |
-| Berechenbares Stopprisiko | `totalCalculableStopRisk` | Summe gültiger Stopprisiken; Basiswährung | Teilsumme bleibt sichtbar, zugleich `riskIsComplete=false` |
-| Risikoabdeckung | `riskValueCoverage` | Marktwert gültig risikoberechenbarer Positionen ÷ gesamter berechenbarer Marktwert; Quote | fehlende Marktwerte werden als unvollständig ausgewiesen |
-| Kategoriengewicht | `categories` | Marktwert je Kategorie; Anteil NetLiq; Anteil Brutto-Exposure | keine Grenzwerte oder Farben in 2B |
-| Aktive Teilpositionen | `activePositionRowCount` | Anzahl aktiver Datensätze | gleiche Ticker werden separat gezählt |
-| Unterschiedliche Instrumente | `distinctInstrumentCount` | Anzahl normalisierter eindeutiger Ticker | unabhängig von Teilpositionen |
+| Positionswert Instrumentwährung | `positionValueInstrument` | `abs(quantity) × multiplier × current_price` | Cash-Positionszeilen sind Legacyfälle und keine Wertpapierpositionen. |
+| Positionswert Basiswährung | `positionValueBase` | `positionValueInstrument × current_fx_to_base` | `current_fx_to_base` ist maßgeblich; `fx_to_base` nur Legacy-Fallback beim Lesen. |
+| Vorzeichenbehaftetes Engagement | `signedExposure` | `direction_factor × positionValueBase` | Short negativ, Long positiv. |
+| Unrealisiertes Ergebnis | `unrealizedPnl` | `direction_factor × (current_price − entry_price) × abs(quantity) × multiplier × current_fx_to_base` | Verwendet den aktuellen FX für den aktuellen Basiswährungswert. |
+| Stopprisiko Instrumentwährung | `stopRiskInstrument` | Long: `(current − stop) × abs(quantity) × multiplier`; Short umgekehrt | Keine künstliche Null bei fehlendem Stopp. |
+| Stopprisiko Basiswährung | `stopRisk` | `stopRiskInstrument × current_fx_to_base` | Aktueller FX ist maßgeblich. |
+| Anteil NetLiq | `netLiquidityShare` | `positionValueBase ÷ net_liquidity` | NetLiq ≤ 0 ist ungültig. |
+| Margin Requirement | `marginRequirement` | direkter bestätigter Wert, sonst `positionValueBase × margin_rate` | Herkunft: `broker`, `imported_direct`, `manual_direct`, `estimated`, `missing`, `legacy_untrusted`. |
 
-## Status und Quellenrangfolge
+Ein manueller direkter Wert wird nie als Brokerwert bezeichnet. Ein bestätigter direkter Wert von `0` ist zulässig. Ein alter, unbestätigter Null-Platzhalter wird als `legacy_untrusted` und damit fehlend behandelt.
+
+## Portfolio- und Cashkennzahlen
+
+| Fachlich | Technisch | Formel / Einheit |
+|---|---|---|
+| Long-Marktwert | `longExposure` | Summe der Long-Wertpapiermarktwerte |
+| Short-Marktwert | `shortExposure` | Summe der absoluten Short-Wertpapiermarktwerte |
+| Brutto-Marktwert | `grossExposure` | `longExposure + shortExposure` |
+| Netto-Marktwert | `netExposure` | `longExposure − shortExposure` |
+| **NetLiq-Hebel** | `netLiquidityLeverage` | **Brutto-Marktwert der Wertpapierpositionen ÷ Nettoliquidität** |
+| Gesamtmargin | `totalMarginRequirement` | Summe bestätigter direkter und geschätzter Marginwerte |
+| Margin-Auslastung | `marginUtilization` | `totalMarginRequirement ÷ net_liquidity` |
+| Cash je Währung | `balances` | vorzeichenbehafteter nativer Saldo |
+| Cashwert Basiswährung | `valueBase` | `balance_native × current_fx_to_base`; Basiswährung verwendet FX `1` |
+| Gesamtcash | `totalCashBase` | Summe der vollständigen Cashwerte in Basiswährung |
+
+Der NetLiq-Hebel ist derzeit marktwertbasiert. Optionen werden noch nicht delta- oder nominalwertbereinigt. Cash geht weder in Long-, Short-, Brutto- oder Netto-Marktwert noch in NetLiq-Hebel oder Wertpapier-Kategoriengewichtung ein. Negative Cashsalden wirken bereits über das separate Quelldatum Nettoliquidität.
+
+Cashberechnungen weisen positive, negative und Nullsalden sowie die FX-Vollständigkeit aus. Ein fehlender Fremdwährungs-FX macht den Gesamtcash sichtbar unvollständig.
+
+## Status und Marktmetadaten
 
 - `calculated`: vollständig aus Quelldaten berechnet.
-- `source_fallback`: direkter Quellenwert beziehungsweise vorübergehender Legacy-Fallback wurde verwendet.
-- `incomplete`: notwendige Eingabe fehlt; ein vorhandener Teilwert kann als unvollständige Summe sichtbar bleiben.
+- `source_fallback`: bestätigter direkter Quellenwert oder vorübergehender Legacy-Marktwert wurde verwendet.
+- `incomplete`: notwendige Eingabe fehlt.
 - `invalid`: Eingabe oder fachliche Beziehung ist ungültig.
 
-Margin verwendet strikt `broker_or_imported` vor `estimated` vor `missing`. Ein geschätzter Wert wird nie als Brokerwert bezeichnet.
+Aktuelle Kurse und Wechselkurse führen jeweils Wert, Quelle, Zeitpunkt und Status. Status: `live`, `delayed`, `closing`, `imported`, `manual`, `stale`. Alte Werte dürfen nicht ohne `stale`-Hinweis als aktuell erscheinen. Automatische Kurs- und FX-Bezüge folgen erst im Broker-/Marktdatenmeilenstein.
 
-## Legacy-/Cachefelder
+## Legacyfelder
 
-`positions.market_value`, `positions.risk_amount`, `portfolios.margin_used_pct` und `portfolios.risk_budget_used_pct` bleiben zunächst schema- und datenkompatibel. Die ersten drei können später als explizit versionierte Cachefelder neu modelliert oder entfernt werden. `risk_budget_used_pct` wird nicht verwendet, bis Meilenstein 2D eine fachlich abgenommene Budgetdefinition liefert. Keine destruktive Bereinigung erfolgt in 2B.
+- `portfolios.cash_balance`: nur Rückwärtskompatibilität; fachliche Cashquelle ist `portfolio_cash_balances`.
+- `positions.margin_percent`: nur Rückwärtskompatibilität; neue Anwendungsteile schreiben `margin_rate`.
+- `positions.fx_to_base`: nur Rückwärtskompatibilität; aktuelle Berechnungen verwenden `current_fx_to_base`.
+- `positions.market_value` und `positions.risk_amount`: Import-/Kompatibilitätscaches; die Berechnungsengine bleibt maßgeblich.
+- `portfolios.margin_used_pct` und `portfolios.risk_budget_used_pct`: Legacyfelder; letzteres bleibt bis zur fachlichen Definition in Meilenstein 2D ungenutzt.

@@ -20,7 +20,7 @@ function positionValueInstrument(input: PositionCalculationInput): CalculationMe
 }
 
 function positionValueBase(input: PositionCalculationInput, instrumentValue: CalculationMetric): CalculationMetric {
-  const fx = decimal(input.fxToBase);
+  const fx = decimal(input.currentFxToBase);
   if (instrumentValue.value !== null && fx !== null && fx.isPositive()) {
     return calculated(new Decimal(instrumentValue.value).mul(fx));
   }
@@ -38,7 +38,7 @@ function unrealizedPnl(input: PositionCalculationInput, factor: 1 | -1): Calcula
   const multiplier = decimal(input.multiplier);
   const currentPrice = decimal(input.currentPrice);
   const entryPrice = decimal(input.entryPrice);
-  const fx = decimal(input.fxToBase);
+  const fx = decimal(input.currentFxToBase);
   if (quantity === null) return incomplete("quantity_missing");
   if (quantity.isNegative()) return invalid("quantity_invalid");
   if (multiplier === null) return incomplete("multiplier_missing");
@@ -60,40 +60,47 @@ function ratio(numerator: CalculationMetric, denominatorInput: PositionCalculati
   return calculated(new Decimal(numerator.value).div(denominator));
 }
 
-function stopRisk(input: PositionCalculationInput, factor: 1 | -1): CalculationMetric {
+function stopRiskInstrument(input: PositionCalculationInput, factor: 1 | -1): CalculationMetric {
   const stop = decimal(input.effectiveStopPrice);
   if (stop === null) return incomplete("stop_missing");
   const currentPrice = decimal(input.currentPrice);
   const quantity = decimal(input.quantity);
   const multiplier = decimal(input.multiplier);
-  const fx = decimal(input.fxToBase);
   if (currentPrice === null) return incomplete("current_price_missing");
   if (currentPrice.isNegative()) return invalid("current_price_invalid");
   if (quantity === null) return incomplete("quantity_missing");
   if (quantity.isNegative()) return invalid("quantity_invalid");
   if (multiplier === null) return incomplete("multiplier_missing");
   if (!multiplier.isPositive()) return invalid("multiplier_invalid");
-  if (fx === null) return incomplete("fx_to_base_missing");
-  if (!fx.isPositive()) return invalid("fx_to_base_invalid");
   if (stop.isNegative()) return invalid("stop_invalid");
   if ((factor === 1 && stop.greaterThan(currentPrice)) || (factor === -1 && stop.lessThan(currentPrice))) {
     return invalid("stop_invalid");
   }
   const distance = factor === 1 ? currentPrice.minus(stop) : stop.minus(currentPrice);
-  return calculated(distance.mul(quantity.abs()).mul(multiplier).mul(fx));
+  return calculated(distance.mul(quantity.abs()).mul(multiplier));
+}
+
+function stopRiskBase(input: PositionCalculationInput, instrumentRisk: CalculationMetric): CalculationMetric {
+  if (instrumentRisk.value === null) return { ...instrumentRisk };
+  const fx = decimal(input.currentFxToBase);
+  if (fx === null) return incomplete("fx_to_base_missing");
+  if (!fx.isPositive()) return invalid("fx_to_base_invalid");
+  return calculated(new Decimal(instrumentRisk.value).mul(fx));
 }
 
 function marginRequirement(input: PositionCalculationInput, baseValue: CalculationMetric): PositionCalculation["marginRequirement"] {
   const direct = decimal(input.directMarginRequirement);
   if (direct !== null) {
     if (direct.isNegative()) return { ...invalid("margin_requirement_invalid"), provenance: "missing" };
-    return { ...sourceFallback(direct, "direct_margin_requirement_used"), provenance: "broker_or_imported" };
+    const provenance = input.directMarginProvenance ?? "legacy_untrusted";
+    if (provenance === "legacy_untrusted") return { ...incomplete("margin_information_missing"), provenance };
+    return { ...sourceFallback(direct, "direct_margin_requirement_used"), provenance };
   }
-  const percent = decimal(input.marginPercent);
-  if (percent === null) return { ...incomplete("margin_information_missing"), provenance: "missing" };
-  if (percent.isNegative()) return { ...invalid("margin_percent_invalid"), provenance: "missing" };
+  const rate = decimal(input.marginRate);
+  if (rate === null) return { ...incomplete("margin_information_missing"), provenance: input.directMarginProvenance === "legacy_untrusted" ? "legacy_untrusted" : "missing" };
+  if (rate.isNegative() || rate.greaterThan(1)) return { ...invalid("margin_rate_invalid"), provenance: "missing" };
   if (baseValue.value === null) return { ...baseValue, provenance: "missing" };
-  return { ...calculated(new Decimal(baseValue.value).mul(percent).div(100)), provenance: "estimated" };
+  return { ...calculated(new Decimal(baseValue.value).mul(rate)), provenance: "estimated" };
 }
 
 export function calculatePosition(input: PositionCalculationInput): PositionCalculation {
@@ -105,11 +112,13 @@ export function calculatePosition(input: PositionCalculationInput): PositionCalc
     : calculated(new Decimal(baseValue.value).mul(factor));
   const pnl = unrealizedPnl(input, factor);
   const netLiquidityShare = ratio(baseValue, input.netLiquidity);
-  const risk = stopRisk(input, factor);
+  const instrumentRisk = stopRiskInstrument(input, factor);
+  const risk = stopRiskBase(input, instrumentRisk);
 
   return {
     id: input.id,
     ticker: input.ticker,
+    instrumentType: input.instrumentType,
     categoryId: input.categoryId ?? null,
     categoryName: input.categoryName ?? null,
     directionFactor: factor,
@@ -119,6 +128,7 @@ export function calculatePosition(input: PositionCalculationInput): PositionCalc
     unrealizedPnl: pnl,
     netLiquidityShare,
     marginRequirement: marginRequirement(input, baseValue),
+    stopRiskInstrument: instrumentRisk,
     stopRisk: risk,
     riskToNetLiquidity: ratio(risk, input.netLiquidity),
     riskShareOfCalculableTotal: incomplete("portfolio_contains_incomplete_positions"),

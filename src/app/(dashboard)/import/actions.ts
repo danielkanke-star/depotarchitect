@@ -70,30 +70,33 @@ export async function replacePortfolioSnapshot(input: SnapshotImportInput): Prom
   const portfolio = await getOrCreatePortfolio();
   const normalizedPositions = input.positions.map((position, index) => {
     const instrumentCurrency = position.instrument_currency?.trim().toUpperCase() || null;
-    const fxToBase = position.fx_to_base ?? (instrumentCurrency === portfolio.currency.trim().toUpperCase() ? 1 : null);
+    const currentFxToBase = position.current_fx_to_base ?? (instrumentCurrency === portfolio.currency.trim().toUpperCase() ? 1 : null);
     const calculation = calculatePosition({
       id: `${index}`,
       ticker: position.ticker,
+      instrumentType: position.instrument_type,
       direction: position.direction,
       quantity: position.quantity,
       multiplier: position.multiplier,
       entryPrice: position.entry_price,
       currentPrice: position.current_price,
-      fxToBase,
+      entryFxToBase: position.entry_fx_to_base,
+      currentFxToBase,
       netLiquidity: portfolio.net_liquidity,
       effectiveStopPrice: position.stop_price,
       directMarginRequirement: position.margin_requirement,
-      marginPercent: position.margin_percent,
+      directMarginProvenance: position.margin_requirement === null ? undefined : "imported_direct",
+      marginRate: position.margin_rate,
     });
     return {
       ...position,
       instrument_currency: instrumentCurrency,
-      fx_to_base: fxToBase,
+      current_fx_to_base: currentFxToBase,
       market_value: calculation.positionValueBase.value,
       risk_amount: calculation.stopRisk.value,
     };
   });
-  const { data, error } = await supabase.rpc("replace_portfolio_snapshot_v2", {
+  const { data, error } = await supabase.rpc("replace_portfolio_snapshot_v3", {
     target_portfolio: portfolio.id,
     original_filename: filename,
     normalized_positions: normalizedPositions as unknown as Json,

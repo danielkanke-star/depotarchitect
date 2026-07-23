@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { calculatePosition } from "@/lib/calculations/position-calculations";
-import type { Direction } from "@/lib/calculations/calculation-types";
+import type { Direction, InstrumentType, MarketDataStatus } from "@/lib/calculations/calculation-types";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
 
 const DIRECTIONS = new Set<Direction>(["long", "short", "long_put", "long_call", "short_put", "short_call"]);
-const INSTRUMENT_TYPES = new Set(["stock", "etf", "option", "cash", "other"]);
+const INSTRUMENT_TYPES = new Set<InstrumentType>(["stock", "etf", "option", "warrant", "knock_out", "cash", "other"]);
 const STATUSES = new Set(["active", "watch", "high", "danger"]);
+const MARKET_DATA_STATUSES = new Set<MarketDataStatus>(["live", "delayed", "closing", "imported", "manual", "stale"]);
 
 const text = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim();
 const nullableNumber = (formData: FormData, key: string) => {
@@ -26,21 +27,27 @@ export async function savePosition(formData: FormData) {
   const id = text(formData, "id");
   const ticker = text(formData, "ticker").toUpperCase();
   const direction = text(formData, "direction") as Direction;
-  const instrumentType = text(formData, "instrument_type") || "stock";
+  const instrumentType = (text(formData, "instrument_type") || "stock") as InstrumentType;
   const status = text(formData, "status") || "active";
   const quantity = nullableNumber(formData, "quantity");
   const multiplier = nullableNumber(formData, "multiplier");
   const entryPrice = nullableNumber(formData, "entry_price");
   const currentPrice = nullableNumber(formData, "current_price");
   const stopPrice = nullableNumber(formData, "stop_price");
-  const marginPercent = nullableNumber(formData, "margin_percent");
+  const marginRatePercent = nullableNumber(formData, "margin_rate_percent");
+  const marginRate = marginRatePercent === null ? null : marginRatePercent / 100;
   const directMarginRequirement = nullableNumber(formData, "margin_requirement");
   const strikePrice = nullableNumber(formData, "strike_price");
   const optionType = text(formData, "option_type") || null;
   const expirationDate = text(formData, "expiration_date") || null;
   const instrumentCurrency = (text(formData, "instrument_currency") || portfolio.currency).toUpperCase();
-  const enteredFx = nullableNumber(formData, "fx_to_base");
-  const fxToBase = enteredFx ?? (instrumentCurrency === portfolio.currency.toUpperCase() ? 1 : null);
+  const entryFxToBase = nullableNumber(formData, "entry_fx_to_base");
+  const enteredCurrentFx = nullableNumber(formData, "current_fx_to_base");
+  const currentFxToBase = enteredCurrentFx ?? (instrumentCurrency === portfolio.currency.toUpperCase() ? 1 : null);
+  const currentPriceAsOf = normalizedDateTime(formData, "current_price_as_of");
+  const currentFxAsOf = normalizedDateTime(formData, "current_fx_as_of");
+  const currentPriceStatus = nullableMarketDataStatus(formData, "current_price_status", currentPrice);
+  const currentFxStatus = nullableMarketDataStatus(formData, "current_fx_status", currentFxToBase);
   const categoryId = text(formData, "category_id") || null;
 
   if (!ticker || ticker.length > 40 || !DIRECTIONS.has(direction) || !INSTRUMENT_TYPES.has(instrumentType) || !STATUSES.has(status)) {
@@ -49,10 +56,10 @@ export async function savePosition(formData: FormData) {
   if (quantity === null || quantity <= 0 || multiplier === null || multiplier <= 0 || entryPrice === null || entryPrice < 0) {
     throw new Error("Menge, Multiplikator und Einstandskurs sind ungültig.");
   }
-  if ((currentPrice !== null && currentPrice < 0) || (stopPrice !== null && stopPrice < 0) || (marginPercent !== null && marginPercent < 0) || (directMarginRequirement !== null && directMarginRequirement < 0)) {
+  if ((currentPrice !== null && currentPrice < 0) || (stopPrice !== null && stopPrice < 0) || (marginRate !== null && (marginRate < 0 || marginRate > 1)) || (directMarginRequirement !== null && directMarginRequirement < 0)) {
     throw new Error("Preis-, Stopp- oder Marginangaben dürfen nicht negativ sein.");
   }
-  if (!/^[A-Z]{3}$/.test(instrumentCurrency) || (fxToBase !== null && fxToBase <= 0)) {
+  if (!/^[A-Z]{3}$/.test(instrumentCurrency) || (entryFxToBase !== null && entryFxToBase <= 0) || (currentFxToBase !== null && currentFxToBase <= 0)) {
     throw new Error("Währung oder Wechselkurs ist ungültig.");
   }
   if (instrumentType === "option" && (!optionType || !new Set(["call", "put"]).has(optionType) || strikePrice === null || strikePrice < 0 || !expirationDate)) {
@@ -66,16 +73,19 @@ export async function savePosition(formData: FormData) {
   const calculation = calculatePosition({
     id: id || "new",
     ticker,
+    instrumentType,
     direction,
     quantity,
     multiplier,
     entryPrice,
     currentPrice,
-    fxToBase,
+    entryFxToBase,
+    currentFxToBase,
     netLiquidity: portfolio.net_liquidity,
     effectiveStopPrice: stopPrice,
     directMarginRequirement,
-    marginPercent,
+    directMarginProvenance: directMarginRequirement === null ? undefined : "manual_direct",
+    marginRate,
   });
   const payload = {
     portfolio_id: portfolio.id,
@@ -90,13 +100,20 @@ export async function savePosition(formData: FormData) {
     entry_price: entryPrice,
     current_price: currentPrice,
     instrument_currency: instrumentCurrency,
-    fx_to_base: fxToBase,
-    data_as_of: normalizedDateTime(formData, "data_as_of"),
+    entry_fx_to_base: entryFxToBase,
+    current_fx_to_base: currentFxToBase,
+    current_fx_as_of: currentFxAsOf,
+    current_fx_source: currentFxToBase === null ? null : text(formData, "current_fx_source") || "manual",
+    current_fx_status: currentFxStatus,
+    current_price_as_of: currentPriceAsOf,
+    current_price_source: currentPrice === null ? null : text(formData, "current_price_source") || "manual",
+    current_price_status: currentPriceStatus,
     stop_price: stopPrice,
     market_value: calculation.positionValueBase.value,
     risk_amount: calculation.stopRisk.value,
     margin_requirement: directMarginRequirement,
-    margin_percent: marginPercent,
+    margin_rate: marginRate,
+    margin_source: directMarginRequirement !== null ? "manual_direct" as const : marginRate !== null ? "estimated" as const : "missing" as const,
     option_type: instrumentType === "option" ? optionType : null,
     strike_price: instrumentType === "option" ? strikePrice : null,
     expiration_date: instrumentType === "option" ? expirationDate : null,
@@ -115,6 +132,13 @@ export async function savePosition(formData: FormData) {
   revalidatePath("/depot");
   revalidatePath("/cockpit");
   redirect("/depot");
+}
+
+function nullableMarketDataStatus(formData: FormData, key: string, sourceValue: number | null) {
+  if (sourceValue === null) return null;
+  const value = (text(formData, key) || "manual") as MarketDataStatus;
+  if (!MARKET_DATA_STATUSES.has(value)) throw new Error("Der Marktdatenstatus ist ungültig.");
+  return value;
 }
 
 function normalizedDateTime(formData: FormData, key: string) {

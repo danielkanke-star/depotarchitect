@@ -1,6 +1,8 @@
 export type NumericInput = number | string | null | undefined;
 
 export type CalculationStatus = "calculated" | "source_fallback" | "incomplete" | "invalid";
+export type MarketDataStatus = "live" | "delayed" | "closing" | "imported" | "manual" | "stale";
+export type InstrumentType = "stock" | "etf" | "option" | "warrant" | "knock_out" | "cash" | "other";
 
 export type CalculationReason =
   | "current_price_missing"
@@ -19,9 +21,12 @@ export type CalculationReason =
   | "stop_invalid"
   | "margin_information_missing"
   | "margin_requirement_invalid"
-  | "margin_percent_invalid"
+  | "margin_rate_invalid"
   | "legacy_market_value_used"
   | "direct_margin_requirement_used"
+  | "legacy_cash_position_excluded"
+  | "cash_fx_missing"
+  | "cash_fx_invalid"
   | "portfolio_contains_incomplete_positions"
   | "portfolio_contains_invalid_positions"
   | "gross_exposure_zero"
@@ -34,7 +39,13 @@ export type CalculationMetric = {
   reasons: CalculationReason[];
 };
 
-export type MarginProvenance = "broker_or_imported" | "estimated" | "missing";
+export type MarginProvenance =
+  | "broker"
+  | "imported_direct"
+  | "manual_direct"
+  | "estimated"
+  | "missing"
+  | "legacy_untrusted";
 
 export type Direction = "long" | "short" | "long_put" | "long_call" | "short_put" | "short_call";
 
@@ -43,22 +54,26 @@ export type PositionCalculationInput = {
   ticker: string;
   categoryId?: string | null;
   categoryName?: string | null;
+  instrumentType: InstrumentType;
   direction: Direction;
   quantity: NumericInput;
   multiplier: NumericInput;
   entryPrice: NumericInput;
   currentPrice: NumericInput;
-  fxToBase: NumericInput;
+  entryFxToBase?: NumericInput;
+  currentFxToBase: NumericInput;
   netLiquidity: NumericInput;
   effectiveStopPrice?: NumericInput;
   directMarginRequirement?: NumericInput;
-  marginPercent?: NumericInput;
+  directMarginProvenance?: Exclude<MarginProvenance, "estimated" | "missing">;
+  marginRate?: NumericInput;
   legacyMarketValueBase?: NumericInput;
 };
 
 export type PositionCalculation = {
   id: string;
   ticker: string;
+  instrumentType: InstrumentType;
   categoryId: string | null;
   categoryName: string | null;
   directionFactor: 1 | -1;
@@ -68,6 +83,7 @@ export type PositionCalculation = {
   unrealizedPnl: CalculationMetric;
   netLiquidityShare: CalculationMetric;
   marginRequirement: CalculationMetric & { provenance: MarginProvenance };
+  stopRiskInstrument: CalculationMetric;
   stopRisk: CalculationMetric;
   riskToNetLiquidity: CalculationMetric;
   riskShareOfCalculableTotal: CalculationMetric;
@@ -89,11 +105,12 @@ export type PortfolioCalculationInput = {
 
 export type PortfolioCalculation = {
   positions: PositionCalculation[];
+  securityPositions: PositionCalculation[];
   longExposure: CalculationMetric;
   shortExposure: CalculationMetric;
   grossExposure: CalculationMetric;
   netExposure: CalculationMetric;
-  leverage: CalculationMetric;
+  netLiquidityLeverage: CalculationMetric;
   totalMarginRequirement: CalculationMetric;
   marginUtilization: CalculationMetric;
   totalCalculableStopRisk: CalculationMetric;
@@ -105,5 +122,32 @@ export type PortfolioCalculation = {
   riskIsComplete: boolean;
   activePositionRowCount: number;
   distinctInstrumentCount: number;
+  legacyCashPositionCount: number;
   categories: CategoryCalculation[];
+};
+
+export type CashBalanceCalculationInput = {
+  id: string;
+  currency: string;
+  baseCurrency: string;
+  balanceNative: NumericInput;
+  currentFxToBase: NumericInput;
+};
+
+export type CashBalanceCalculation = {
+  id: string;
+  currency: string;
+  balanceNative: number | null;
+  currentFxToBase: number | null;
+  valueBase: CalculationMetric;
+};
+
+export type CashPortfolioCalculation = {
+  balances: CashBalanceCalculation[];
+  totalCashBase: CalculationMetric;
+  positiveBalanceCount: number;
+  negativeBalanceCount: number;
+  zeroBalanceCount: number;
+  fxIsComplete: boolean;
+  missingFxCount: number;
 };

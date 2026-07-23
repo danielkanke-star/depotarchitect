@@ -1,6 +1,36 @@
 # Zielbild für Brokerpositionen und DepotArchitect-Teilpositionen
 
-Status: Architekturentwurf für Meilenstein 2C. Auch Meilenstein 2B implementiert die beschriebenen Tabellen, Synchronisationsprozesse und Zuordnungsregeln **nicht**. Die Berechnungsengine arbeitet bereits korrekt auf einzelnen DepotArchitect-Teilpositionszeilen und setzt nie voraus, dass ein Ticker nur einmal vorkommt.
+Status: Architekturentwurf für Meilenstein 2C. Meilenstein 2B.1 implementiert nur das additive Cashquellenmodell und die vorbereitenden Kurs-/FX-Metadaten. Brokerkonten, Synchronisation und Zuordnungsregeln werden **nicht** implementiert. Die Berechnungsengine arbeitet bereits korrekt auf einzelnen DepotArchitect-Teilpositionszeilen und setzt nie voraus, dass ein Ticker nur einmal vorkommt.
+
+## Zielstruktur
+
+```text
+Depot
+├── Cash
+│   ├── EUR
+│   ├── USD
+│   └── CHF
+├── Aktien
+│   └── Instrument
+│       └── DepotArchitect-Teilpositionen
+├── ETFs
+├── Optionen
+│   └── Basiswert
+│       └── konkreter Vertrag
+│           └── Teilpositionen
+├── Optionsscheine
+└── Knock-out-Produkte
+```
+
+Beispiel:
+
+```text
+GOOG – Gesamtbestand 7 Aktien
+├── Kerninvestment – 3 Aktien
+└── Momentumtrade – 4 Aktien
+```
+
+Kategorie und Strategie gehören an die Teilposition, nicht dauerhaft an Ticker oder Gesamtbestand. Die Baumansicht selbst folgt erst in Meilenstein 2C.
 
 ## Abgrenzung zu Meilenstein 2A
 
@@ -15,6 +45,8 @@ Ein Brokerkonto bildet ein konkretes Konto bei einem Anbieter wie IBKR, Estably 
 ### Brokerposition
 
 Eine Brokerposition ist der vom Broker zusammengefasste Gesamtbestand eines Instruments. Ein Broker könnte beispielsweise für GOOG einen Gesamtbestand von sieben Aktien liefern. Dieser Gesamtbestand ist die brokerseitige Bestandswahrheit, aber noch keine fachliche Aufteilung innerhalb von DepotArchitect.
+
+Die Produkttypen sind erweiterbar auf `stock`, `etf`, `option`, `warrant`, `knock_out`, `cash` und `other`. Optionsscheine benötigen später mindestens ISIN, Emittent, Basiswert, Bezugsverhältnis, Strike und Verfall. Knock-outs benötigen mindestens ISIN, Emittent, Basiswert, Richtung, Knock-out-Schwelle und Bezugsverhältnis. Diese Produktdaten und Spezialberechnungen sind noch nicht umgesetzt.
 
 ### DepotArchitect-Teilposition
 
@@ -51,3 +83,5 @@ Eine Orderzuordnung verbindet eine Brokerorder mit einer bestimmten DepotArchite
 Dieser Entwurf führt weder neue Datenbanktabellen noch eine Broker-API, Ordersynchronisierung, automatische Tranchenzuordnung oder Stoppauswahl ein. Vor einer Implementierung sind Identitäten, Reconciliation, Historisierung, Fehlerzustände, RLS, Auditierung und Löschregeln separat zu spezifizieren und zu testen.
 
 Ein späterer Estably-/IBKR-Jahresbericht kann eine historische Importquelle für Transaktionen, Stichtagspositionen, Gebühren und Ergebnisse werden. Aktuelle offene Orders und Stoporders benötigen voraussichtlich eine getrennte, zeitnahe Brokerquelle.
+
+Aktuelle Wertpapierkurse und Wechselkurse werden im späteren Broker-/Marktdatenmeilenstein automatisch bezogen. Meilenstein 2B.1 speichert nur Wert, Quelle, Zeitpunkt und Status und implementiert weder IBKR/TWS/Client-Portal-API noch WebSocket, Marktdatenabonnements oder automatische Abfragen.

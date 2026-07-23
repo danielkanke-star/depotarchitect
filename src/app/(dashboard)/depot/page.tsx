@@ -42,22 +42,28 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
         <label>Kategorie<select name="category_id" defaultValue={editPosition?.category_id ?? ""}><option value="">Keine</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
         <label>Strategie<input name="strategy" defaultValue={editPosition?.strategy ?? ""} /></label>
         <label>Richtung<select name="direction" defaultValue={editPosition?.direction ?? "long"}><option value="long">Long</option><option value="short">Short</option><option value="long_put">Long Put</option><option value="long_call">Long Call</option><option value="short_put">Short Put</option><option value="short_call">Short Call</option></select></label>
-        <label>Instrument<select name="instrument_type" defaultValue={editPosition?.instrument_type ?? "stock"}><option value="stock">Aktie</option><option value="etf">ETF</option><option value="option">Option</option><option value="cash">Cash</option><option value="other">Sonstiges</option></select></label>
+        <label>Instrument<select name="instrument_type" defaultValue={editPosition?.instrument_type ?? "stock"}><option value="stock">Aktie</option><option value="etf">ETF</option><option value="option">Option</option><option value="warrant">Optionsschein</option><option value="knock_out">Knock-out</option><option value="cash">Cash · nur Legacy</option><option value="other">Sonstiges</option></select></label>
         <label>Menge<input name="quantity" required inputMode="decimal" defaultValue={editPosition?.quantity ?? 1} /></label>
         <label>Multiplikator<input name="multiplier" required inputMode="decimal" defaultValue={editPosition?.multiplier ?? 1} /></label>
         <label>Einstandskurs<input name="entry_price" required inputMode="decimal" defaultValue={editPosition?.entry_price ?? 0} /></label>
         <label>Aktueller Kurs<input name="current_price" inputMode="decimal" defaultValue={editPosition?.current_price ?? ""} /></label>
+        <label>Kursquelle<input name="current_price_source" defaultValue={editPosition?.current_price_source ?? (editPosition?.current_price === null ? "" : "manual")} /></label>
+        <label>Kursstatus<select name="current_price_status" defaultValue={editPosition?.current_price_status ?? (editPosition?.current_price === null ? "" : "manual")}><option value="">Nicht vorhanden</option>{marketDataStatusOptions()}</select></label>
+        <label>Kurszeitpunkt<input type="datetime-local" name="current_price_as_of" defaultValue={toDateTimeLocal(editPosition?.current_price_as_of ?? editPosition?.data_as_of)} /></label>
         <label>Instrumentwährung<input name="instrument_currency" maxLength={3} defaultValue={editPosition?.instrument_currency ?? portfolio.currency} /></label>
-        <label>FX zur Basiswährung<input name="fx_to_base" inputMode="decimal" defaultValue={editPosition?.fx_to_base ?? ((editPosition?.instrument_currency ?? portfolio.currency) === portfolio.currency ? 1 : "")} /></label>
+        <label>Entry-FX zur Basis<input name="entry_fx_to_base" inputMode="decimal" defaultValue={editPosition?.entry_fx_to_base ?? ""} /></label>
+        <label>Aktueller FX zur Basis<input name="current_fx_to_base" inputMode="decimal" defaultValue={editPosition?.current_fx_to_base ?? editPosition?.fx_to_base ?? ((editPosition?.instrument_currency ?? portfolio.currency) === portfolio.currency ? 1 : "")} /></label>
+        <label>FX-Quelle<input name="current_fx_source" defaultValue={editPosition?.current_fx_source ?? ((editPosition?.current_fx_to_base ?? editPosition?.fx_to_base) === null ? "" : "manual")} /></label>
+        <label>FX-Status<select name="current_fx_status" defaultValue={editPosition?.current_fx_status ?? ((editPosition?.current_fx_to_base ?? editPosition?.fx_to_base) === null ? "" : "manual")}><option value="">Nicht vorhanden</option>{marketDataStatusOptions()}</select></label>
+        <label>FX-Zeitpunkt<input type="datetime-local" name="current_fx_as_of" defaultValue={toDateTimeLocal(editPosition?.current_fx_as_of ?? editPosition?.data_as_of)} /></label>
         <label>Manueller Stopp<input name="stop_price" inputMode="decimal" defaultValue={editPosition?.stop_price ?? ""} /></label>
-        <label>Margin-Prozentsatz<input name="margin_percent" inputMode="decimal" defaultValue={editPosition?.margin_percent ?? ""} /></label>
-        <label>Direktes Margin Requirement<input name="margin_requirement" inputMode="decimal" defaultValue={editPosition?.margin_requirement ?? ""} /></label>
+        <label>Marginquote (%)<input name="margin_rate_percent" inputMode="decimal" defaultValue={editPosition?.margin_rate != null ? editPosition.margin_rate * 100 : editPosition?.margin_percent ?? ""} /></label>
+        <label>Manuell bestätigtes Margin Requirement<input name="margin_requirement" inputMode="decimal" defaultValue={editPosition?.margin_source === "manual_direct" ? editPosition.margin_requirement ?? "" : ""} /></label>
         <label>Optionsart<select name="option_type" defaultValue={editPosition?.option_type ?? ""}><option value="">Nicht zutreffend</option><option value="call">Call</option><option value="put">Put</option></select></label>
         <label>Ausübungspreis<input name="strike_price" inputMode="decimal" defaultValue={editPosition?.strike_price ?? ""} /></label>
         <label>Verfallsdatum<input type="date" name="expiration_date" defaultValue={editPosition?.expiration_date ?? ""} /></label>
         <label>Sektor<input name="sector" defaultValue={editPosition?.sector ?? ""} /></label>
         <label>Einstiegsdatum<input type="date" name="entry_date" defaultValue={editPosition?.entry_date ?? ""} /></label>
-        <label>Datenzeitpunkt<input type="datetime-local" name="data_as_of" defaultValue={toDateTimeLocal(editPosition?.data_as_of)} /></label>
         <label>Status<select name="status" defaultValue={editPosition?.status ?? "active"}><option value="active">Aktiv</option><option value="watch">Beobachten</option><option value="high">Hoch</option><option value="danger">Gefahr</option></select></label>
         <label className="sm:col-span-2">Kommentar<textarea name="notes" rows={3} defaultValue={editPosition?.notes ?? ""} /></label>
         {editCalculation && <div className="sm:col-span-2 xl:col-span-4 grid gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -74,7 +80,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
       <div className="overflow-x-auto"><table className="w-full min-w-[1320px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Instrument</th><th>Kategorie / Strategie</th><th>Richtung</th><th>Positionswert</th><th>NetLiq-Anteil</th><th>Ergebnis</th><th>Margin</th><th>Stopprisiko</th><th>Risiko / NetLiq</th><th>Risikoanteil</th><th></th></tr></thead><tbody>{filtered.map((position) => {
         const result = calculatedById.get(position.id);
         if (!result) return null;
-        return <tr key={position.id} className="border-t border-border/60 align-top"><td className="py-3"><div className="font-medium">{position.ticker}</div><div className="text-xs text-muted">{position.instrument_name || "–"} · {position.instrument_currency || "Währung fehlt"}</div></td><td><div>{result.categoryName ?? "Nicht zugeordnet"}</div><div className="text-xs text-muted">{position.strategy ?? "Keine Strategie"}</div></td><td className="text-muted">{position.direction}</td><td><MetricValue metric={result.positionValueBase} format={(value) => money.format(value)} /></td><td><MetricValue metric={result.netLiquidityShare} format={(value) => pct(value * 100)} /></td><td><MetricValue metric={result.unrealizedPnl} format={(value) => money.format(value)} /></td><td><MetricValue metric={result.marginRequirement} format={(value) => money.format(value)} detail={MARGIN_PROVENANCE_LABELS[result.marginRequirement.provenance]} /></td><td><MetricValue metric={result.stopRisk} format={(value) => money.format(value)} /></td><td><MetricValue metric={result.riskToNetLiquidity} format={(value) => pct(value * 100)} /></td><td><MetricValue metric={result.riskShareOfCalculableTotal} format={(value) => pct(value * 100)} /></td><td><div className="flex items-center gap-3"><Link href={`/depot?edit=${position.id}`} className="text-xs text-accent">Bearbeiten</Link><form action={deletePosition}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-red-300">Löschen</button></form></div></td></tr>;
+        return <tr key={position.id} className="border-t border-border/60 align-top"><td className="py-3"><div className="font-medium">{position.ticker}</div><div className="text-xs text-muted">{position.instrument_name || "–"} · {position.instrument_currency || "Währung fehlt"}</div><div className="mt-1 text-[10px] text-muted">{marketDataLine(position)}</div>{position.instrument_type === "cash" && <div className="mt-1 text-[10px] uppercase tracking-wide text-amber-300">Legacy-Cash · nicht in Wertpapieraggregaten</div>}</td><td><div>{result.categoryName ?? "Nicht zugeordnet"}</div><div className="text-xs text-muted">{position.strategy ?? "Keine Strategie"}</div></td><td className="text-muted">{position.direction}</td><td><MetricValue metric={result.positionValueBase} format={(value) => money.format(value)} /></td><td><MetricValue metric={result.netLiquidityShare} format={(value) => pct(value * 100)} /></td><td><MetricValue metric={result.unrealizedPnl} format={(value) => money.format(value)} /></td><td><MetricValue metric={result.marginRequirement} format={(value) => money.format(value)} detail={MARGIN_PROVENANCE_LABELS[result.marginRequirement.provenance]} /></td><td><MetricValue metric={result.stopRisk} format={(value) => money.format(value)} /></td><td><MetricValue metric={result.riskToNetLiquidity} format={(value) => pct(value * 100)} /></td><td><MetricValue metric={result.riskShareOfCalculableTotal} format={(value) => pct(value * 100)} /></td><td><div className="flex items-center gap-3"><Link href={`/depot?edit=${position.id}`} className="text-xs text-accent">Bearbeiten</Link><form action={deletePosition}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-red-300">Löschen</button></form></div></td></tr>;
       })}</tbody></table></div>
     </Card>
   </>;
@@ -99,4 +105,17 @@ function toDateTimeLocal(value: string | null | undefined) {
   if (Number.isNaN(date.getTime())) return "";
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function marketDataStatusOptions() {
+  return <>
+    <option value="live">Live</option><option value="delayed">Verzögert</option><option value="closing">Schlusskurs</option>
+    <option value="imported">Importiert</option><option value="manual">Manuell</option><option value="stale">Veraltet</option>
+  </>;
+}
+
+function marketDataLine(position: { current_price_source: string | null; current_price_status: string | null; current_price_as_of: string | null; current_fx_source: string | null; current_fx_status: string | null; current_fx_as_of: string | null }) {
+  const priceTime = position.current_price_as_of ? formatImportDate(position.current_price_as_of) : "Zeit fehlt";
+  const fxTime = position.current_fx_as_of ? formatImportDate(position.current_fx_as_of) : "Zeit fehlt";
+  return `Kurs: ${position.current_price_source ?? "Quelle fehlt"} · ${position.current_price_status ?? "Status fehlt"} · ${priceTime} | FX: ${position.current_fx_source ?? "Quelle fehlt"} · ${position.current_fx_status ?? "Status fehlt"} · ${fxTime}`;
 }

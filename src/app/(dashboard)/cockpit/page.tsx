@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, CircleAlert, Database, Sigma } from "lucide-react";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { calculationExplanation } from "@/lib/calculations/calculation-provenance";
+import { calculateCashPortfolio } from "@/lib/calculations/cash-calculations";
 import { calculatePortfolio } from "@/lib/calculations/portfolio-calculations";
 import { positionToCalculationInput } from "@/lib/calculations/position-adapter";
 import type { CalculationMetric } from "@/lib/calculations/calculation-types";
@@ -9,34 +10,44 @@ import { pct } from "@/lib/format";
 import { getPortfolioData } from "@/lib/portfolio";
 
 export default async function CockpitPage() {
-  const { portfolio, categories, positions, latestImport } = await getPortfolioData();
+  const { portfolio, categories, positions, cashBalances, latestImport } = await getPortfolioData();
   const calculation = calculatePortfolio({
     netLiquidity: portfolio.net_liquidity,
     positions: positions.map((position) => positionToCalculationInput(position, portfolio, categories)),
   });
+  const cash = calculateCashPortfolio(cashBalances.map((balance) => ({
+    id: balance.id,
+    currency: balance.currency,
+    baseCurrency: portfolio.currency,
+    balanceNative: balance.balance_native,
+    currentFxToBase: balance.current_fx_to_base,
+  })));
   const money = new Intl.NumberFormat("de-DE", { style: "currency", currency: portfolio.currency, maximumFractionDigits: 2 });
-  const top = [...calculation.positions].sort((a, b) => (b.positionValueBase.value ?? -1) - (a.positionValueBase.value ?? -1)).slice(0, 6);
+  const top = [...calculation.securityPositions].sort((a, b) => (b.positionValueBase.value ?? -1) - (a.positionValueBase.value ?? -1)).slice(0, 6);
 
   return <>
     <PageHeader eyebrow="Portfolio-Cockpit" title="DepotArchitect" description="Quelldaten und zentral berechnete Depotkennzahlen – mit sichtbarer Datenvollständigkeit statt erfundener Nullwerte." action={latestImport ? <div className="text-right"><Badge tone="good">Benutzerdefinierte CSV</Badge><div className="mt-1 text-xs text-muted">{formatImportDate(latestImport.imported_at)} · {latestImport.inserted_position_count} Teilpositionen</div><Link href="/import" className="text-xs text-accent">Importhistorie</Link></div> : <Badge>Beispieldaten</Badge>} />
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <SourceKpi label="Nettoliquidität" value={portfolio.net_liquidity === null ? "Daten fehlen" : money.format(Number(portfolio.net_liquidity))} note={portfolio.data_as_of ? `Quelldatum · ${formatImportDate(portfolio.data_as_of)}` : "Quelldatum · Zeitpunkt fehlt"} />
-      <MetricKpi label="Brutto-Exposure" metric={calculation.grossExposure} format={(value) => money.format(value)} />
-      <MetricKpi label="Long-Exposure" metric={calculation.longExposure} format={(value) => money.format(value)} />
-      <MetricKpi label="Short-Exposure" metric={calculation.shortExposure} format={(value) => money.format(value)} />
-      <MetricKpi label="Netto-Exposure" metric={calculation.netExposure} format={(value) => money.format(value)} />
-      <MetricKpi label="Depot-Hebel" metric={calculation.leverage} format={(value) => `${value.toFixed(2).replace(".", ",")}×`} />
+      <MetricKpi label="Brutto-Marktwert Wertpapiere" metric={calculation.grossExposure} format={(value) => money.format(value)} />
+      <MetricKpi label="Long-Marktwert" metric={calculation.longExposure} format={(value) => money.format(value)} />
+      <MetricKpi label="Short-Marktwert" metric={calculation.shortExposure} format={(value) => money.format(value)} />
+      <MetricKpi label="Netto-Marktwert" metric={calculation.netExposure} format={(value) => money.format(value)} />
+      <MetricKpi label="NetLiq-Hebel" metric={calculation.netLiquidityLeverage} format={(value) => `${value.toFixed(2).replace(".", ",")}×`} note="Derzeit marktwertbasiert; Optionen noch nicht delta- oder nominalwertbereinigt. Cash ist ausgeschlossen." />
       <MetricKpi label="Margin Requirement" metric={calculation.totalMarginRequirement} format={(value) => money.format(value)} note={`${calculation.missingMarginPositionCount} Teilpositionen ohne Marginwert`} />
       <MetricKpi label="Margin-Auslastung" metric={calculation.marginUtilization} format={(value) => pct(value * 100)} />
       <MetricKpi label="Berechenbares Stopprisiko" metric={calculation.totalCalculableStopRisk} format={(value) => money.format(value)} note={`${calculation.calculableRiskPositionCount} von ${calculation.activePositionRowCount} Teilpositionen berechenbar`} />
       <MetricKpi label="Risikoabdeckung nach Marktwert" metric={calculation.riskValueCoverage} format={(value) => pct(value * 100)} note={calculation.riskIsComplete ? "vollständig" : "unvollständig"} />
       <SourceKpi label="Aktive Teilpositionen" value={String(calculation.activePositionRowCount)} note="Positionszeilen" />
       <SourceKpi label="Unterschiedliche Instrumente" value={String(calculation.distinctInstrumentCount)} note="Ticker / Instrumente" />
+      <MetricKpi label="Gesamtcash" metric={cash.totalCashBase} format={(value) => money.format(value)} note={`${cash.positiveBalanceCount} positive, ${cash.negativeBalanceCount} negative Salden · separat vom Wertpapiermarktwert`} />
     </div>
     <div className="mt-4 grid gap-4 xl:grid-cols-[.9fr_1.6fr]">
       <Card><h2 className="mb-4 font-medium">Datenvollständigkeit</h2><div className="space-y-3">
         <Info icon={<CircleAlert size={17} />} title="Stopprisiko" text={calculation.riskIsComplete ? "Alle aktiven Teilpositionen besitzen einen gültigen, berechenbaren Stopp." : `${calculation.missingStopPositionCount} ohne Stopp, ${calculation.invalidStopPositionCount} mit ungültigem Stopp. Die ausgewiesene Risikosumme ist deshalb unvollständig.`} />
         <Info icon={<Database size={17} />} title="Marginquellen" text={`${calculation.missingMarginPositionCount} Teilpositionen ohne direktes oder schätzbares Margin Requirement.`} />
+        <Info icon={<Database size={17} />} title="Cash-FX" text={cash.fxIsComplete ? "Alle Währungs-Cashsalden besitzen einen berechenbaren aktuellen FX-Kurs." : `${cash.missingFxCount} Cashsalden ohne aktuellen FX-Kurs. Die Cashsumme ist unvollständig.`} />
+        {calculation.legacyCashPositionCount > 0 && <Info icon={<CircleAlert size={17} />} title="Legacy-Cashpositionen" text={`${calculation.legacyCashPositionCount} alte Cash-Positionszeilen werden aus sämtlichen Wertpapieraggregaten ausgeschlossen und nicht zusätzlich zum neuen Cashmodell gezählt.`} />}
         <Info icon={<Sigma size={17} />} title="Saubere Kennzahlenabgrenzung" text="Risiko in % der NetLiq und Anteil am berechenbaren Gesamtrisiko werden berechnet. Eine Risikobudget-Auslastung wird in diesem Meilenstein bewusst nicht erfunden." />
       </div></Card>
       <Card><div className="mb-4 flex items-center justify-between"><h2 className="font-medium">Kompakte Depotübersicht</h2><Link href="/depot" className="flex items-center gap-1 text-xs text-accent">Alle Teilpositionen <ArrowRight size={14} /></Link></div>

@@ -16,13 +16,15 @@ export type CsvField =
   | "entry_price"
   | "current_price"
   | "instrument_currency"
-  | "fx_to_base"
+  | "entry_fx_to_base"
+  | "current_fx_to_base"
   | "data_as_of"
   | "entry_date"
   | "stop_price"
   | "market_value"
   | "risk_amount"
   | "margin_requirement"
+  | "margin_rate"
   | "margin_percent"
   | "sector"
   | "strategy"
@@ -44,20 +46,27 @@ export type NormalizedPosition = {
   category_name: string | null;
   status: "active" | "watch" | "high" | "danger" | "closed";
   direction: "long" | "short" | "long_put" | "long_call" | "short_put" | "short_call";
-  instrument_type: "stock" | "etf" | "option" | "cash" | "other";
+  instrument_type: "stock" | "etf" | "option" | "warrant" | "knock_out" | "cash" | "other";
   quantity: number;
   multiplier: number;
   entry_price: number | null;
   current_price: number | null;
   instrument_currency: string | null;
-  fx_to_base: number | null;
-  data_as_of: string | null;
+  entry_fx_to_base: number | null;
+  current_fx_to_base: number | null;
+  current_fx_as_of: string | null;
+  current_fx_source: string | null;
+  current_fx_status: "imported" | null;
+  current_price_as_of: string | null;
+  current_price_source: string | null;
+  current_price_status: "imported" | null;
   entry_date: string | null;
   stop_price: number | null;
   market_value: number | null;
   risk_amount: number | null;
   margin_requirement: number | null;
-  margin_percent: number | null;
+  margin_rate: number | null;
+  margin_source: "imported_direct" | "estimated" | "missing";
   sector: string | null;
   strategy: string | null;
   notes: string | null;
@@ -83,6 +92,7 @@ export type AnalyzedRow = {
   errors: string[];
   warnings: string[];
   derivedFields: string[];
+  marginPreview: { original: string | null; normalizedRate: number | null; calculatedRequirement: number | null };
   position: NormalizedPosition | null;
 };
 
@@ -113,13 +123,15 @@ export const CSV_FIELDS: Array<{ value: CsvField | "ignore"; label: string }> = 
   { value: "entry_price", label: "Einstandskurs" },
   { value: "current_price", label: "Aktueller Kurs" },
   { value: "instrument_currency", label: "Instrumentwährung" },
-  { value: "fx_to_base", label: "Wechselkurs zur Basiswährung (fx_to_base)" },
+  { value: "entry_fx_to_base", label: "Entry-FX zur Basiswährung" },
+  { value: "current_fx_to_base", label: "Aktueller FX zur Basiswährung" },
   { value: "data_as_of", label: "Datenzeitpunkt" },
   { value: "entry_date", label: "Einstiegsdatum" },
   { value: "stop_price", label: "Trading-Stop" },
   { value: "market_value", label: "Marktwert" },
   { value: "risk_amount", label: "Risiko bis Stop" },
   { value: "margin_requirement", label: "Margin-Anforderung" },
+  { value: "margin_rate", label: "Marginquote (0,25 = 25 %)" },
   { value: "margin_percent", label: "Margin-Prozent" },
   { value: "sector", label: "Sektor" },
   { value: "strategy", label: "Strategie" },
@@ -142,13 +154,15 @@ const aliases: Record<CsvField, string[]> = {
   entry_price: ["kaufkurs", "einstand", "einstandskurs", "entry price", "cost basis"],
   current_price: ["aktueller kurs", "current price", "kurs", "last price", "mark price"],
   instrument_currency: ["wahrung", "waehrung", "currency", "instrument currency", "instrumentwahrung"],
-  fx_to_base: ["fx to base", "fx_to_base", "wechselkurs", "wechselkurs zur basiswahrung", "exchange rate"],
+  entry_fx_to_base: ["entry_fx_to_base", "entry fx to base", "entry fx zur basiswahrung"],
+  current_fx_to_base: ["fx_to_base", "fx to base", "current_fx_to_base", "current fx to base", "fx zur basiswahrung", "instrumentwahrung in basiswahrung"],
   data_as_of: ["datenzeitpunkt", "data as of", "as of", "kurszeitpunkt"],
   entry_date: ["einstiegsdatum", "kaufdatum", "entry date", "open date"],
   stop_price: ["stop", "trading stop", "stoppreis", "stop price"],
   market_value: ["marktwert", "market value", "positionswert", "position value"],
   risk_amount: ["risiko bis stop", "positionsrisiko", "risk amount", "risk to stop"],
   margin_requirement: ["margin anforderung", "margin requirement", "margin betrag", "margin amount"],
+  margin_rate: ["margin_rate", "margin rate", "marginquote", "margin quote"],
   margin_percent: ["margin prozent", "margin percent", "margin pct", "margin %"],
   sector: ["sektor", "sector", "branche", "industry"],
   strategy: ["strategie", "strategy", "setup"],
@@ -337,7 +351,8 @@ function mappedValues(raw: string[], mapping: ColumnMapping) {
 
 const instrumentTypes: Record<string, NormalizedPosition["instrument_type"]> = {
   aktie: "stock", aktien: "stock", stock: "stock", equity: "stock",
-  etf: "etf", fonds: "etf", option: "option", optionsschein: "option",
+  etf: "etf", fonds: "etf", option: "option", optionsschein: "warrant", warrant: "warrant",
+  knockout: "knock_out", "knock out": "knock_out", knock_out: "knock_out",
   cash: "cash", bargeld: "cash", sonstiges: "other", other: "other",
 };
 const directions: Record<string, NormalizedPosition["direction"]> = {
@@ -362,6 +377,31 @@ function numberField(values: Record<CsvField, string>, field: CsvField, label: s
   const parsed = parseLocalizedNumber(values[field] ?? "");
   if (parsed === "invalid") errors.push(`${label} ist keine Zahl.`);
   return parsed === "invalid" ? null : parsed;
+}
+
+export function normalizeMarginRate(values: Pick<Record<CsvField, string>, "margin_rate" | "margin_percent">) {
+  const rateRaw = values.margin_rate?.trim() ?? "";
+  const percentRaw = values.margin_percent?.trim() ?? "";
+  if (rateRaw && percentRaw) return { original: `${rateRaw} / ${percentRaw}`, rate: null, error: "Marginquote und Margin-Prozent dürfen nicht gleichzeitig befüllt sein." };
+  const original = rateRaw || percentRaw;
+  if (!original) return { original: null, rate: null, error: null };
+  const hasPercentSign = original.endsWith("%");
+  const numeric = parseLocalizedNumber(hasPercentSign ? original.slice(0, -1) : original);
+  if (numeric === null || numeric === "invalid") return { original, rate: null, error: "Marginquote ist keine Zahl." };
+
+  const rate = rateRaw
+    ? hasPercentSign ? numeric / 100 : numeric
+    : numeric / 100;
+  if (rate < 0 || rate > 1) {
+    return {
+      original,
+      rate: null,
+      error: rateRaw
+        ? "Eine ausdrücklich als Quote definierte Spalte muss zwischen 0 und 1 liegen oder ein Prozentzeichen enthalten."
+        : "Margin-Prozent muss zwischen 0 und 100 liegen.",
+    };
+  }
+  return { original, rate, error: null };
 }
 
 function dateField(values: Record<CsvField, string>, field: CsvField, label: string, errors: string[]) {
@@ -429,10 +469,12 @@ export function analyzeImport(
 
     const instrumentCurrency = values.instrument_currency?.trim().toUpperCase() || null;
     if (instrumentCurrency && !/^[A-Z]{3}$/.test(instrumentCurrency)) errors.push("Instrumentwährung muss ein dreistelliger ISO-Code sein.");
-    const parsedFxToBase = numberField(values, "fx_to_base", "Wechselkurs zur Basiswährung", errors);
-    const fxToBase = parsedFxToBase ?? (instrumentCurrency === baseCurrency.trim().toUpperCase() ? 1 : null);
-    if (fxToBase !== null && fxToBase <= 0) errors.push("Wechselkurs zur Basiswährung muss größer als null sein.");
-    if (currentPrice !== null && fxToBase === null && marketValue === null) {
+    const entryFxToBase = numberField(values, "entry_fx_to_base", "Entry-FX zur Basiswährung", errors);
+    const parsedCurrentFxToBase = numberField(values, "current_fx_to_base", "Aktueller FX zur Basiswährung", errors);
+    const currentFxToBase = parsedCurrentFxToBase ?? (instrumentCurrency === baseCurrency.trim().toUpperCase() ? 1 : null);
+    if (entryFxToBase !== null && entryFxToBase <= 0) errors.push("Entry-FX zur Basiswährung muss größer als null sein.");
+    if (currentFxToBase !== null && currentFxToBase <= 0) errors.push("Aktueller FX zur Basiswährung muss größer als null sein.");
+    if (currentPrice !== null && currentFxToBase === null && marketValue === null) {
       warnings.push("Wechselkurs fehlt; der Marktwert bleibt bis zur Ergänzung nicht berechenbar.");
     }
 
@@ -440,12 +482,14 @@ export function analyzeImport(
     const stopPrice = numberField(values, "stop_price", "Trading-Stop", errors);
     const riskAmount = numberField(values, "risk_amount", "Risiko bis Stop", errors);
     const marginRequirement = numberField(values, "margin_requirement", "Margin-Anforderung", errors);
-    const marginPercent = numberField(values, "margin_percent", "Margin-Prozent", errors);
+    const normalizedMargin = normalizeMarginRate(values);
+    if (normalizedMargin.error) errors.push(normalizedMargin.error);
+    const marginRate = normalizedMargin.rate;
     const strikePrice = numberField(values, "strike_price", "Ausübungspreis", errors);
     const numericValues: Array<[string, number | null]> = [
       ["Einstandskurs", entryPrice], ["Aktueller Kurs", currentPrice], ["Trading-Stop", stopPrice],
       ["Marktwert", marketValue], ["Risiko bis Stop", riskAmount], ["Margin-Anforderung", marginRequirement],
-      ["Margin-Prozent", marginPercent], ["Ausübungspreis", strikePrice],
+      ["Marginquote", marginRate], ["Ausübungspreis", strikePrice],
     ];
     for (const [label, value] of numericValues) {
       if (value !== null && value < 0) errors.push(`${label} darf nicht negativ sein.`);
@@ -522,14 +566,21 @@ export function analyzeImport(
         entry_price: entryPrice,
         current_price: currentPrice,
         instrument_currency: instrumentCurrency,
-        fx_to_base: fxToBase,
-        data_as_of: dataAsOf,
+        entry_fx_to_base: entryFxToBase,
+        current_fx_to_base: currentFxToBase,
+        current_fx_as_of: currentFxToBase === null ? null : dataAsOf,
+        current_fx_source: currentFxToBase === null ? null : "custom_csv",
+        current_fx_status: currentFxToBase === null ? null : "imported",
+        current_price_as_of: currentPrice === null ? null : dataAsOf,
+        current_price_source: currentPrice === null ? null : "custom_csv",
+        current_price_status: currentPrice === null ? null : "imported",
         entry_date: entryDate,
         stop_price: stopPrice,
         market_value: marketValue,
         risk_amount: riskAmount,
         margin_requirement: marginRequirement,
-        margin_percent: marginPercent,
+        margin_rate: marginRate,
+        margin_source: marginRequirement !== null ? "imported_direct" : marginRate !== null ? "estimated" : "missing",
         sector: values.sector?.trim() || null,
         strategy: values.strategy?.trim() || null,
         notes: values.notes?.trim() || null,
@@ -542,16 +593,19 @@ export function analyzeImport(
       const calculation = calculatePosition({
         id: String(rowNumber),
         ticker: position.ticker,
+        instrumentType: position.instrument_type,
         direction: position.direction,
         quantity: position.quantity,
         multiplier: position.multiplier,
         entryPrice: position.entry_price,
         currentPrice: position.current_price,
-        fxToBase: position.fx_to_base,
+        entryFxToBase: position.entry_fx_to_base,
+        currentFxToBase: position.current_fx_to_base,
         netLiquidity: null,
         effectiveStopPrice: position.stop_price,
         directMarginRequirement: position.margin_requirement,
-        marginPercent: position.margin_percent,
+        directMarginProvenance: position.margin_requirement === null ? undefined : "imported_direct",
+        marginRate: position.margin_rate,
       });
       const calculatedMarketValue = calculation.positionValueBase.value;
       if (calculatedMarketValue !== null) {
@@ -576,6 +630,26 @@ export function analyzeImport(
       errors,
       warnings,
       derivedFields,
+      marginPreview: {
+        original: normalizedMargin.original,
+        normalizedRate: marginRate,
+        calculatedRequirement: position ? calculatePosition({
+          id: String(rowNumber),
+          ticker: position.ticker,
+          instrumentType: position.instrument_type,
+          direction: position.direction,
+          quantity: position.quantity,
+          multiplier: position.multiplier,
+          entryPrice: position.entry_price,
+          currentPrice: position.current_price,
+          currentFxToBase: position.current_fx_to_base,
+          netLiquidity: null,
+          effectiveStopPrice: position.stop_price,
+          directMarginRequirement: position.margin_requirement,
+          directMarginProvenance: position.margin_requirement === null ? undefined : "imported_direct",
+          marginRate: position.margin_rate,
+        }).marginRequirement.value : null,
+      },
       position,
     };
   });
