@@ -1,12 +1,13 @@
 # Supabase Security- und Performance-Advisors
 
-Prüfstand nach der additiven Meilenstein-2B.1-Migration `20260723080014` am 23. Juli 2026. Arbeitsunterlage.
+Prüfstand nach den additiven Meilenstein-2B.4-Migrationen `20260723195457` und `20260723195859` am 23. Juli 2026. Arbeitsunterlage.
 
 ## Behoben
 
 - Fehlende Indizes auf `user_invitations.invited_by` und `account_deletion_requests.processed_by` ergänzt.
 - Doppelte permissive Select-Policies für Profile und Löschanfragen jeweils zu einer Policy zusammengeführt.
 - Auf internen Konfigurations-, Rollen-, Berechtigungs- und Einladungstabellen explizite Deny-Policies ergänzt. Zusätzlich bleiben die Tabellenrechte für `anon`/`authenticated` entzogen.
+- `portfolio_fx_rates` besitzt vollständige Eigentümer-RLS, keine Rechte für `anon` und einen erfolgreichen Cross-User-Isolationstest. Der aktuelle Advisor meldet dafür keine neue Warnung.
 
 ## Bewusst verbleibend
 

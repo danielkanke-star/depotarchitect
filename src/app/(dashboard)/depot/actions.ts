@@ -11,7 +11,12 @@ import { resolveWritableInstrumentType } from "@/lib/portfolio-write-policy";
 const DIRECTIONS = new Set<Direction>(["long", "short", "long_put", "long_call", "short_put", "short_call"]);
 const INSTRUMENT_TYPES = new Set<InstrumentType>(["stock", "etf", "option", "warrant", "knock_out", "cash", "other"]);
 const STATUSES = new Set(["active", "watch", "high", "danger"]);
-const MARKET_DATA_STATUSES = new Set<MarketDataStatus>(["live", "delayed", "closing", "imported", "manual", "stale"]);
+const MARKET_DATA_STATUSES = new Set<MarketDataStatus>([
+  "live", "delayed", "end_of_day", "manually_updated", "stale", "missing", "demo",
+]);
+const REAL_MARKET_DATA_STATUSES = new Set<MarketDataStatus>([
+  "live", "delayed", "end_of_day", "manually_updated", "stale",
+]);
 
 const text = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim();
 const nullableNumber = (formData: FormData, key: string) => {
@@ -33,8 +38,8 @@ export async function savePosition(formData: FormData) {
   const quantity = nullableNumber(formData, "quantity");
   const multiplier = nullableNumber(formData, "multiplier");
   const entryPrice = nullableNumber(formData, "entry_price");
-  const currentPrice = nullableNumber(formData, "current_price");
-  const stopPrice = nullableNumber(formData, "stop_price");
+  const currentPrice = nullableNumber(formData, "current_price_native");
+  const stopPrice = nullableNumber(formData, "stop_price_native");
   const marginRatePercent = nullableNumber(formData, "margin_rate_percent");
   const marginRate = marginRatePercent === null ? null : marginRatePercent / 100;
   const directMarginRequirement = nullableNumber(formData, "margin_requirement");
@@ -50,6 +55,11 @@ export async function savePosition(formData: FormData) {
   const currentPriceStatus = nullableMarketDataStatus(formData, "current_price_status", currentPrice);
   const currentFxStatus = nullableMarketDataStatus(formData, "current_fx_status", currentFxToBase);
   const categoryId = text(formData, "category_id") || null;
+  const currentPriceSource = text(formData, "current_price_source");
+  const currentFxSource = text(formData, "current_fx_source");
+  const stopUpdatedAt = normalizedDateTime(formData, "stop_updated_at");
+  const marginAsOf = normalizedDateTime(formData, "margin_as_of");
+  const marginSource = text(formData, "margin_source") || (directMarginRequirement !== null ? "manual_direct" : marginRate !== null ? "estimated" : "missing");
 
   if (!ticker || ticker.length > 40 || !DIRECTIONS.has(direction) || !INSTRUMENT_TYPES.has(instrumentType) || !STATUSES.has(status)) {
     throw new Error("Die Positionsangaben sind ungültig.");
@@ -62,6 +72,19 @@ export async function savePosition(formData: FormData) {
   }
   if (!/^[A-Z]{3}$/.test(instrumentCurrency) || (entryFxToBase !== null && entryFxToBase <= 0) || (currentFxToBase !== null && currentFxToBase <= 0)) {
     throw new Error("Währung oder Wechselkurs ist ungültig.");
+  }
+  assertCompleteMarketData("Kurs", currentPrice, currentPriceSource, currentPriceAsOf, currentPriceStatus);
+  if (instrumentCurrency !== portfolio.currency.toUpperCase()) {
+    assertCompleteMarketData("FX", currentFxToBase, currentFxSource, currentFxAsOf, currentFxStatus);
+  }
+  if (stopPrice !== null && !stopUpdatedAt) {
+    throw new Error("Für einen Trading-Stopp ist der Aktualisierungszeitpunkt erforderlich.");
+  }
+  if (directMarginRequirement !== null && !["broker", "manual_direct"].includes(marginSource)) {
+    throw new Error("Ein direktes Margin Requirement benötigt die Quelle Broker oder Manuell.");
+  }
+  if (directMarginRequirement !== null && !marginAsOf) {
+    throw new Error("Für ein direktes Margin Requirement ist der Datenzeitpunkt erforderlich.");
   }
   if (instrumentType === "option" && (!optionType || !new Set(["call", "put"]).has(optionType) || strikePrice === null || strikePrice < 0 || !expirationDate)) {
     throw new Error("Für Optionen sind Optionsart, Ausübungspreis und Verfallsdatum erforderlich.");
@@ -93,12 +116,16 @@ export async function savePosition(formData: FormData) {
     multiplier,
     entryPrice,
     currentPrice,
+    currentPriceStatus,
     entryFxToBase,
     currentFxToBase,
+    currentFxStatus,
     netLiquidity: portfolio.net_liquidity,
     effectiveStopPrice: stopPrice,
     directMarginRequirement,
-    directMarginProvenance: directMarginRequirement === null ? undefined : "manual_direct",
+    directMarginProvenance: directMarginRequirement === null
+      ? undefined
+      : marginSource as "broker" | "manual_direct",
     marginRate,
   });
   const payload = {
@@ -113,21 +140,29 @@ export async function savePosition(formData: FormData) {
     multiplier,
     entry_price: entryPrice,
     current_price: currentPrice,
+    current_price_native: currentPrice,
     instrument_currency: instrumentCurrency,
     entry_fx_to_base: entryFxToBase,
     current_fx_to_base: currentFxToBase,
     current_fx_as_of: currentFxAsOf,
-    current_fx_source: currentFxToBase === null ? null : text(formData, "current_fx_source") || "manual",
+    current_fx_source: currentFxToBase === null ? null : instrumentCurrency === portfolio.currency.toUpperCase() ? "identity" : currentFxSource,
     current_fx_status: currentFxStatus,
     current_price_as_of: currentPriceAsOf,
-    current_price_source: currentPrice === null ? null : text(formData, "current_price_source") || "manual",
+    current_price_source: currentPrice === null ? null : currentPriceSource,
     current_price_status: currentPriceStatus,
     stop_price: stopPrice,
+    stop_price_native: stopPrice,
+    stop_updated_at: stopPrice === null ? null : stopUpdatedAt,
+    stop_comment: stopPrice === null ? null : text(formData, "stop_comment") || null,
     market_value: calculation.positionValueBase.value,
     risk_amount: calculation.stopRisk.value,
     margin_requirement: directMarginRequirement,
     margin_rate: marginRate,
-    margin_source: directMarginRequirement !== null ? "manual_direct" as const : marginRate !== null ? "estimated" as const : "missing" as const,
+    margin_source: directMarginRequirement !== null ? marginSource as "broker" | "manual_direct" : marginRate !== null ? "estimated" as const : "missing" as const,
+    margin_currency: directMarginRequirement === null ? null : portfolio.currency.toUpperCase(),
+    margin_as_of: directMarginRequirement === null && marginRate === null ? null : marginAsOf ?? currentPriceAsOf,
+    margin_calculation_type: directMarginRequirement !== null ? "direct_requirement" as const : marginRate !== null ? "rate_estimate" as const : null,
+    margin_confidence: directMarginRequirement !== null ? "trusted" as const : marginRate !== null ? "estimated" as const : "missing" as const,
     option_type: writableInstrumentType === "option" ? optionType : null,
     strike_price: writableInstrumentType === "option" ? strikePrice : null,
     expiration_date: writableInstrumentType === "option" ? expirationDate : null,
@@ -149,10 +184,23 @@ export async function savePosition(formData: FormData) {
 }
 
 function nullableMarketDataStatus(formData: FormData, key: string, sourceValue: number | null) {
-  if (sourceValue === null) return null;
-  const value = (text(formData, key) || "manual") as MarketDataStatus;
+  if (sourceValue === null) return "missing" as const;
+  const value = (text(formData, key) || "manually_updated") as MarketDataStatus;
   if (!MARKET_DATA_STATUSES.has(value)) throw new Error("Der Marktdatenstatus ist ungültig.");
   return value;
+}
+
+function assertCompleteMarketData(
+  label: string,
+  value: number | null,
+  source: string,
+  asOf: string | null,
+  status: MarketDataStatus,
+) {
+  if (value === null) return;
+  if (!source || !asOf || (!REAL_MARKET_DATA_STATUSES.has(status) && status !== "demo")) {
+    throw new Error(`${label} benötigt Quelle, Zeitpunkt und einen realen Datenstatus.`);
+  }
 }
 
 function normalizedDateTime(formData: FormData, key: string) {
@@ -169,6 +217,102 @@ export async function deletePosition(formData: FormData) {
   const id = text(formData, "id");
   const { error } = await supabase.from("positions").delete().eq("id", id).eq("portfolio_id", portfolio.id);
   if (error) throw new Error("Die Position konnte nicht gelöscht werden.");
+  revalidatePath("/depot");
+  revalidatePath("/cockpit");
+}
+
+export async function saveFxRate(formData: FormData) {
+  const supabase = await createClient();
+  const userId = await getUserId();
+  const portfolio = await getOrCreatePortfolio();
+  const sourceCurrency = text(formData, "source_currency").toUpperCase();
+  const targetCurrency = portfolio.currency.toUpperCase();
+  const rate = nullableNumber(formData, "rate");
+  const sourceType = text(formData, "source_type") || "manual";
+  const sourceName = text(formData, "source_name");
+  const rateAsOf = normalizedDateTime(formData, "rate_as_of");
+  const status = (text(formData, "status") || "manually_updated") as MarketDataStatus;
+
+  if (!/^[A-Z]{3}$/.test(sourceCurrency) || sourceCurrency === targetCurrency || rate === null || rate <= 0) {
+    throw new Error("Das FX-Paar oder der Wechselkurs ist ungültig.");
+  }
+  if (!["manual", "broker", "market_data_provider"].includes(sourceType) || !sourceName || !rateAsOf || !REAL_MARKET_DATA_STATUSES.has(status)) {
+    throw new Error("Der reale Wechselkurs benötigt Quelle, Zeitpunkt und Datenstatus.");
+  }
+
+  const { error } = await supabase.from("portfolio_fx_rates").insert({
+    user_id: userId,
+    portfolio_id: portfolio.id,
+    source_currency: sourceCurrency,
+    target_currency: targetCurrency,
+    rate,
+    source_type: sourceType as "manual" | "broker" | "market_data_provider",
+    source_name: sourceName,
+    rate_as_of: rateAsOf,
+    status,
+  });
+  if (error) throw new Error("Der Wechselkurs konnte nicht gespeichert werden.");
+  revalidatePath("/depot");
+  revalidatePath("/cockpit");
+}
+
+export async function deleteFxRate(formData: FormData) {
+  const supabase = await createClient();
+  const portfolio = await getOrCreatePortfolio();
+  const id = text(formData, "id");
+  const { error } = await supabase.from("portfolio_fx_rates").delete().eq("id", id).eq("portfolio_id", portfolio.id);
+  if (error) throw new Error("Der Wechselkurs konnte nicht gelöscht werden.");
+  revalidatePath("/depot");
+  revalidatePath("/cockpit");
+}
+
+export async function saveCashBalance(formData: FormData) {
+  const supabase = await createClient();
+  const userId = await getUserId();
+  const portfolio = await getOrCreatePortfolio();
+  const currency = text(formData, "currency").toUpperCase();
+  const balanceNative = nullableNumber(formData, "balance_native");
+  const balanceAsOf = normalizedDateTime(formData, "balance_as_of");
+  const enteredFx = nullableNumber(formData, "current_fx_to_base");
+  const currentFx = currency === portfolio.currency.toUpperCase() ? 1 : enteredFx;
+  const fxAsOf = currency === portfolio.currency.toUpperCase() ? null : normalizedDateTime(formData, "fx_as_of");
+  const fxSource = currency === portfolio.currency.toUpperCase() ? "identity" : text(formData, "fx_source");
+  const fxStatus = currency === portfolio.currency.toUpperCase()
+    ? "manually_updated" as const
+    : nullableMarketDataStatus(formData, "fx_status", currentFx);
+
+  if (!/^[A-Z]{3}$/.test(currency) || balanceNative === null || !balanceAsOf) {
+    throw new Error("Cashwährung, Saldo und Datenzeitpunkt sind erforderlich.");
+  }
+  if (currency !== portfolio.currency.toUpperCase()) {
+    assertCompleteMarketData("Cash-FX", currentFx, fxSource, fxAsOf, fxStatus);
+  }
+
+  const payload = {
+    user_id: userId,
+    portfolio_id: portfolio.id,
+    currency,
+    balance_native: balanceNative,
+    balance_as_of: balanceAsOf,
+    current_fx_to_base: currentFx,
+    fx_as_of: fxAsOf,
+    fx_source: fxSource,
+    fx_status: fxStatus,
+    source_type: "manual",
+    source_reference: fxSource,
+  } as const;
+  const { data: existing } = await supabase
+    .from("portfolio_cash_balances")
+    .select("id")
+    .eq("portfolio_id", portfolio.id)
+    .eq("source_type", "manual")
+    .eq("currency", currency)
+    .is("broker_account_id", null)
+    .maybeSingle();
+  const { error } = existing
+    ? await supabase.from("portfolio_cash_balances").update(payload).eq("id", existing.id).eq("portfolio_id", portfolio.id)
+    : await supabase.from("portfolio_cash_balances").insert(payload);
+  if (error) throw new Error("Der Cashbestand konnte nicht gespeichert werden.");
   revalidatePath("/depot");
   revalidatePath("/cockpit");
 }

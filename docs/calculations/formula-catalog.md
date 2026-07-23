@@ -1,6 +1,6 @@
 # Zentraler Formelkatalog
 
-Status: Berechnungsstand Meilenstein 2B.2. Fachliche Quelle ist die pure TypeScript-Bibliothek unter `src/lib/calculations/`. Geldwerte werden mit `decimal.js` ohne Zwischenrundung berechnet; gerundet wird erst in Anzeige oder Export.
+Status: Berechnungsstand Meilenstein 2B.4. Fachliche Quelle ist die pure TypeScript-Bibliothek unter `src/lib/calculations/`. Geldwerte werden mit `decimal.js` ohne Zwischenrundung berechnet; gerundet wird erst in Anzeige oder Export.
 
 ## Kanonische Definitionen
 
@@ -24,8 +24,13 @@ Eine Ausgangsquote `1 EUR = 0,929275 CHF` wird im Quellenadapter für ein EUR-De
 | Stopprisiko Basiswährung | `stopRisk` | `stopRiskInstrument × current_fx_to_base` | Aktueller FX ist maßgeblich. |
 | Anteil NetLiq | `netLiquidityShare` | `positionValueBase ÷ net_liquidity` | NetLiq ≤ 0 ist ungültig. |
 | Margin Requirement | `marginRequirement` | direkter bestätigter Wert, sonst `positionValueBase × margin_rate` | Herkunft: `broker`, `imported_direct`, `manual_direct`, `estimated`, `missing`, `legacy_untrusted`. |
+| Anteil am konfigurierten Risikobudget | `riskToBudget` | `stopRisk ÷ (NetLiq × risk_per_trade_pct)` | Fehlt das konfigurierte Budget, ist der Anteil nicht berechenbar. |
 
 Ein manueller direkter Wert wird nie als Brokerwert bezeichnet. Ein bestätigter direkter Wert von `0` ist zulässig. Ein alter, unbestätigter Null-Platzhalter wird als `legacy_untrusted` und damit fehlend behandelt.
+
+`current_price_native` ist das fachlich maßgebliche aktuelle Kursfeld in Instrumentwährung; `current_price` bleibt ein synchronisierter Kompatibilitätsspiegel. `stop_price_native` ist der Trading-Stopp in Instrumentwährung. Ein Long-Stopp oberhalb des aktuellen Kurses beziehungsweise Short-Stopp unterhalb des aktuellen Kurses wird nicht korrigiert, sondern als widersprüchlich gekennzeichnet.
+
+`margin_currency`, `margin_as_of`, `margin_calculation_type` und `margin_confidence` machen Währung, Zeitpunkt, Berechnungsweg und Vertrauen nachvollziehbar. Cashkonten zeigen „Margin nicht zutreffend“.
 
 Ein späterer Ausbau trennt Kurs-G&V in Instrumentwährung, Kurs-G&V in Basiswährung zum aktuellen FX, den Referenzwert beim Einstieg mit `entry_fx_to_base`, den referenzierten FX-Effekt, die gesamte Wertveränderung der Wertpapierposition und die FX-Wirkung der Währungs-Cashbestände. Eine komplexe Konten-P&L- oder Finanzierungsrechnung ist noch nicht Bestandteil der Berechnungsmaschine.
 
@@ -53,11 +58,11 @@ Cashberechnungen weisen positive, negative und Nullsalden sowie die FX-Vollstän
 ## Status und Marktmetadaten
 
 - `calculated`: vollständig aus Quelldaten berechnet.
-- `source_fallback`: bestätigter direkter Quellenwert oder vorübergehender Legacy-Marktwert wurde verwendet.
+- `source_fallback`: bestätigter direkter Quellenwert oder sichtbar als veraltet gekennzeichnete Marktdaten wurden verwendet.
 - `incomplete`: notwendige Eingabe fehlt.
 - `invalid`: Eingabe oder fachliche Beziehung ist ungültig.
 
-Aktuelle Kurse und Wechselkurse führen jeweils Wert, Quelle, Zeitpunkt und Status. Status: `live`, `delayed`, `closing`, `imported`, `manual`, `stale`. Alte Werte dürfen nicht ohne `stale`-Hinweis als aktuell erscheinen. Automatische Kurs- und FX-Bezüge folgen erst im Broker-/Marktdatenmeilenstein.
+Aktuelle Kurse und Wechselkurse führen jeweils Wert, Quelle, Zeitpunkt und Status. Kanonische Statuswerte sind `live`, `delayed`, `end_of_day`, `manually_updated`, `stale`, `missing` und `demo`. Demo-Daten werden nicht als reale Daten berechnet. Fehlende Daten erzeugen keinen Null- oder Legacy-Ersatzwert. Alte Werte dürfen nicht ohne `stale`-Hinweis als aktuell erscheinen. Details: [Marktdatenmodell](../architecture/market-data-model.md).
 
 ## Legacyfelder
 

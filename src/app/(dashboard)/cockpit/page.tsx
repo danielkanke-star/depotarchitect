@@ -7,21 +7,28 @@ import { calculatePortfolio } from "@/lib/calculations/portfolio-calculations";
 import { positionToCalculationInput } from "@/lib/calculations/position-adapter";
 import type { CalculationMetric } from "@/lib/calculations/calculation-types";
 import { pct } from "@/lib/format";
+import { calculatePortfolioDataQuality, canonicalMarketDataStatus, latestUsableFxRate } from "@/lib/market-data";
 import { getPortfolioData } from "@/lib/portfolio";
 
 export default async function CockpitPage() {
-  const { portfolio, categories, positions, cashBalances, latestImport } = await getPortfolioData();
+  const { portfolio, settings, categories, positions, cashBalances, fxRates, latestImport } = await getPortfolioData();
+  const riskBudget = portfolio.net_liquidity === null || Number(settings.risk_per_trade_pct) <= 0
+    ? null
+    : Number(portfolio.net_liquidity) * Number(settings.risk_per_trade_pct) / 100;
   const calculation = calculatePortfolio({
     netLiquidity: portfolio.net_liquidity,
-    positions: positions.map((position) => positionToCalculationInput(position, portfolio, categories)),
+    positions: positions.map((position) => positionToCalculationInput(position, portfolio, categories, fxRates, riskBudget)),
   });
   const cash = calculateCashPortfolio(cashBalances.map((balance) => ({
     id: balance.id,
     currency: balance.currency,
     baseCurrency: portfolio.currency,
     balanceNative: balance.balance_native,
-    currentFxToBase: balance.current_fx_to_base,
+    currentFxToBase: latestUsableFxRate(fxRates, balance.currency, portfolio.currency)?.rate ?? balance.current_fx_to_base,
+    currentFxStatus: latestUsableFxRate(fxRates, balance.currency, portfolio.currency)?.status
+      ?? canonicalMarketDataStatus(balance.fx_status, balance.source_type, balance.current_fx_to_base !== null),
   })));
+  const dataQuality = calculatePortfolioDataQuality({ portfolio, positions, cashBalances, fxRates });
   const money = new Intl.NumberFormat("de-DE", { style: "currency", currency: portfolio.currency, maximumFractionDigits: 2 });
   const top = [...calculation.securityPositions].sort((a, b) => (b.positionValueBase.value ?? -1) - (a.positionValueBase.value ?? -1)).slice(0, 6);
 
@@ -44,9 +51,11 @@ export default async function CockpitPage() {
     </div>
     <div className="mt-4 grid gap-4 xl:grid-cols-[.9fr_1.6fr]">
       <Card><h2 className="mb-4 font-medium">Datenvollständigkeit</h2><div className="space-y-3">
-        <Info icon={<CircleAlert size={17} />} title="Stopprisiko" text={calculation.riskIsComplete ? "Alle aktiven Teilpositionen besitzen einen gültigen, berechenbaren Stopp." : `${calculation.missingStopPositionCount} ohne Stopp, ${calculation.invalidStopPositionCount} mit ungültigem Stopp. Die ausgewiesene Risikosumme ist deshalb unvollständig.`} />
-        <Info icon={<Database size={17} />} title="Marginquellen" text={`${calculation.missingMarginPositionCount} Teilpositionen ohne direktes oder schätzbares Margin Requirement.`} />
-        <Info icon={<Database size={17} />} title="Cash-FX" text={cash.fxIsComplete ? "Alle Währungs-Cashsalden besitzen einen berechenbaren aktuellen FX-Kurs." : `${cash.missingFxCount} Cashsalden ohne aktuellen FX-Kurs. Die Cashsumme ist unvollständig.`} />
+        <Info icon={<CircleAlert size={17} />} title="Aktuelle Kurse" text={`${dataQuality.positionsWithRealPrice} von ${dataQuality.securityPositionCount} Teilpositionen mit realem Kurs; ${dataQuality.stalePriceCount} als veraltet und ${dataQuality.demoPriceCount} als Demo markiert.`} />
+        <Info icon={<CircleAlert size={17} />} title="Trading-Stopps" text={calculation.riskIsComplete ? "Alle aktiven Teilpositionen besitzen einen gültigen, berechenbaren Stopp." : `${calculation.missingStopPositionCount} ohne Stopp, ${calculation.invalidStopPositionCount} mit widersprüchlichem Stopp. Die ausgewiesene Risikosumme ist deshalb unvollständig.`} />
+        <Info icon={<Database size={17} />} title="Marginquellen" text={`${dataQuality.positionsWithReliableMargin} von ${dataQuality.securityPositionCount} Teilpositionen mit belastbarer Marginangabe; Legacy-untrusted bleibt ausgeschlossen.`} />
+        <Info icon={<Database size={17} />} title="FX-Paare" text={`${dataQuality.completeFxPairCount} von ${dataQuality.requiredFxPairCount} benötigten Paaren vollständig. ${cash.fxIsComplete ? "Cash-FX berechenbar." : `${cash.missingFxCount} Cashsalden ohne realen FX-Kurs.`}`} />
+        <Info icon={<Database size={17} />} title="Ältester Kursstand" text={dataQuality.oldestPriceAsOf ? formatImportDate(dataQuality.oldestPriceAsOf) : "Kein realer Kurszeitpunkt vorhanden."} />
         {calculation.legacyCashPositionCount > 0 && <Info icon={<CircleAlert size={17} />} title="Legacy-Cashpositionen" text={`${calculation.legacyCashPositionCount} alte Cash-Positionszeilen werden aus sämtlichen Wertpapieraggregaten ausgeschlossen und nicht zusätzlich zum neuen Cashmodell gezählt.`} />}
         <Info icon={<Sigma size={17} />} title="Saubere Kennzahlenabgrenzung" text="Risiko in % der NetLiq und Anteil am berechenbaren Gesamtrisiko werden berechnet. Eine Risikobudget-Auslastung wird in diesem Meilenstein bewusst nicht erfunden." />
       </div></Card>

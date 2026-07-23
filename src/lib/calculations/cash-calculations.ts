@@ -5,7 +5,7 @@ import type {
   CashBalanceCalculationInput,
   CashPortfolioCalculation,
 } from "./calculation-types";
-import { calculated, decimal, incomplete, invalid, metricWithValue, unique } from "./calculation-validation";
+import { calculated, decimal, incomplete, invalid, metricWithValue, sourceFallback, unique } from "./calculation-validation";
 
 function calculateCashBalance(input: CashBalanceCalculationInput): CashBalanceCalculation {
   const balance = decimal(input.balanceNative);
@@ -17,6 +17,9 @@ function calculateCashBalance(input: CashBalanceCalculationInput): CashBalanceCa
   if (balance === null) valueBase = incomplete("quantity_missing");
   else if (fx === null) valueBase = incomplete("cash_fx_missing");
   else if (!fx.isPositive() || (sameCurrency && !fx.equals(1))) valueBase = invalid("cash_fx_invalid");
+  else if (!sameCurrency && input.currentFxStatus === "demo") valueBase = incomplete("cash_fx_demo");
+  else if (!sameCurrency && input.currentFxStatus === "missing") valueBase = incomplete("cash_fx_missing");
+  else if (!sameCurrency && input.currentFxStatus === "stale") valueBase = sourceFallback(balance.mul(fx), "cash_fx_stale");
   else valueBase = calculated(balance.mul(fx));
 
   return {
@@ -34,12 +37,15 @@ export function calculateCashPortfolio(inputs: CashBalanceCalculationInput[]): C
   const reasons = unique(balances.flatMap((balance) => balance.valueBase.reasons));
   const hasInvalid = balances.some((balance) => balance.valueBase.status === "invalid");
   const hasIncomplete = balances.some((balance) => balance.valueBase.status === "incomplete");
+  const hasFallback = balances.some((balance) => balance.valueBase.status === "source_fallback");
   const total = available.reduce((sum, value) => sum.add(value), new Decimal(0));
   const totalCashBase = hasInvalid
     ? metricWithValue(total, "invalid", reasons)
     : hasIncomplete
       ? metricWithValue(total, "incomplete", reasons)
-      : calculated(total);
+      : hasFallback
+        ? metricWithValue(total, "source_fallback", reasons)
+        : calculated(total);
 
   return {
     balances,

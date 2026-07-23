@@ -1,11 +1,20 @@
 export type NumericInput = number | string | null | undefined;
 
 export type CalculationStatus = "calculated" | "source_fallback" | "incomplete" | "invalid";
-export type MarketDataStatus = "live" | "delayed" | "closing" | "imported" | "manual" | "stale";
+export type MarketDataStatus =
+  | "live"
+  | "delayed"
+  | "end_of_day"
+  | "manually_updated"
+  | "stale"
+  | "missing"
+  | "demo";
 export type InstrumentType = "stock" | "etf" | "option" | "warrant" | "knock_out" | "cash" | "other";
 
 export type CalculationReason =
   | "current_price_missing"
+  | "current_price_demo"
+  | "current_price_stale"
   | "current_price_invalid"
   | "entry_price_missing"
   | "entry_price_invalid"
@@ -14,9 +23,13 @@ export type CalculationReason =
   | "multiplier_missing"
   | "multiplier_invalid"
   | "fx_to_base_missing"
+  | "fx_to_base_demo"
+  | "fx_to_base_stale"
   | "fx_to_base_invalid"
   | "net_liquidity_missing"
   | "net_liquidity_invalid"
+  | "risk_budget_missing"
+  | "risk_budget_invalid"
   | "stop_missing"
   | "stop_invalid"
   | "margin_information_missing"
@@ -27,6 +40,8 @@ export type CalculationReason =
   | "legacy_cash_position_excluded"
   | "cash_fx_missing"
   | "cash_fx_invalid"
+  | "cash_fx_demo"
+  | "cash_fx_stale"
   | "portfolio_contains_incomplete_positions"
   | "portfolio_contains_invalid_positions"
   | "gross_exposure_zero"
@@ -60,9 +75,12 @@ export type PositionCalculationInput = {
   multiplier: NumericInput;
   entryPrice: NumericInput;
   currentPrice: NumericInput;
+  currentPriceStatus?: MarketDataStatus;
   entryFxToBase?: NumericInput;
   currentFxToBase: NumericInput;
+  currentFxStatus?: MarketDataStatus;
   netLiquidity: NumericInput;
+  riskBudget?: NumericInput;
   effectiveStopPrice?: NumericInput;
   directMarginRequirement?: NumericInput;
   directMarginProvenance?: Exclude<MarginProvenance, "estimated" | "missing">;
@@ -86,6 +104,7 @@ export type PositionCalculation = {
   stopRiskInstrument: CalculationMetric;
   stopRisk: CalculationMetric;
   riskToNetLiquidity: CalculationMetric;
+  riskToBudget: CalculationMetric;
   riskShareOfCalculableTotal: CalculationMetric;
 };
 
@@ -132,6 +151,7 @@ export type CashBalanceCalculationInput = {
   baseCurrency: string;
   balanceNative: NumericInput;
   currentFxToBase: NumericInput;
+  currentFxStatus?: MarketDataStatus;
 };
 
 export type CashBalanceCalculation = {

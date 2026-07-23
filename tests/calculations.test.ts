@@ -51,9 +51,37 @@ describe("central position calculation engine", () => {
     expect(result.stopRisk.value).toBe(54);
   });
 
+  it("uses factor one for a position in portfolio base currency", () => {
+    const result = calculatePosition({ ...base, currentFxToBase: 1, currentFxStatus: "manually_updated" });
+    expect(result.positionValueBase).toMatchObject({ value: 1_200, status: "calculated" });
+  });
+
   it("marks a missing current FX as incomplete", () => {
     const result = calculatePosition({ ...base, currentFxToBase: null });
     expect(result.positionValueBase).toMatchObject({ value: null, status: "incomplete", reasons: ["fx_to_base_missing"] });
+  });
+
+  it("marks a missing current price as not calculable", () => {
+    const result = calculatePosition({ ...base, currentPrice: null, currentPriceStatus: "missing" });
+    expect(result.positionValueBase).toMatchObject({ value: null, status: "incomplete" });
+    expect(result.positionValueBase.reasons).toContain("current_price_missing");
+  });
+
+  it("does not treat demo market data as real current data", () => {
+    const priceDemo = calculatePosition({ ...base, currentPriceStatus: "demo" });
+    const fxDemo = calculatePosition({ ...base, currentFxStatus: "demo" });
+    expect(priceDemo.positionValueBase).toMatchObject({ value: null, reasons: ["current_price_demo"] });
+    expect(fxDemo.positionValueBase).toMatchObject({ value: null, reasons: ["fx_to_base_demo"] });
+  });
+
+  it("keeps stale data visible but marks dependent values as restricted", () => {
+    const result = calculatePosition({
+      ...base,
+      currentPriceStatus: "stale",
+      currentFxStatus: "stale",
+    });
+    expect(result.positionValueBase).toMatchObject({ value: 1_200, status: "source_fallback" });
+    expect(result.positionValueBase.reasons).toEqual(expect.arrayContaining(["current_price_stale", "fx_to_base_stale"]));
   });
 
   it("calculates a profitable short stock and negative signed exposure", () => {
@@ -62,6 +90,17 @@ describe("central position calculation engine", () => {
     expect(result.signedExposure.value).toBe(-800);
     expect(result.unrealizedPnl.value).toBe(200);
     expect(result.stopRisk.value).toBe(80);
+  });
+
+  it("uses only the remaining open quantity for a partially closed position", () => {
+    const result = calculatePosition({ ...base, quantity: 6 });
+    expect(result.positionValueBase.value).toBe(720);
+    expect(result.stopRisk.value).toBe(72);
+  });
+
+  it("calculates the stop risk share of the configured per-position risk budget", () => {
+    const result = calculatePosition({ ...base, riskBudget: 200 });
+    expect(result.riskToBudget.value).toBe(0.6);
   });
 
   it("calculates a long option with contract multiplier", () => {
@@ -230,5 +269,22 @@ describe("central portfolio calculation engine", () => {
     });
     expect(result.totalMarginRequirement).toMatchObject({ value: 275, status: "source_fallback" });
     expect(result.marginUtilization).toMatchObject({ value: 0.0275, status: "source_fallback" });
+  });
+
+  it("excludes legacy-untrusted margin from a reliable aggregate", () => {
+    const result = calculatePortfolio({
+      netLiquidity: 10_000,
+      positions: [{
+        ...base,
+        directMarginRequirement: 0,
+        directMarginProvenance: "legacy_untrusted",
+        marginRate: null,
+      }],
+    });
+    expect(result.totalMarginRequirement).toMatchObject({
+      value: null,
+      status: "incomplete",
+      reasons: ["margin_information_missing"],
+    });
   });
 });
