@@ -24,6 +24,7 @@ export default async function ImportPage() {
     <CsvImporter
       currentPositionCount={positions.length}
       categoryNames={categories.map((category) => category.name)}
+      baseCurrency={portfolio.currency}
       imports={imports}
     />
   </>;

@@ -4,6 +4,19 @@ export type AppRole = "user" | "admin";
 export type AccountStatus = "active" | "invited" | "suspended" | "deletion_requested" | "deleted";
 export type LegalDocumentType = "privacy_notice" | "terms_of_use" | "risk_notice";
 export type DeletionRequestStatus = "pending" | "confirmed" | "processing" | "completed" | "rejected";
+export type MarketDataStatus =
+  | "live"
+  | "delayed"
+  | "end_of_day"
+  | "manually_updated"
+  | "stale"
+  | "missing"
+  | "demo"
+  | "closing"
+  | "imported"
+  | "manual";
+export type MarginSource = "broker" | "imported_direct" | "manual_direct" | "estimated" | "missing" | "legacy_untrusted";
+export type MarginConfidence = "trusted" | "estimated" | "untrusted" | "missing" | "not_applicable";
 
 type Table<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
   Row: Row;
@@ -17,10 +30,12 @@ export type Database = {
     Tables: {
       portfolios: Table<{
         id: string; user_id: string; name: string; currency: string; net_liquidity: number | null;
+        cash_balance: number | null; data_as_of: string | null;
         margin_used_pct: number | null; risk_budget_used_pct: number | null; risk_profile: string;
         created_at: string; updated_at: string;
       }, {
         id?: string; user_id: string; name?: string; currency?: string; net_liquidity?: number | null;
+        cash_balance?: number | null; data_as_of?: string | null;
         margin_used_pct?: number | null; risk_budget_used_pct?: number | null; risk_profile?: string;
         created_at?: string; updated_at?: string;
       }>;
@@ -40,13 +55,51 @@ export type Database = {
         max_margin_pct?: number; max_position_pct?: number; max_sector_pct?: number;
         max_drawdown_pct?: number; updated_at?: string;
       }>;
+      portfolio_cash_balances: Table<{
+        id: string; user_id: string; portfolio_id: string; broker_account_id: string | null;
+        currency: string; balance_native: number; settled_cash_native: number | null;
+        current_fx_to_base: number | null; value_base: number | null;
+        balance_as_of: string; fx_as_of: string | null; source_type: "manual" | "custom_csv" | "broker" | "demo" | "legacy";
+        source_reference: string | null; fx_source: string | null; fx_status: Exclude<MarketDataStatus, "closing" | "imported" | "manual"> | null;
+        created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string; broker_account_id?: string | null;
+        currency: string; balance_native: number; settled_cash_native?: number | null;
+        current_fx_to_base?: number | null; value_base?: number | null;
+        balance_as_of: string; fx_as_of?: string | null; source_type?: "manual" | "custom_csv" | "broker" | "demo" | "legacy";
+        source_reference?: string | null; fx_source?: string | null; fx_status?: Exclude<MarketDataStatus, "closing" | "imported" | "manual"> | null;
+        created_at?: string; updated_at?: string;
+      }>;
+      portfolio_fx_rates: Table<{
+        id: string; user_id: string; portfolio_id: string;
+        source_currency: string; target_currency: string; rate: number;
+        source_type: "manual" | "broker" | "market_data_provider" | "demo";
+        source_name: string; rate_as_of: string;
+        status: Exclude<MarketDataStatus, "closing" | "imported" | "manual">;
+        created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string;
+        source_currency: string; target_currency: string; rate: number;
+        source_type: "manual" | "broker" | "market_data_provider" | "demo";
+        source_name: string; rate_as_of: string;
+        status: Exclude<MarketDataStatus, "closing" | "imported" | "manual">;
+        created_at?: string; updated_at?: string;
+      }>;
       positions: Table<{
         id: string; portfolio_id: string; user_id: string; category_id: string | null;
         ticker: string; instrument_name: string | null; instrument_type: string; direction: string;
-        quantity: number; multiplier: number; entry_price: number; current_price: number | null;
-        stop_price: number | null; market_value: number; risk_amount: number | null;
-        margin_requirement: number | null; margin_percent: number | null; sector: string | null;
-        entry_date: string | null; status: string; notes: string | null;
+        quantity: number; multiplier: number; entry_price: number; current_price: number | null; current_price_native: number | null;
+        instrument_currency: string | null; fx_to_base: number | null; data_as_of: string | null;
+        entry_fx_to_base: number | null; current_fx_to_base: number | null;
+        current_fx_as_of: string | null; current_fx_source: string | null; current_fx_status: MarketDataStatus | null;
+        current_price_as_of: string | null; current_price_source: string | null; current_price_status: MarketDataStatus | null;
+        stop_price: number | null; stop_price_native: number | null; stop_updated_at: string | null; stop_comment: string | null;
+        market_value: number | null; risk_amount: number | null;
+        margin_requirement: number | null; margin_percent: number | null; margin_rate: number | null;
+        margin_source: MarginSource; margin_currency: string | null; margin_as_of: string | null;
+        margin_calculation_type: "direct_requirement" | "rate_estimate" | "not_applicable" | null;
+        margin_confidence: MarginConfidence; sector: string | null;
+        strategy: string | null; entry_date: string | null; status: string; notes: string | null;
         external_position_id: string | null; option_type: string | null; strike_price: number | null;
         expiration_date: string | null; source_type: "demo" | "manual" | "csv" | "custom_csv";
         source_import_id: string | null; imported_at: string | null;
@@ -54,10 +107,18 @@ export type Database = {
       }, {
         id?: string; portfolio_id: string; user_id: string; category_id?: string | null;
         ticker: string; instrument_name?: string | null; instrument_type?: string; direction?: string;
-        quantity?: number; multiplier?: number; entry_price?: number; current_price?: number | null;
-        stop_price?: number | null; market_value?: number; risk_amount?: number | null;
-        margin_requirement?: number | null; margin_percent?: number | null; sector?: string | null;
-        entry_date?: string | null; status?: string; notes?: string | null;
+        quantity?: number; multiplier?: number; entry_price?: number; current_price?: number | null; current_price_native?: number | null;
+        instrument_currency?: string | null; fx_to_base?: number | null; data_as_of?: string | null;
+        entry_fx_to_base?: number | null; current_fx_to_base?: number | null;
+        current_fx_as_of?: string | null; current_fx_source?: string | null; current_fx_status?: MarketDataStatus | null;
+        current_price_as_of?: string | null; current_price_source?: string | null; current_price_status?: MarketDataStatus | null;
+        stop_price?: number | null; stop_price_native?: number | null; stop_updated_at?: string | null; stop_comment?: string | null;
+        market_value?: number | null; risk_amount?: number | null;
+        margin_requirement?: number | null; margin_percent?: number | null; margin_rate?: number | null;
+        margin_source?: MarginSource; margin_currency?: string | null; margin_as_of?: string | null;
+        margin_calculation_type?: "direct_requirement" | "rate_estimate" | "not_applicable" | null;
+        margin_confidence?: MarginConfidence; sector?: string | null;
+        strategy?: string | null; entry_date?: string | null; status?: string; notes?: string | null;
         external_position_id?: string | null; option_type?: string | null; strike_price?: number | null;
         expiration_date?: string | null; source_type?: "demo" | "manual" | "csv" | "custom_csv";
         source_import_id?: string | null; imported_at?: string | null;
@@ -151,6 +212,32 @@ export type Database = {
         };
         Returns: Json;
       };
+      replace_portfolio_snapshot_v2: {
+        Args: {
+          target_portfolio: string;
+          original_filename: string;
+          normalized_positions: Json;
+          new_categories: string[];
+          total_rows: number;
+          warning_rows: number;
+          rejected_rows: number;
+          import_metadata?: Json;
+        };
+        Returns: Json;
+      };
+      replace_portfolio_snapshot_v3: {
+        Args: {
+          target_portfolio: string;
+          original_filename: string;
+          normalized_positions: Json;
+          new_categories: string[];
+          total_rows: number;
+          warning_rows: number;
+          rejected_rows: number;
+          import_metadata?: Json;
+        };
+        Returns: Json;
+      };
       get_admin_summary: { Args: Record<PropertyKey, never>; Returns: Json };
       get_admin_user_directory: {
         Args: Record<PropertyKey, never>;
@@ -200,3 +287,5 @@ export type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"];
 export type LegalAcceptance = Database["public"]["Tables"]["legal_acceptances"]["Row"];
 export type AccountDeletionRequest = Database["public"]["Tables"]["account_deletion_requests"]["Row"];
 export type PortfolioImport = Database["public"]["Tables"]["portfolio_imports"]["Row"];
+export type PortfolioCashBalance = Database["public"]["Tables"]["portfolio_cash_balances"]["Row"];
+export type PortfolioFxRate = Database["public"]["Tables"]["portfolio_fx_rates"]["Row"];
