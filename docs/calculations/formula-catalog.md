@@ -1,6 +1,6 @@
 # Zentraler Formelkatalog
 
-Status: Meilenstein 2B.1. Fachliche Quelle ist die pure TypeScript-Bibliothek unter `src/lib/calculations/`. Geldwerte werden mit `decimal.js` ohne Zwischenrundung berechnet; gerundet wird erst in Anzeige oder Export.
+Status: Berechnungsstand Meilenstein 2B.2. Fachliche Quelle ist die pure TypeScript-Bibliothek unter `src/lib/calculations/`. Geldwerte werden mit `decimal.js` ohne Zwischenrundung berechnet; gerundet wird erst in Anzeige oder Export.
 
 ## Kanonische Definitionen
 
@@ -48,7 +48,7 @@ Der NetLiq-Hebel ist derzeit marktwertbasiert. Optionen werden noch nicht delta-
 
 Cashberechnungen weisen positive, negative und Nullsalden sowie die FX-Vollständigkeit aus. Ein fehlender Fremdwährungs-FX macht den Gesamtcash sichtbar unvollständig.
 
-Die Basiswährung darf nur geändert werden, solange weder Positionen noch Währungs-Cashbestände vorhanden sind. Eine spätere Änderung bei fachlichen Daten benötigt einen kontrollierten Migrations- und Neubewertungsvorgang für Positionen, Cash, FX, Margin und Risiko.
+Übergangsregel in Meilenstein 2B.2: Die Basiswährung darf nur geändert werden, solange weder Positionen noch Währungs-Cashbestände vorhanden sind. Verbindliches Zielbild ab 2C: Die Basiswährung wird bei Depoterstellung festgelegt und ist danach nicht über ein normales Eingabefeld veränderbar. Jede spätere Änderung benötigt einen kontrollierten Migrations- und Neubewertungsvorgang für Positionen, Cash, FX, Margin und Risiko.
 
 ## Status und Marktmetadaten
 
