@@ -17,4 +17,6 @@ Arbeitsunterlage, keine Datenschutz-Folgenabschätzung und keine Rechtsberatung.
 
 Die von Next.js gebündelte PostCSS-Version wurde per npm-Override auf die gepatchte Reihe `>=8.5.10` gehoben. Der Override ist bei jedem Next.js-Update zu überprüfen und zu entfernen, sobald die stabile Next-Version die gepatchte Version selbst festlegt.
 
+Der npm-Audit vom 23. Juli 2026 meldet für die über Next.js transitive Abhängigkeit `sharp <0.35.0` die libvips-Hinweise CVE-2026-33327, CVE-2026-33328, CVE-2026-35590 und CVE-2026-35591. Dies ist für Meilenstein 2B kein Mergeblocker, weil DepotArchitect derzeit keine Bilddateien verarbeitet und der angebotene automatische Fix ein breaking Downgrade von Next.js auslösen würde. Vor Einführung geplanter Screenshot- oder Bildnotizen ist die gesamte serverseitige Bildverarbeitung erneut sicherheitstechnisch zu prüfen und auf eine nicht verwundbare Version zu aktualisieren. Nicht vertrauenswürdige Bilder dürfen niemals über eine verwundbare serverseitige `sharp`-Version verarbeitet werden.
+
 Die Erforderlichkeit einer formellen Datenschutz-Folgenabschätzung und eines Datenschutzbeauftragten ist vor Kundenstart fachlich zu prüfen.

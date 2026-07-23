@@ -6,6 +6,7 @@ import { calculatePosition } from "@/lib/calculations/position-calculations";
 import type { Direction, InstrumentType, MarketDataStatus } from "@/lib/calculations/calculation-types";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
+import { resolveWritableInstrumentType } from "@/lib/portfolio-write-policy";
 
 const DIRECTIONS = new Set<Direction>(["long", "short", "long_put", "long_call", "short_put", "short_call"]);
 const INSTRUMENT_TYPES = new Set<InstrumentType>(["stock", "etf", "option", "warrant", "knock_out", "cash", "other"]);
@@ -70,10 +71,23 @@ export async function savePosition(formData: FormData) {
     if (!category) throw new Error("Die Kategorie gehört nicht zu diesem Depot.");
   }
 
+  let existingInstrumentType: InstrumentType | null = null;
+  if (id) {
+    const { data: existingPosition, error: existingPositionError } = await supabase
+      .from("positions")
+      .select("instrument_type")
+      .eq("id", id)
+      .eq("portfolio_id", portfolio.id)
+      .maybeSingle();
+    if (existingPositionError || !existingPosition) throw new Error("Die Position konnte nicht geprüft werden.");
+    existingInstrumentType = existingPosition.instrument_type as InstrumentType;
+  }
+  const writableInstrumentType = resolveWritableInstrumentType(instrumentType, existingInstrumentType);
+
   const calculation = calculatePosition({
     id: id || "new",
     ticker,
-    instrumentType,
+    instrumentType: writableInstrumentType,
     direction,
     quantity,
     multiplier,
@@ -93,7 +107,7 @@ export async function savePosition(formData: FormData) {
     category_id: categoryId,
     ticker,
     instrument_name: text(formData, "instrument_name") || null,
-    instrument_type: instrumentType,
+    instrument_type: writableInstrumentType,
     direction,
     quantity,
     multiplier,
@@ -114,9 +128,9 @@ export async function savePosition(formData: FormData) {
     margin_requirement: directMarginRequirement,
     margin_rate: marginRate,
     margin_source: directMarginRequirement !== null ? "manual_direct" as const : marginRate !== null ? "estimated" as const : "missing" as const,
-    option_type: instrumentType === "option" ? optionType : null,
-    strike_price: instrumentType === "option" ? strikePrice : null,
-    expiration_date: instrumentType === "option" ? expirationDate : null,
+    option_type: writableInstrumentType === "option" ? optionType : null,
+    strike_price: writableInstrumentType === "option" ? strikePrice : null,
+    expiration_date: writableInstrumentType === "option" ? expirationDate : null,
     sector: text(formData, "sector") || null,
     strategy: text(formData, "strategy") || null,
     notes: text(formData, "notes") || null,

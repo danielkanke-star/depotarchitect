@@ -2,10 +2,12 @@ import { Card, PageHeader } from "@/components/ui";
 import { calculateCashPortfolio } from "@/lib/calculations/cash-calculations";
 import { calculationExplanation } from "@/lib/calculations/calculation-provenance";
 import { getPortfolioData } from "@/lib/portfolio";
+import { isBaseCurrencyLocked } from "@/lib/portfolio-write-policy";
 import { deleteCashBalance, saveCashBalance, saveSettings } from "./actions";
 
 export default async function EinstellungenPage() {
-  const { portfolio, settings, categories, cashBalances } = await getPortfolioData();
+  const { portfolio, settings, categories, positions, cashBalances } = await getPortfolioData();
+  const baseCurrencyLocked = isBaseCurrencyLocked(positions.length, cashBalances.length);
   const money = new Intl.NumberFormat("de-DE", { style: "currency", currency: portfolio.currency, maximumFractionDigits: 2 });
   const cash = calculateCashPortfolio(cashBalances.map((balance) => ({
     id: balance.id,
@@ -21,7 +23,7 @@ export default async function EinstellungenPage() {
       <Card>
         <form action={saveSettings} className="grid gap-3 sm:grid-cols-2">
           <label>Nettoliquidität · Quelldatum<input name="net_liquidity" defaultValue={portfolio.net_liquidity ?? ""} /></label>
-          <label>Basiswährung<input name="currency" maxLength={3} defaultValue={portfolio.currency} /></label>
+          <label>Basiswährung<input name="currency" maxLength={3} defaultValue={portfolio.currency} readOnly={baseCurrencyLocked} aria-readonly={baseCurrencyLocked} /></label>
           <label>Datenzeitpunkt<input type="datetime-local" name="data_as_of" defaultValue={toDateTimeLocal(portfolio.data_as_of)} /></label>
           <label>Risikoprofil<input name="risk_profile" defaultValue={portfolio.risk_profile} /></label>
           <label>Risiko je Trade (%)<input name="risk_per_trade_pct" defaultValue={settings.risk_per_trade_pct} /></label>
@@ -32,6 +34,9 @@ export default async function EinstellungenPage() {
           <div className="sm:col-span-2 rounded-xl border border-border/70 bg-background/30 p-3 text-xs text-muted">
             NetLiq bleibt ein eigenständiges Quelldatum. Das alte Einzel-Cashfeld wird nur noch zur Rückwärtskompatibilität gespeichert und hier nicht mehr bearbeitet.
           </div>
+          {baseCurrencyLocked && <div className="sm:col-span-2 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
+            Die Basiswährung ist schreibgeschützt, solange Positionen oder Währungs-Cashbestände vorhanden sind. Eine spätere Änderung benötigt einen kontrollierten Migrations- und Neubewertungsvorgang für Positionen, Cash, FX, Margin und Risiko.
+          </div>}
           <div className="sm:col-span-2"><button className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-[#062218]">Einstellungen speichern</button></div>
         </form>
       </Card>

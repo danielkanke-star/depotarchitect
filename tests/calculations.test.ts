@@ -194,7 +194,7 @@ describe("central portfolio calculation engine", () => {
     expect(result.netLiquidityLeverage.value).toBe(0.2);
   });
 
-  it("excludes legacy cash position rows from gross market value, leverage and categories", () => {
+  it("excludes legacy cash position rows from market value, leverage, margin, risk and categories", () => {
     const result = calculatePortfolio({
       netLiquidity: 10_000,
       positions: [
@@ -203,9 +203,23 @@ describe("central portfolio calculation engine", () => {
       ],
     });
     expect(result.grossExposure.value).toBe(1_200);
+    expect(result.netExposure.value).toBe(1_200);
     expect(result.netLiquidityLeverage.value).toBe(0.12);
+    expect(result.totalMarginRequirement.value).toBe(300);
+    expect(result.marginUtilization.value).toBe(0.03);
+    expect(result.totalCalculableStopRisk.value).toBe(120);
+    expect(result.calculableRiskPositionCount).toBe(1);
     expect(result.activePositionRowCount).toBe(1);
     expect(result.legacyCashPositionCount).toBe(1);
+    expect(result.positions).toHaveLength(2);
+    expect(result.positions.find((position) => position.id === "legacy-cash")).toMatchObject({
+      instrumentType: "cash",
+      riskShareOfCalculableTotal: {
+        value: null,
+        status: "incomplete",
+        reasons: ["legacy_cash_position_excluded"],
+      },
+    });
     expect(result.categories).toHaveLength(1);
   });
 
