@@ -119,6 +119,7 @@ export type CategoryCalculation = {
 
 export type PortfolioCalculationInput = {
   netLiquidity: NumericInput;
+  riskBudget?: NumericInput;
   positions: PositionCalculationInput[];
 };
 
@@ -133,6 +134,7 @@ export type PortfolioCalculation = {
   totalMarginRequirement: CalculationMetric;
   marginUtilization: CalculationMetric;
   totalCalculableStopRisk: CalculationMetric;
+  riskBudgetUtilization: CalculationMetric;
   riskValueCoverage: CalculationMetric;
   calculableRiskPositionCount: number;
   missingStopPositionCount: number;

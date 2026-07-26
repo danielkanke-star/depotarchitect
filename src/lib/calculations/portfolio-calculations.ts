@@ -27,11 +27,16 @@ function partialAggregate(metrics: CalculationMetric[]): CalculationMetric {
   return calculated(sum(available));
 }
 
-function portfolioRatio(numerator: CalculationMetric, denominatorInput: PortfolioCalculationInput["netLiquidity"]): CalculationMetric {
+function portfolioRatio(
+  numerator: CalculationMetric,
+  denominatorInput: PortfolioCalculationInput["netLiquidity"],
+  missingReason: CalculationReason = "net_liquidity_missing",
+  invalidReason: CalculationReason = "net_liquidity_invalid",
+): CalculationMetric {
   if (numerator.value === null) return { ...numerator };
   const denominator = decimal(denominatorInput);
-  if (denominator === null) return incomplete("net_liquidity_missing");
-  if (!denominator.isPositive()) return invalid("net_liquidity_invalid");
+  if (denominator === null) return incomplete(missingReason);
+  if (!denominator.isPositive()) return invalid(invalidReason);
   return metricWithValue(new Decimal(numerator.value).div(denominator), numerator.status, numerator.reasons);
 }
 
@@ -129,6 +134,12 @@ export function calculatePortfolio(input: PortfolioCalculationInput): PortfolioC
     totalMarginRequirement,
     marginUtilization: portfolioRatio(totalMarginRequirement, input.netLiquidity),
     totalCalculableStopRisk,
+    riskBudgetUtilization: portfolioRatio(
+      totalCalculableStopRisk,
+      input.riskBudget,
+      "risk_budget_missing",
+      "risk_budget_invalid",
+    ),
     riskValueCoverage,
     calculableRiskPositionCount: securityPositions.filter((position) => position.stopRisk.value !== null).length,
     missingStopPositionCount,

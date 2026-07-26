@@ -1,6 +1,6 @@
 # Zentraler Formelkatalog
 
-Status: Berechnungsstand Meilenstein 2B.4. Fachliche Quelle ist die pure TypeScript-Bibliothek unter `src/lib/calculations/`. Geldwerte werden mit `decimal.js` ohne Zwischenrundung berechnet; gerundet wird erst in Anzeige oder Export.
+Status: Berechnungsstand Meilenstein 2B.5. Fachliche Quelle ist die pure TypeScript-Bibliothek unter `src/lib/calculations/`. Geldwerte werden mit `decimal.js` ohne Zwischenrundung berechnet; gerundet wird erst in Anzeige oder Export.
 
 ## Kanonische Definitionen
 
@@ -43,6 +43,7 @@ Ein späterer Ausbau trennt Kurs-G&V in Instrumentwährung, Kurs-G&V in Basiswä
 | Brutto-Marktwert | `grossExposure` | `longExposure + shortExposure` |
 | Netto-Marktwert | `netExposure` | `longExposure − shortExposure` |
 | **NetLiq-Hebel** | `netLiquidityLeverage` | **Brutto-Marktwert der Wertpapierpositionen ÷ Nettoliquidität** |
+| Risiko-Budget-Auslastung | `riskBudgetUtilization` | Summe des berechenbaren Risikos bis Trading-Stopp ÷ konfiguriertes Risikobudget |
 | Gesamtmargin | `totalMarginRequirement` | Summe bestätigter direkter und geschätzter Marginwerte |
 | Margin-Auslastung | `marginUtilization` | `totalMarginRequirement ÷ net_liquidity` |
 | Cash je Währung | `balances` | vorzeichenbehafteter nativer Saldo |

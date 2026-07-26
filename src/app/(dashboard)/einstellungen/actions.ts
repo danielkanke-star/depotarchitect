@@ -15,6 +15,7 @@ export async function saveSettings(formData: FormData) {
   const supabase = await createClient();
   const portfolio = await getOrCreatePortfolio();
   const requestedCurrency = normalizedCurrency(formData);
+  const accountType = normalizedAccountType(formData);
   const [{ data: positions, error: positionError }, { data: cashBalances, error: cashError }] = await Promise.all([
     supabase.from("positions").select("id").eq("portfolio_id", portfolio.id).limit(1),
     supabase.from("portfolio_cash_balances").select("id").eq("portfolio_id", portfolio.id).limit(1),
@@ -27,7 +28,7 @@ export async function saveSettings(formData: FormData) {
     cashBalanceCount: cashBalances?.length ?? 0,
   });
   const [{ error: portfolioError }, { error: settingsError }] = await Promise.all([
-    supabase.from("portfolios").update({ net_liquidity: nullableNum(formData, "net_liquidity"), currency: requestedCurrency, data_as_of: normalizedDateTime(formData, "data_as_of"), margin_used_pct: null, risk_budget_used_pct: null, risk_profile: String(formData.get("risk_profile") ?? "Aggressiv 1,0"), updated_at: new Date().toISOString() }).eq("id", portfolio.id),
+    supabase.from("portfolios").update({ net_liquidity: nullableNum(formData, "net_liquidity"), currency: requestedCurrency, account_type: accountType, data_as_of: normalizedDateTime(formData, "data_as_of"), margin_used_pct: null, risk_budget_used_pct: null, risk_profile: String(formData.get("risk_profile") ?? "Aggressiv 1,0"), updated_at: new Date().toISOString() }).eq("id", portfolio.id),
     supabase.from("portfolio_settings").update({ risk_per_trade_pct: num(formData, "risk_per_trade_pct"), max_margin_pct: num(formData, "max_margin_pct"), max_position_pct: num(formData, "max_position_pct"), max_sector_pct: num(formData, "max_sector_pct"), max_drawdown_pct: num(formData, "max_drawdown_pct"), updated_at: new Date().toISOString() }).eq("portfolio_id", portfolio.id),
   ]);
   if (portfolioError) throw new Error("Die Portfolioeinstellungen konnten nicht gespeichert werden.");
@@ -106,6 +107,14 @@ function normalizedCurrency(formData: FormData, key = "currency") {
   const currency = String(formData.get(key) ?? "EUR").trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) throw new Error("Die Basiswährung ist ungültig.");
   return currency;
+}
+
+function normalizedAccountType(formData: FormData) {
+  const value = String(formData.get("account_type") ?? "").trim();
+  if (!["cash_account", "margin_account", "portfolio_margin_account", "other"].includes(value)) {
+    throw new Error("Das Kontomodell ist ungültig.");
+  }
+  return value as "cash_account" | "margin_account" | "portfolio_margin_account" | "other";
 }
 
 function requiredNumber(formData: FormData, key: string, label: string) {

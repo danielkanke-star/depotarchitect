@@ -199,6 +199,17 @@ describe("FX source normalization", () => {
 });
 
 describe("central portfolio calculation engine", () => {
+  it("calculates aggregate risk-budget utilization without inventing a value", () => {
+    const calculatedResult = calculatePortfolio({
+      netLiquidity: 10_000,
+      riskBudget: 200,
+      positions: [base],
+    });
+    const missingResult = calculatePortfolio({ netLiquidity: 10_000, positions: [base] });
+    expect(calculatedResult.riskBudgetUtilization.value).toBe(0.6);
+    expect(missingResult.riskBudgetUtilization).toMatchObject({ value: null, reasons: ["risk_budget_missing"] });
+  });
+
   it("returns a partial risk sum and marks an incomplete portfolio", () => {
     const result = calculatePortfolio({
       netLiquidity: 10_000,

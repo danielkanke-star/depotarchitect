@@ -2,6 +2,17 @@
 
 Prüfstand nach den additiven Meilenstein-2B.4-Migrationen `20260723195457` und `20260723195859` am 23. Juli 2026. Arbeitsunterlage.
 
+## Ergänzung Meilenstein 2B.5
+
+Erneut geprüft nach `20260726215222_milestone_2b_5_simplified_portfolio_core.sql` und `20260726215315_index_capital_movement_owner_fk.sql`.
+
+- Die neue Tabelle `portfolio_capital_movements` hat RLS, nur eigene Select-/Insert-Policies und keine Rechte für `anon`.
+- Der zusammengesetzte Eigentümer-Fremdschlüssel `(portfolio_id, user_id)` ist durch einen passenden Index abgedeckt.
+- Der Security Advisor meldet für 2B.5 keine neue Warnung.
+- Die bestehenden bewusst exponierten SECURITY-DEFINER-RPC-Warnungen bleiben unverändert; ihre Rollen-, Eigentums- und AAL-Prüfungen werden in den SQL-Sicherheitstests abgedeckt.
+- Leaked Password Protection bleibt im Free-Tarif deaktiviert und ist zwingender Launch-Blocker vor externer Registrierung.
+- Der Performance Advisor meldet ausschließlich aktuell unbenutzte Indizes. Der neue Eigentümerindex ist unmittelbar nach Anlage erwartungsgemäß noch unbenutzt und wird wegen seiner Fremdschlüsselabdeckung beibehalten.
+
 ## Behoben
 
 - Fehlende Indizes auf `user_invitations.invited_by` und `account_deletion_requests.processed_by` ergänzt.

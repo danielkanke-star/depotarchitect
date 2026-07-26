@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import type { Portfolio, PortfolioCashBalance, PortfolioCategory, PortfolioFxRate, PortfolioImport, PortfolioSettings, Position } from "@/lib/database.types";
+import type { Portfolio, PortfolioCapitalMovement, PortfolioCashBalance, PortfolioCategory, PortfolioFxRate, PortfolioImport, PortfolioSettings, Position } from "@/lib/database.types";
 
 export async function getUserId() {
   const { userId } = await requireUser();
@@ -33,17 +33,19 @@ export async function getPortfolioData(): Promise<{
   cashBalances: PortfolioCashBalance[];
   fxRates: PortfolioFxRate[];
   latestImport: PortfolioImport | null;
+  capitalMovements: PortfolioCapitalMovement[];
 }> {
   const supabase = await createClient();
   const portfolio = await getOrCreatePortfolio();
 
-  const [{ data: settings, error: settingsError }, { data: categories, error: categoriesError }, { data: positions, error: positionsError }, { data: cashBalances, error: cashError }, { data: fxRates, error: fxError }, { data: latestImport, error: importError }] = await Promise.all([
+  const [{ data: settings, error: settingsError }, { data: categories, error: categoriesError }, { data: positions, error: positionsError }, { data: cashBalances, error: cashError }, { data: fxRates, error: fxError }, { data: latestImport, error: importError }, { data: capitalMovements, error: capitalMovementError }] = await Promise.all([
     supabase.from("portfolio_settings").select("*").eq("portfolio_id", portfolio.id).single(),
     supabase.from("portfolio_categories").select("*").eq("portfolio_id", portfolio.id).order("sort_order"),
-    supabase.from("positions").select("*").eq("portfolio_id", portfolio.id).neq("status", "closed").order("created_at", { ascending: true }),
+    supabase.from("positions").select("*").eq("portfolio_id", portfolio.id).order("created_at", { ascending: true }),
     supabase.from("portfolio_cash_balances").select("*").eq("portfolio_id", portfolio.id).order("currency"),
     supabase.from("portfolio_fx_rates").select("*").eq("portfolio_id", portfolio.id).order("rate_as_of", { ascending: false }),
     supabase.from("portfolio_imports").select("*").eq("portfolio_id", portfolio.id).eq("import_status", "completed").order("imported_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("portfolio_capital_movements").select("*").eq("portfolio_id", portfolio.id).order("movement_date", { ascending: false }),
   ]);
 
   if (settingsError) throw new Error("Die Einstellungen konnten nicht geladen werden.");
@@ -52,7 +54,8 @@ export async function getPortfolioData(): Promise<{
   if (cashError) throw new Error("Die Cashbestände konnten nicht geladen werden.");
   if (fxError) throw new Error("Die Wechselkurse konnten nicht geladen werden.");
   if (importError) throw new Error("Die Importquelle konnte nicht geladen werden.");
+  if (capitalMovementError) throw new Error("Die Ein- und Auszahlungen konnten nicht geladen werden.");
 
-  return { portfolio, settings, categories, positions, cashBalances, fxRates, latestImport };
+  return { portfolio, settings, categories, positions, cashBalances, fxRates, latestImport, capitalMovements };
 }
 import "server-only";

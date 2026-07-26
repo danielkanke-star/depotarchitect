@@ -1,0 +1,68 @@
+"use client";
+
+import { useState } from "react";
+import { savePosition } from "@/app/(dashboard)/depot/actions";
+import type { PortfolioAccountType, PortfolioCategory, Position } from "@/lib/database.types";
+import { isMarginAccount } from "@/lib/portfolio-entry";
+
+type EditablePosition = Pick<Position,
+  "id" | "ticker" | "category_id" | "instrument_type" | "direction" | "quantity"
+  | "instrument_currency" | "entry_price" | "entry_date" | "stop_price_native"
+  | "stop_price" | "status" | "notes" | "sold_quantity" | "sale_price" | "sale_date"
+  | "margin_rate" | "margin_requirement" | "margin_source"
+>;
+
+export function PositionForm({
+  position,
+  categories,
+  accountType,
+  baseCurrency,
+}: {
+  position?: EditablePosition;
+  categories: PortfolioCategory[];
+  accountType: PortfolioAccountType;
+  baseCurrency: string;
+}) {
+  const initiallyClosed = position?.status === "closed";
+  const initiallyPartial = !initiallyClosed && Number(position?.sold_quantity ?? 0) > 0;
+  const [positionStatus, setPositionStatus] = useState<"open" | "closed">(initiallyClosed ? "closed" : "open");
+  const [partialSale, setPartialSale] = useState(initiallyPartial);
+  const marginApplicable = isMarginAccount(accountType);
+  const directMargin = position?.margin_source === "manual_direct" || position?.margin_source === "broker";
+  const showSale = positionStatus === "closed" || partialSale;
+
+  return (
+    <form action={savePosition} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <input type="hidden" name="id" value={position?.id ?? ""} />
+      <label>Ticker<input name="ticker" required maxLength={40} defaultValue={position?.ticker ?? ""} /></label>
+      <label>Kategorie<select name="category_id" defaultValue={position?.category_id ?? ""}><option value="">Keine</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+      <label>Positionstyp<select name="instrument_type" defaultValue={position?.instrument_type ?? "stock"}><option value="stock">Aktie</option><option value="etf">ETF</option><option value="option">Option</option><option value="warrant">Optionsschein</option><option value="knock_out">Knock-out</option><option value="other">Sonstiges</option></select></label>
+      <label>Richtung<select name="direction" defaultValue={position?.direction === "short" ? "short" : "long"}><option value="long">Long</option><option value="short">Short</option></select></label>
+      <label>Status<select name="position_status" value={positionStatus} onChange={(event) => {
+        const nextStatus = event.target.value as "open" | "closed";
+        setPositionStatus(nextStatus);
+        if (nextStatus === "closed") setPartialSale(false);
+      }}><option value="open">Offen</option><option value="closed">Geschlossen</option></select></label>
+      <label>Menge<input name="quantity" required inputMode="decimal" defaultValue={position?.quantity ?? 1} /></label>
+      <label>Instrumentwährung<input name="instrument_currency" required maxLength={3} defaultValue={position?.instrument_currency ?? baseCurrency} /></label>
+      <label>Einstandskurs<input name="entry_price" required inputMode="decimal" defaultValue={position?.entry_price ?? ""} /></label>
+      <label>Einstiegsdatum<input type="date" name="entry_date" defaultValue={position?.entry_date ?? ""} /></label>
+      <label>Trading-Stopp<input name="stop_price" inputMode="decimal" defaultValue={position?.stop_price_native ?? position?.stop_price ?? ""} /></label>
+
+      {positionStatus === "open" && <label className="flex items-end gap-2 rounded-xl border border-border/70 px-3 py-2.5 text-sm"><input className="h-4 w-4" type="checkbox" checked={partialSale} onChange={(event) => setPartialSale(event.target.checked)} />Teilverkauf erfassen</label>}
+      {showSale && <>
+        <label>Verkaufte Menge<input name="sold_quantity" required inputMode="decimal" defaultValue={positionStatus === "closed" ? position?.quantity ?? "" : position?.sold_quantity ?? ""} /></label>
+        <label>Verkaufskurs<input name="sale_price" required inputMode="decimal" defaultValue={position?.sale_price ?? ""} /></label>
+        <label>Verkaufsdatum<input type="date" name="sale_date" required defaultValue={position?.sale_date ?? ""} /></label>
+      </>}
+
+      {marginApplicable ? <>
+        <label>Marginangabe<select name="margin_input_type" defaultValue={directMargin ? "amount" : "rate"}><option value="rate">Marginquote in Prozent</option><option value="amount">Marginbetrag</option></select></label>
+        <label>Marginwert<input name="margin_value" inputMode="decimal" defaultValue={directMargin ? position?.margin_requirement ?? "" : position?.margin_rate == null ? "" : position.margin_rate * 100} /></label>
+      </> : <div className="rounded-xl border border-border/70 bg-background/30 p-3 text-sm text-muted sm:col-span-2">Margin ist für dieses Kontomodell nicht zutreffend.</div>}
+
+      <label className="sm:col-span-2 xl:col-span-4">Kommentar · optional<textarea name="notes" rows={3} maxLength={1000} defaultValue={position?.notes ?? ""} /></label>
+      <div className="sm:col-span-2 xl:col-span-4"><button className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-[#062218]">Position speichern</button></div>
+    </form>
+  );
+}

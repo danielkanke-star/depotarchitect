@@ -1,6 +1,8 @@
 # Reale Markt-, FX-, Stopp- und Margindaten
 
-Status: technische und fachliche Grundlage für Meilenstein 2B.4. Es wird keine automatische Broker- oder Marktdatenanbindung eingeführt.
+Status: technische und fachliche Grundlage aus Meilenstein 2B.4, in 2B.5 als interne Infrastruktur fortgeführt. Es wird keine automatische Broker- oder Marktdatenanbindung eingeführt.
+
+Die technischen Kurs-, FX-, Quellen-, Status- und Zeitfelder werden in 2B.5 bewusst nicht im normalen Positionsformular angezeigt. Sie bleiben für spätere Broker- und Marktdatenadapter erhalten. Der reguläre Benutzerweg erfasst nur fachlich notwendige Quelldaten; fehlende Marktdaten bleiben fehlend.
 
 ## Datenstatus
 

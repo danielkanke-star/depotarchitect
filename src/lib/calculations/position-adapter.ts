@@ -1,6 +1,7 @@
 import type { Portfolio, PortfolioCategory, PortfolioFxRate, Position } from "@/lib/database.types";
 import { canonicalMarketDataStatus, isUsableRealMarketData, latestUsableFxRate } from "@/lib/market-data";
 import type { Direction, InstrumentType, MarginProvenance, PositionCalculationInput } from "./calculation-types";
+import { remainingQuantity } from "@/lib/portfolio-entry";
 
 export function positionToCalculationInput(
   position: Position,
@@ -54,7 +55,7 @@ export function positionToCalculationInput(
     categoryName,
     instrumentType: position.instrument_type as InstrumentType,
     direction: position.direction as Direction,
-    quantity: position.quantity,
+    quantity: remainingQuantity(Number(position.quantity), position.sold_quantity),
     multiplier: position.multiplier,
     entryPrice: position.entry_price,
     currentPrice,

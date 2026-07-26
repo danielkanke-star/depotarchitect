@@ -22,7 +22,7 @@ export default async function ImportPage() {
       description="Optionaler manueller Dateiimport. Die spätere automatische Brokeranbindung ist hiervon getrennt."
     />
     <CsvImporter
-      currentPositionCount={positions.length}
+      currentPositionCount={positions.filter((position) => position.status !== "closed").length}
       categoryNames={categories.map((category) => category.name)}
       baseCurrency={portfolio.currency}
       imports={imports}

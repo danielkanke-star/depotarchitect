@@ -17,6 +17,7 @@ export type MarketDataStatus =
   | "manual";
 export type MarginSource = "broker" | "imported_direct" | "manual_direct" | "estimated" | "missing" | "legacy_untrusted";
 export type MarginConfidence = "trusted" | "estimated" | "untrusted" | "missing" | "not_applicable";
+export type PortfolioAccountType = "cash_account" | "margin_account" | "portfolio_margin_account" | "other";
 
 type Table<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
   Row: Row;
@@ -31,11 +32,13 @@ export type Database = {
       portfolios: Table<{
         id: string; user_id: string; name: string; currency: string; net_liquidity: number | null;
         cash_balance: number | null; data_as_of: string | null;
+        account_type: PortfolioAccountType;
         margin_used_pct: number | null; risk_budget_used_pct: number | null; risk_profile: string;
         created_at: string; updated_at: string;
       }, {
         id?: string; user_id: string; name?: string; currency?: string; net_liquidity?: number | null;
         cash_balance?: number | null; data_as_of?: string | null;
+        account_type?: PortfolioAccountType;
         margin_used_pct?: number | null; risk_budget_used_pct?: number | null; risk_profile?: string;
         created_at?: string; updated_at?: string;
       }>;
@@ -100,6 +103,7 @@ export type Database = {
         margin_calculation_type: "direct_requirement" | "rate_estimate" | "not_applicable" | null;
         margin_confidence: MarginConfidence; sector: string | null;
         strategy: string | null; entry_date: string | null; status: string; notes: string | null;
+        sold_quantity: number; sale_price: number | null; sale_date: string | null;
         external_position_id: string | null; option_type: string | null; strike_price: number | null;
         expiration_date: string | null; source_type: "demo" | "manual" | "csv" | "custom_csv";
         source_import_id: string | null; imported_at: string | null;
@@ -119,6 +123,7 @@ export type Database = {
         margin_calculation_type?: "direct_requirement" | "rate_estimate" | "not_applicable" | null;
         margin_confidence?: MarginConfidence; sector?: string | null;
         strategy?: string | null; entry_date?: string | null; status?: string; notes?: string | null;
+        sold_quantity?: number; sale_price?: number | null; sale_date?: string | null;
         external_position_id?: string | null; option_type?: string | null; strike_price?: number | null;
         expiration_date?: string | null; source_type?: "demo" | "manual" | "csv" | "custom_csv";
         source_import_id?: string | null; imported_at?: string | null;
@@ -134,6 +139,17 @@ export type Database = {
         original_filename: string; imported_at?: string; total_rows: number; valid_rows: number;
         warning_rows: number; rejected_rows: number; import_status: "processing" | "completed" | "failed";
         replaced_position_count?: number; inserted_position_count?: number; metadata?: Json; created_at?: string;
+      }>;
+      portfolio_capital_movements: Table<{
+        id: string; user_id: string; portfolio_id: string;
+        movement_type: "deposit" | "withdrawal"; amount_native: number;
+        currency: string; movement_date: string; comment: string | null;
+        created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string;
+        movement_type: "deposit" | "withdrawal"; amount_native: number;
+        currency: string; movement_date: string; comment?: string | null;
+        created_at?: string; updated_at?: string;
       }>;
       app_runtime_settings: Table<{
         singleton: boolean; registration_mode: string; updated_at: string;
@@ -289,3 +305,4 @@ export type AccountDeletionRequest = Database["public"]["Tables"]["account_delet
 export type PortfolioImport = Database["public"]["Tables"]["portfolio_imports"]["Row"];
 export type PortfolioCashBalance = Database["public"]["Tables"]["portfolio_cash_balances"]["Row"];
 export type PortfolioFxRate = Database["public"]["Tables"]["portfolio_fx_rates"]["Row"];
+export type PortfolioCapitalMovement = Database["public"]["Tables"]["portfolio_capital_movements"]["Row"];
