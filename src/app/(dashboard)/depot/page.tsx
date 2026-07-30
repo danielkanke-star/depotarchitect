@@ -4,16 +4,19 @@ import { Badge, Card, PageHeader } from "@/components/ui";
 import { calculatePortfolio } from "@/lib/calculations/portfolio-calculations";
 import { positionToCalculationInput } from "@/lib/calculations/position-adapter";
 import type { CalculationMetric } from "@/lib/calculations/calculation-types";
+import { getPositionMarketDataMappings } from "@/lib/market-data-mappings";
 import { getPortfolioData } from "@/lib/portfolio";
 import { isMarginAccount, remainingQuantity } from "@/lib/portfolio-entry";
 import { positionPriceSourceLabel, resolvePositionPrice } from "@/lib/price-resolution";
-import { deletePosition, saveCapitalMovement } from "./actions";
+import { deletePosition, refreshPositionPrice, saveCapitalMovement } from "./actions";
 
-type Params = { q?: string; category?: string; view?: string; edit?: string; add?: string };
+type Params = { q?: string; category?: string; view?: string; edit?: string; add?: string; price?: string };
 
 export default async function DepotPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const { portfolio, settings, categories, positions, fxRates, priceObservations, latestImport, capitalMovements } = await getPortfolioData();
+  const marketDataMappings = await getPositionMarketDataMappings(portfolio.id);
+  const mappingByPositionId = new Map(marketDataMappings.map((mapping) => [mapping.position_id, mapping]));
   const activePositions = positions.filter((position) => position.status !== "closed");
   const riskBudget = portfolio.net_liquidity === null || Number(settings.risk_per_trade_pct) <= 0
     ? null
@@ -61,8 +64,11 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
         baseCurrency={portfolio.currency}
         currentPrice={editPosition ? pricesByPositionId.get(editPosition.id)?.price ?? null : null}
         currentPriceSource={editPosition ? priceSourceDescription(pricesByPositionId.get(editPosition.id) ?? null) : null}
+        marketDataMapping={editPosition ? mappingByPositionId.get(editPosition.id) ?? null : null}
       />
     </Card>}
+
+    {priceNotice(params.price)}
 
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -94,7 +100,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
               <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueBase} format={(value) => money.format(value)} missing="Aktueller Kurs fehlt" />}</td>
               <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.stopRisk} format={(value) => money.format(value)} missing="Trading-Stopp oder Kurs fehlt" />}</td>
               <td>{!isMarginAccount(portfolio.account_type) ? "Nicht zutreffend" : closed || legacyCash ? "–" : <SimpleMetric metric={result?.marginRequirement} format={(value) => money.format(value)} missing="Marginangabe fehlt" />}</td>
-              <td><div className="flex items-center gap-3">{!legacyCash && <Link href={`/depot?edit=${position.id}`} className="text-xs text-accent">Bearbeiten</Link>}<form action={deletePosition}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-red-300">Löschen</button></form></div></td>
+              <td><div className="flex flex-wrap items-center gap-3">{!legacyCash && !closed && <form action={refreshPositionPrice}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-accent">Kurs aktualisieren</button></form>}{!legacyCash && <Link href={`/depot?edit=${position.id}`} className="text-xs text-accent">Bearbeiten</Link>}<form action={deletePosition}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-red-300">Löschen</button></form></div></td>
             </tr>;
           })}</tbody>
         </table>
@@ -133,7 +139,44 @@ function priceSourceDescription(price: ReturnType<typeof resolvePositionPrice>) 
   const date = price.observedAt
     ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(price.observedAt))
     : null;
-  return [positionPriceSourceLabel(price.sourceType), price.status === "stale" ? "veraltet" : null, date]
+  const genericLabel = positionPriceSourceLabel(price.sourceType);
+  const sourceLabel = price.sourceName && price.sourceName !== price.sourceType
+    ? price.sourceName
+    : genericLabel;
+  return [sourceLabel, price.status === "stale" ? "veraltet" : null, date]
     .filter(Boolean)
     .join(" · ");
+}
+
+function priceNotice(status: string | undefined) {
+  const messages: Record<string, { tone: string; text: string }> = {
+    updated: {
+      tone: "border-emerald-500/30 bg-emerald-500/10 text-emerald-100",
+      text: "Der eindeutig zugeordnete Twelve-Data-Kurs wurde gespeichert. Ein späterer gültiger IBKR-Kurs bleibt vorrangig.",
+    },
+    "provider-disabled": {
+      tone: "border-border bg-panel text-muted",
+      text: "Twelve Data ist in dieser Umgebung noch nicht aktiviert. Der vorhandene Rückfallkurs bleibt aktiv.",
+    },
+    ambiguous: {
+      tone: "border-amber-500/30 bg-amber-500/10 text-amber-100",
+      text: "Der Ticker ist an mehreren Börsen in derselben Währung gelistet. Bitte beim Bearbeiten den vierstelligen MIC-Börsenplatz ergänzen.",
+    },
+    "not-found": {
+      tone: "border-amber-500/30 bg-amber-500/10 text-amber-100",
+      text: "Für diese eindeutige Instrumentzuordnung war bei Twelve Data kein Kurs verfügbar. Der vorhandene Rückfallkurs bleibt aktiv.",
+    },
+    "provider-error": {
+      tone: "border-amber-500/30 bg-amber-500/10 text-amber-100",
+      text: "Twelve Data war nicht verfügbar oder das Abfragelimit war erreicht. Der vorhandene Rückfallkurs bleibt aktiv.",
+    },
+    "higher-priority-active": {
+      tone: "border-border bg-panel text-muted",
+      text: "Ein höher priorisierter Broker- oder IBKR-Kurs bleibt aktiv.",
+    },
+  };
+  const notice = status ? messages[status] : null;
+  return notice
+    ? <div className={`mb-4 rounded-xl border p-3 text-sm ${notice.tone}`}>{notice.text}</div>
+    : null;
 }

@@ -22,6 +22,15 @@ Stand der Advisor-Abfrage vor Anwendung der additiven Kursquellenmigration am 30
 - `position_price_observations` ist mit RLS, eigenen Select-/Insert-Policies, entzogenen `anon`-Rechten und unveränderlichen Beobachtungen entworfen. Der zugehörige SQL-Test prüft zusätzlich Cross-User-Isolation und den Übergangstrigger.
 - Da Preview und Production dasselbe Supabase-Projekt verwenden und Production in diesem Auftrag unverändert bleiben muss, wird die Migration erst für ein ausdrücklich freigegebenes Preview-Datenbankziel oder den späteren Merge angewendet. Ein Advisor-Lauf nach tatsächlicher Anwendung bleibt deshalb Teil der Deployment-Abnahme.
 
+## Ergänzung Twelve Data
+
+Erneut rein lesend geprüft am 31. Juli 2026. Der reale Datenbankstand endet weiterhin bei `20260726215315`; die Kursbeobachtungsmigration `20260730120000` und die neue Mappingmigration `20260731120000` sind ausschließlich im Branch vorhanden. Die Datenbank ist damit nicht weiter als der Migrationsstand im Repository. Production wurde nicht verändert.
+
+- `position_market_data_mappings` ist additiv mit Eigentümer-RLS, expliziten `authenticated`-Policies, entzogenen `anon`-Rechten und Cross-User-Test entworfen.
+- Ticker, Währung und vierstelliger MIC werden gemeinsam gespeichert; API-Schlüssel gehören nicht in diese Tabelle.
+- Die Advisor-Ergebnisse sind vor Anwendung der beiden Migrationen unverändert: die dokumentierten SECURITY-DEFINER-RPC-Warnungen, deaktivierte Leaked Password Protection und vier unbenutzte Indizes.
+- Nach Anwendung auf einem isolierten Datenbankziel sind Migration, SQL-/RLS-Test und beide Advisors erneut auszuführen. Die gemeinsam genutzte Production-Datenbank ist kein zulässiges Testziel für die neue DDL.
+
 ## Behoben
 
 - Fehlende Indizes auf `user_invitations.invited_by` und `account_deletion_requests.processed_by` ergänzt.

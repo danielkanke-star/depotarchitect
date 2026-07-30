@@ -1,6 +1,6 @@
 # Reale Markt-, FX-, Stopp- und Margindaten
 
-Status: technische und fachliche Grundlage aus Meilenstein 2B.4, in 2B.5 als interne Infrastruktur fortgeführt und um eine additive Kursquellenauflösung ergänzt. Es wird noch keine automatische Broker- oder Marktdatenanbindung eingeführt.
+Status: technische und fachliche Grundlage aus Meilenstein 2B.4, in 2B.5 als interne Infrastruktur fortgeführt und um eine additive Kursquellenauflösung ergänzt. Twelve Data ist als optionaler serverseitiger Rückfallanbieter vorbereitet. Eine Brokeranbindung wird noch nicht eingeführt.
 
 Die technischen FX-, Provider-, Quellen-, Status- und Zeitfelder werden bewusst nicht im normalen Positionsformular angezeigt. Der aktuelle Kurs ist dagegen eine notwendige fachliche Eingabe: Jede neue normale Position benötigt einen manuellen Rückfallkurs. Importpfade liefern den Kurs mit ihren Positionen. Spätere Broker- und Marktdatenadapter bleiben technisch vorbereitet.
 
@@ -38,7 +38,17 @@ Innerhalb derselben Quellqualität gewinnt der neuere Zeitpunkt. Ein als `stale`
 
 `positions.current_price_native` in `instrument_currency`, `current_price_source`, `current_price_as_of` und `current_price_status` bleiben als synchronisierte Kompatibilitätsfelder für bestehende Imports und Anwendungsteile bestehen. Der Übergangstrigger historisiert echte Änderungen additiv. Ein gespeicherter Legacy-Marktwert ersetzt keinen fehlenden aktuellen Kurs.
 
-Der spätere IBKR-Adapter schreibt neue Beobachtungen mit `source_type = 'ibkr'`. Dadurch korrigiert ein gültiger IBKR-Wert abweichende niedrigere Quellen in allen Berechnungen, ohne deren Herkunft zu vernichten. Ein Google-Sheets-Adapter verwendet `google_sheets`; der bestehende CSV-Pfad wird als `custom_csv` erfasst. Ein konkreter externer Marktdatenanbieter wird erst nach Klärung von Lizenz, Abdeckung, Aktualität und Zugangsdaten angebunden.
+Der spätere IBKR-Adapter schreibt neue Beobachtungen mit `source_type = 'ibkr'`. Dadurch korrigiert ein gültiger IBKR-Wert abweichende niedrigere Quellen in allen Berechnungen, ohne deren Herkunft zu vernichten. Ein Google-Sheets-Adapter verwendet `google_sheets`; der bestehende CSV-Pfad wird als `custom_csv` erfasst.
+
+Twelve Data ist als erster optionaler `market_data_provider` implementiert. Der Schlüssel `TWELVE_DATA_API_KEY` wird ausschließlich in einem serverseitigen Adapter gelesen, im `Authorization`-Header übertragen und weder im Browser noch in URLs, Datenbankzeilen oder Logs abgelegt. Fehlt der Schlüssel, ist der Anbieter deaktiviert. Zeitüberschreitungen, Abfragelimits, fehlende Abdeckung und ungültige Antworten lassen das Speichern der Position nicht scheitern; der vorhandene Google-Sheets-/CSV-/manuelle Rückfallkurs bleibt erhalten.
+
+## Eindeutige Instrumentzuordnung
+
+Ein nackter Ticker reicht nicht als globale Instrumentidentität. `position_market_data_mappings` bindet deshalb eine Position an Anbieter, Anbieter-Symbol, Handelswährung und vierstelligen ISO-10383-MIC. Ohne vorgegebenen MIC wird eine Zuordnung nur übernommen, wenn Twelve Data für Ticker und Währung genau einen Treffer liefert. Mehrere Listings führen zu keiner automatischen Kursübernahme und verlangen eine manuelle MIC-Auswahl. Jede Quote wird erneut gegen Symbol, Währung und MIC geprüft.
+
+Der Adapter verwendet derzeit den regulären Schluss-/letzten Kurs aus dem Quote-Endpunkt. Solange die konkrete Datenberechtigung keine belastbare Echtzeitklassifizierung liefert, wird ein Kurs bei geöffnetem Markt vorsichtig als `delayed`, bei geschlossenem Markt als `end_of_day` und nach sieben Tagen als `stale` markiert. Er wird nicht ungeprüft als `live` bezeichnet.
+
+Vor einem produktiven Einsatz sind Abdeckung, Börsenberechtigungen, zulässige Anzeige und Weitergabe, Aktualität, API-Limits, Vertragsbedingungen und Kosten des gewählten Twelve-Data-Tarifs verbindlich zu prüfen. Die Anwendung bleibt auch danach anbieterneutral; Twelve Data kann durch einen anderen Adapter ersetzt oder ergänzt werden.
 
 ## Wechselkurs
 
@@ -71,4 +81,4 @@ Zusätzlich dokumentieren `margin_currency`, `margin_as_of`, `margin_calculation
 
 Die Berechnungsengine kennt keinen konkreten Broker oder Marktdatenanbieter. Spätere Adapter dürfen Daten aus `manual`, `broker` oder `market_data_provider` liefern, müssen aber vor Speicherung auf die kanonischen Felder, Währungen, Quotes und Statuswerte normalisieren.
 
-Nicht Bestandteil dieses Schritts sind Streaming, WebSockets, automatische Broker-Synchronisation, automatische Orderausführung, Bestellung kostenpflichtiger Marktdaten und eine ungeprüfte öffentliche Kurs-API als Production-Abhängigkeit.
+Nicht Bestandteil dieses Schritts sind Streaming, WebSockets, automatische Broker-Synchronisation, automatische Orderausführung und die eigenständige Bestellung kostenpflichtiger Marktdaten. Der Twelve-Data-Adapter wird erst durch einen bewusst gesetzten serverseitigen Schlüssel aktiv und ist keine ungeprüfte öffentliche Browser-API.

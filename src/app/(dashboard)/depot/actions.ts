@@ -2,7 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Direction, InstrumentType } from "@/lib/calculations/calculation-types";
+import type { Database, Position } from "@/lib/database.types";
+import { isMissingMarketDataTable } from "@/lib/market-data-mappings";
+import {
+  getTwelveDataQuote,
+  resolveTwelveDataInstrument,
+} from "@/lib/market-data-providers/twelve-data";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
 import { normalizeMarginInput, normalizePositionSale, validateCapitalMovement } from "@/lib/portfolio-entry";
 import { resolveWritableInstrumentType } from "@/lib/portfolio-write-policy";
@@ -10,6 +17,18 @@ import { createClient } from "@/lib/supabase/server";
 
 const DIRECTIONS = new Set<Direction>(["long", "short"]);
 const INSTRUMENT_TYPES = new Set<InstrumentType>(["stock", "etf", "option", "warrant", "knock_out", "other"]);
+const MARKET_DATA_SOURCE = "market_data_provider:twelve_data";
+const MIC_PATTERN = /^[A-Z0-9]{4}$/;
+const PROVIDER_REFRESH_COOLDOWN_MS = 60_000;
+
+type AppSupabaseClient = SupabaseClient<Database>;
+type PriceRefreshOutcome =
+  | "updated"
+  | "provider-disabled"
+  | "ambiguous"
+  | "not-found"
+  | "provider-error"
+  | "higher-priority-active";
 
 const text = (formData: FormData, key: string) => String(formData.get(key) ?? "").trim();
 const nullableNumber = (formData: FormData, key: string) => {
@@ -35,6 +54,7 @@ export async function savePosition(formData: FormData) {
   const instrumentCurrency = (text(formData, "instrument_currency") || portfolio.currency).toUpperCase();
   const categoryId = text(formData, "category_id") || null;
   const notes = text(formData, "notes") || null;
+  const marketDataMic = text(formData, "market_data_mic").toUpperCase() || null;
   const entryDate = optionalIsoDate(text(formData, "entry_date"), "Das Einstiegsdatum ist ungültig.");
 
   if (!ticker || ticker.length > 40 || !DIRECTIONS.has(direction) || !INSTRUMENT_TYPES.has(requestedInstrumentType)) {
@@ -46,6 +66,9 @@ export async function savePosition(formData: FormData) {
   if (stopPrice !== null && stopPrice < 0) throw new Error("Der Trading-Stopp darf nicht negativ sein.");
   if (!/^[A-Z]{3}$/.test(instrumentCurrency)) throw new Error("Die Instrumentwährung ist ungültig.");
   if (notes && notes.length > 1000) throw new Error("Der Kommentar darf höchstens 1.000 Zeichen enthalten.");
+  if (marketDataMic && !MIC_PATTERN.test(marketDataMic)) {
+    throw new Error("Der Börsenplatz muss als vierstelliger MIC angegeben werden, zum Beispiel XETR oder XNAS.");
+  }
 
   if (categoryId) {
     const { data: category } = await supabase
@@ -139,28 +162,92 @@ export async function savePosition(formData: FormData) {
         risk_amount: null,
       } : {}),
     };
-    result = await supabase.from("positions").update({ ...payload, ...technicalInvalidation }).eq("id", existing.id).eq("portfolio_id", portfolio.id);
+    result = await supabase
+      .from("positions")
+      .update({ ...payload, ...technicalInvalidation })
+      .eq("id", existing.id)
+      .eq("portfolio_id", portfolio.id)
+      .select("id")
+      .single();
   } else {
     const baseCurrencyPosition = instrumentCurrency === portfolio.currency.toUpperCase();
-    result = await supabase.from("positions").insert({
-      ...payload,
-      portfolio_id: portfolio.id,
-      user_id: userId,
-      multiplier: 1,
-      source_type: "manual",
-      entry_fx_to_base: baseCurrencyPosition ? 1 : null,
-      current_fx_to_base: baseCurrencyPosition ? 1 : null,
-      current_fx_source: baseCurrencyPosition ? "identity" : null,
-      current_fx_as_of: baseCurrencyPosition ? now : null,
-      current_fx_status: baseCurrencyPosition ? "manually_updated" : "missing",
-      fx_to_base: baseCurrencyPosition ? 1 : null,
-      market_value: null,
-      risk_amount: null,
-    });
+    result = await supabase
+      .from("positions")
+      .insert({
+        ...payload,
+        portfolio_id: portfolio.id,
+        user_id: userId,
+        multiplier: 1,
+        source_type: "manual",
+        entry_fx_to_base: baseCurrencyPosition ? 1 : null,
+        current_fx_to_base: baseCurrencyPosition ? 1 : null,
+        current_fx_source: baseCurrencyPosition ? "identity" : null,
+        current_fx_as_of: baseCurrencyPosition ? now : null,
+        current_fx_status: baseCurrencyPosition ? "manually_updated" : "missing",
+        fx_to_base: baseCurrencyPosition ? 1 : null,
+        market_value: null,
+        risk_amount: null,
+      })
+      .select("id")
+      .single();
   }
-  if (result.error) throw new Error("Die Position konnte nicht gespeichert werden.");
+  if (result.error || !result.data) throw new Error("Die Position konnte nicht gespeichert werden.");
+  const priceOutcome = sale.status === "closed"
+    ? null
+    : await refreshPositionFromTwelveData({
+      supabase,
+      userId,
+      portfolioId: portfolio.id,
+      positionId: result.data.id,
+      ticker,
+      currency: instrumentCurrency,
+      requestedMic: marketDataMic,
+      currentPriceSource: existing?.current_price_source ?? "manual",
+    });
   revalidatePortfolioPages();
-  redirect("/depot");
+  redirect(priceOutcome ? `/depot?price=${priceOutcome}` : "/depot");
+}
+
+export async function refreshPositionPrice(formData: FormData) {
+  const supabase = await createClient();
+  const userId = await getUserId();
+  const portfolio = await getOrCreatePortfolio();
+  const id = text(formData, "id");
+  if (!id) throw new Error("Die Position fehlt.");
+
+  const { data: position, error: positionError } = await supabase
+    .from("positions")
+    .select("*")
+    .eq("id", id)
+    .eq("portfolio_id", portfolio.id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (positionError || !position || position.instrument_type === "cash" || position.status === "closed") {
+    throw new Error("Die Position kann nicht aktualisiert werden.");
+  }
+
+  const { data: mapping, error: mappingError } = await supabase
+    .from("position_market_data_mappings")
+    .select("mic_code")
+    .eq("position_id", position.id)
+    .eq("provider", "twelve_data")
+    .maybeSingle();
+  if (mappingError && !isMissingMarketDataTable(mappingError)) {
+    throw new Error("Die Kurszuordnung konnte nicht geprüft werden.");
+  }
+
+  const outcome = await refreshPositionFromTwelveData({
+    supabase,
+    userId,
+    portfolioId: portfolio.id,
+    positionId: position.id,
+    ticker: position.ticker,
+    currency: position.instrument_currency ?? portfolio.currency,
+    requestedMic: mapping?.mic_code ?? null,
+    currentPriceSource: position.current_price_source,
+  });
+  revalidatePortfolioPages();
+  redirect(`/depot?price=${outcome}`);
 }
 
 export async function deletePosition(formData: FormData) {
@@ -215,4 +302,126 @@ function revalidatePortfolioPages() {
   revalidatePath("/depot");
   revalidatePath("/cockpit");
   revalidatePath("/risiko");
+}
+
+async function refreshPositionFromTwelveData({
+  supabase,
+  userId,
+  portfolioId,
+  positionId,
+  ticker,
+  currency,
+  requestedMic,
+  currentPriceSource,
+}: {
+  supabase: AppSupabaseClient;
+  userId: string;
+  portfolioId: string;
+  positionId: string;
+  ticker: string;
+  currency: string;
+  requestedMic: string | null;
+  currentPriceSource: Position["current_price_source"];
+}): Promise<PriceRefreshOutcome> {
+  const { data: recentObservation, error: recentObservationError } = await supabase
+    .from("position_price_observations")
+    .select("observed_at")
+    .eq("position_id", positionId)
+    .eq("ticker", ticker.trim().toUpperCase())
+    .eq("currency", currency.trim().toUpperCase())
+    .eq("source_type", "market_data_provider")
+    .order("observed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (recentObservationError && !isMissingMarketDataTable(recentObservationError)) {
+    return "provider-error";
+  }
+  if (
+    recentObservation
+    && Date.now() - Date.parse(recentObservation.observed_at) < PROVIDER_REFRESH_COOLDOWN_MS
+  ) return "updated";
+
+  const instrumentResult = await resolveTwelveDataInstrument({
+    symbol: ticker,
+    currency,
+    micCode: requestedMic,
+  });
+  if (instrumentResult.status === "disabled") return "provider-disabled";
+  if (instrumentResult.status === "ambiguous") return "ambiguous";
+  if (instrumentResult.status === "not_found") return "not-found";
+  if (instrumentResult.status !== "success") return "provider-error";
+
+  const quoteResult = await getTwelveDataQuote({
+    symbol: instrumentResult.data.symbol,
+    currency: instrumentResult.data.currency,
+    micCode: instrumentResult.data.micCode,
+  });
+  if (quoteResult.status === "disabled") return "provider-disabled";
+  if (quoteResult.status === "not_found") return "not-found";
+  if (quoteResult.status !== "success") return "provider-error";
+
+  const quote = quoteResult.data;
+  const { error: mappingError } = await supabase
+    .from("position_market_data_mappings")
+    .upsert({
+      user_id: userId,
+      portfolio_id: portfolioId,
+      position_id: positionId,
+      provider: "twelve_data",
+      provider_symbol: quote.symbol,
+      exchange: quote.exchange,
+      mic_code: quote.micCode,
+      currency: quote.currency,
+      instrument_name: quote.name,
+      instrument_type: quote.instrumentType,
+      mapping_status: requestedMic ? "manual" : "verified",
+      verified_at: quote.observedAt,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "position_id,provider" });
+  if (mappingError && !isMissingMarketDataTable(mappingError)) return "provider-error";
+
+  const { error: observationError } = await supabase
+    .from("position_price_observations")
+    .upsert({
+      user_id: userId,
+      portfolio_id: portfolioId,
+      position_id: positionId,
+      ticker: ticker.trim().toUpperCase(),
+      currency: quote.currency,
+      price_native: quote.price,
+      source_type: "market_data_provider",
+      source_name: "Twelve Data",
+      observed_at: quote.observedAt,
+      status: quote.status,
+      source_reference: `${quote.symbol}@${quote.micCode}`,
+    }, {
+      onConflict: "position_id,source_type,observed_at,price_native",
+      ignoreDuplicates: true,
+    });
+
+  if (!observationError) return "updated";
+  if (!isMissingMarketDataTable(observationError)) return "provider-error";
+  if (hasHigherPriorityCompatibilitySource(currentPriceSource)) return "higher-priority-active";
+
+  const { error: compatibilityError } = await supabase
+    .from("positions")
+    .update({
+      current_price: quote.price,
+      current_price_native: quote.price,
+      current_price_source: MARKET_DATA_SOURCE,
+      current_price_as_of: quote.observedAt,
+      current_price_status: quote.status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", positionId)
+    .eq("portfolio_id", portfolioId)
+    .eq("user_id", userId);
+  return compatibilityError ? "provider-error" : "updated";
+}
+
+function hasHigherPriorityCompatibilitySource(source: string | null) {
+  const normalized = source?.trim().toLowerCase() ?? "";
+  return normalized.includes("ibkr")
+    || normalized.includes("interactive brokers")
+    || (normalized.includes("broker") && !normalized.includes("provider"));
 }

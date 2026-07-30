@@ -20,14 +20,21 @@ Vor jeder manuellen Prüfung Anzahl und fachlichen Inhalt der vorhandenen Positi
 ## Positionen und Marktdaten
 
 1. `/depot` öffnen und höchstens eine eindeutig identifizierbare synthetische Wertpapierposition anlegen.
-2. Kurs, Kursquelle, Zeitpunkt und Status gemeinsam prüfen.
-3. Entry-FX und aktuellen FX verschieden setzen; der aktuelle Positionswert muss den aktuellen FX verwenden.
-4. Marginquote im Formular als `25,00 %` anzeigen lassen; gespeicherter kanonischer Wert ist `0.25`.
-5. Einen bestätigten manuellen direkten Marginwert `0` speichern: Er bleibt zulässig und wird als manuell direkt, nicht als Brokerwert, gekennzeichnet.
-6. Einen alten oder fehlenden Kurs mit Status `stale` prüfen; er darf nicht ohne Hinweis aktuell wirken.
-7. Prüfen, dass „Cash“ bei einer neuen Position nicht auswählbar ist und ein manipulierter `savePosition`-Aufruf mit `instrument_type=cash` abgelehnt wird.
-8. Eine bereits vorhandene Legacy-Cash-Positionszeile darf gelesen werden, bleibt unveränderbar Cash und ist aus Marktwert, NetLiq-Hebel, Margin, Risiko und Kategorien ausgeschlossen. Für diesen Test keine Legacydaten erzeugen oder löschen.
-9. Die synthetische Wertpapierposition gezielt löschen und den dokumentierten Ausgangsbestand abgleichen.
+2. Ohne `TWELVE_DATA_API_KEY` prüfen, dass die Position mit dem manuellen Rückfallkurs gespeichert wird und die Oberfläche den deaktivierten Anbieter verständlich meldet.
+3. Nur in einem isolierten Preview mit bewusst gesetztem Testschlüssel:
+   - eindeutigen synthetischen Ticker samt Währung anlegen und Twelve-Data-Kurs, Quelle, Zeitpunkt und Status gemeinsam prüfen;
+   - einen mehrdeutigen Ticker ohne MIC prüfen: keine automatische Übernahme, manueller Kurs bleibt aktiv;
+   - anschließend einen passenden vierstelligen MIC wie `XNAS`, `XETR` oder `XSWX` ergänzen und die Zuordnung prüfen;
+   - einen absichtlich nicht verfügbaren Ticker prüfen: Speichern bleibt erfolgreich, Rückfallkurs bleibt aktiv;
+   - „Kurs aktualisieren“ prüfen, ohne andere Positionen zu verändern.
+4. Prüfen, dass ein gültiger IBKR-Testwert trotz einer abweichenden Twelve-Data-Quote aktiv bleibt und eine aktuelle Anbieterquote Google Sheets, CSV und manuell überstimmt.
+5. Entry-FX und aktuellen FX verschieden setzen; der aktuelle Positionswert muss den aktuellen FX verwenden.
+6. Marginquote im Formular als `25,00 %` anzeigen lassen; gespeicherter kanonischer Wert ist `0.25`.
+7. Einen bestätigten manuellen direkten Marginwert `0` speichern: Er bleibt zulässig und wird als manuell direkt, nicht als Brokerwert, gekennzeichnet.
+8. Einen alten oder fehlenden Kurs mit Status `stale` prüfen; er darf nicht ohne Hinweis aktuell wirken.
+9. Prüfen, dass „Cash“ bei einer neuen Position nicht auswählbar ist und ein manipulierter `savePosition`-Aufruf mit `instrument_type=cash` abgelehnt wird.
+10. Eine bereits vorhandene Legacy-Cash-Positionszeile darf gelesen werden, bleibt unveränderbar Cash und ist aus Marktwert, NetLiq-Hebel, Margin, Risiko und Kategorien ausgeschlossen. Für diesen Test keine Legacydaten erzeugen oder löschen.
+11. Die synthetische Wertpapierposition und ihre kaskadierend zugeordneten Mappingdaten gezielt löschen und den dokumentierten Ausgangsbestand abgleichen.
 
 ## CSV-Snapshot und Rollback
 

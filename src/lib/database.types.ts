@@ -109,6 +109,21 @@ export type Database = {
         observed_at: string; status: Exclude<MarketDataStatus, "missing" | "demo" | "closing" | "imported" | "manual">;
         source_reference?: string | null; created_at?: string;
       }>;
+      position_market_data_mappings: Table<{
+        id: string; user_id: string; portfolio_id: string; position_id: string;
+        provider: "twelve_data"; provider_symbol: string;
+        exchange: string | null; mic_code: string; currency: string;
+        instrument_name: string | null; instrument_type: string | null;
+        mapping_status: "verified" | "manual";
+        verified_at: string; created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string; position_id: string;
+        provider?: "twelve_data"; provider_symbol: string;
+        exchange?: string | null; mic_code: string; currency: string;
+        instrument_name?: string | null; instrument_type?: string | null;
+        mapping_status?: "verified" | "manual";
+        verified_at: string; created_at?: string; updated_at?: string;
+      }>;
       positions: Table<{
         id: string; portfolio_id: string; user_id: string; category_id: string | null;
         ticker: string; instrument_name: string | null; instrument_type: string; direction: string;
@@ -328,3 +343,4 @@ export type PortfolioCashBalance = Database["public"]["Tables"]["portfolio_cash_
 export type PortfolioFxRate = Database["public"]["Tables"]["portfolio_fx_rates"]["Row"];
 export type PortfolioCapitalMovement = Database["public"]["Tables"]["portfolio_capital_movements"]["Row"];
 export type PositionPriceObservation = Database["public"]["Tables"]["position_price_observations"]["Row"];
+export type PositionMarketDataMapping = Database["public"]["Tables"]["position_market_data_mappings"]["Row"];
