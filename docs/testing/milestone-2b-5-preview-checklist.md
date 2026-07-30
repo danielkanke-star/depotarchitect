@@ -10,7 +10,7 @@ Preview und Production verwenden derzeit dasselbe Supabase-Projekt. Deshalb auss
 4. Margin-Konto: Quote oder Betrag auswählbar.
 5. Vorhandene Legacy-Positionen ohne Kurs und Positionen ohne Trading-Stopp werden als fehlend beziehungsweise nicht berechenbar gezeigt.
 6. Bei einer bearbeiteten Position werden aktiver Kurs, verständliche Quellenbezeichnung und Zeitpunkt gemeinsam angezeigt.
-7. Falls synthetische Beobachtungen mehrerer Quellen geprüft werden: gültiges IBKR schlägt Import/Provider/manuell; veraltetes IBKR schlägt keinen aktuellen Import.
+7. Falls synthetische Beobachtungen mehrerer Quellen geprüft werden: gültiges IBKR schlägt Marktdatenanbieter, Import und manuell; ein Marktdatenanbieter schlägt Google Sheets/CSV und manuell; veraltetes IBKR schlägt keine aktuelle Rückfallquelle.
 8. `/einstellungen`: Kontomodell ist auswählbar; technische Cash- und FX-Pflege ist nicht Teil des normalen Wegs.
 9. Der CSV-Import bleibt über das Depot optional erreichbar, ist aber kein Hauptnavigationspunkt.
 

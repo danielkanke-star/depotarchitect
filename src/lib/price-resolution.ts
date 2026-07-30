@@ -8,10 +8,10 @@ import type { MarketDataStatus } from "./calculations/calculation-types";
 
 const SOURCE_PRIORITY: Record<PositionPriceSourceType, number> = {
   ibkr: 600,
-  broker: 500,
+  broker: 550,
+  market_data_provider: 500,
   google_sheets: 400,
-  custom_csv: 350,
-  market_data_provider: 300,
+  custom_csv: 390,
   manual: 200,
   legacy: 100,
 };

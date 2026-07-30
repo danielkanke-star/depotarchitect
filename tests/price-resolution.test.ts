@@ -51,26 +51,29 @@ describe("current price source resolution", () => {
     expect(resolved).toMatchObject({ price: 105, sourceType: "ibkr", status: "live" });
   });
 
-  it("uses a valid import instead of stale IBKR data", () => {
+  it("uses a valid market-data provider instead of stale IBKR data", () => {
     const resolved = resolvePositionPrice(basePosition, [
       observation("ibkr", 105, { status: "stale" }),
+      observation("market_data_provider", 104),
       observation("google_sheets", 103),
     ]);
 
-    expect(resolved).toMatchObject({ price: 103, sourceType: "google_sheets" });
+    expect(resolved).toMatchObject({ price: 104, sourceType: "market_data_provider" });
   });
 
-  it("uses Google Sheets, provider and manual in descending fallback order", () => {
+  it("uses provider, Google Sheets, CSV and manual in descending fallback order", () => {
     expect(resolvePositionPrice(basePosition, [
       observation("manual", 100),
-      observation("market_data_provider", 101),
+      observation("custom_csv", 101),
       observation("google_sheets", 102),
-    ])).toMatchObject({ price: 102, sourceType: "google_sheets" });
+      observation("market_data_provider", 103),
+    ])).toMatchObject({ price: 103, sourceType: "market_data_provider" });
 
     expect(resolvePositionPrice(basePosition, [
       observation("manual", 100),
-      observation("market_data_provider", 101),
-    ])).toMatchObject({ price: 101, sourceType: "market_data_provider" });
+      observation("custom_csv", 101),
+      observation("google_sheets", 102),
+    ])).toMatchObject({ price: 102, sourceType: "google_sheets" });
   });
 
   it("uses the newest observation within the same source quality", () => {

@@ -11,7 +11,7 @@ Stand: Meilenstein 2A. Dieses Dokument ist eine technische Arbeitsunterlage und 
 5. Vercel Functions sind über `vercel.json` auf `fra1` begrenzt. Die tatsächliche Region ist nach jedem Preview-Deployment in den Metadaten zu prüfen.
 6. Das lokale Skript `scripts/grant-admin.ts` nutzt nur bei bewusster Ausführung einen serverseitigen Supabase Secret Key. Dieser Schlüssel wird nicht an den Browser übertragen und nicht committed.
 7. Benutzerdefinierte CSV-Dateien werden als optionaler manueller Fallback im Browser eingelesen und normalisiert. Die Rohdatei wird nicht hochgeladen oder dauerhaft gespeichert. Erst die bestätigten normalisierten Positionen gelangen über eine Server Action zur transaktionalen Datenbankfunktion. Eine spätere automatische Brokeranbindung ist hiervon getrennt.
-8. Kursbeobachtungen werden positionsbezogen mit Wert, Währung, Quelle, Qualitätsstatus und Zeitpunkt gespeichert. Der Resolver verwendet gültige IBKR-Daten mit höchster Priorität, danach Broker-, Import-, Provider- und manuelle Rückfallquellen. Es werden keine Brokerzugangsdaten, Kontonummern oder Authentifizierungstokens in den Kurszeilen gespeichert.
+8. Kursbeobachtungen werden positionsbezogen mit Wert, Währung, Quelle, Qualitätsstatus und Zeitpunkt gespeichert. Der Resolver verwendet gültige IBKR-Daten mit höchster Priorität, danach andere Broker-, Marktdatenanbieter-, Google-Sheets-/CSV- und manuelle Rückfallquellen. Es werden keine Brokerzugangsdaten, Kontonummern oder Authentifizierungstokens in den Kurszeilen gespeichert.
 
 ## Datenkategorien
 

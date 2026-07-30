@@ -28,9 +28,9 @@ Die Anwendung löst daraus einen kanonischen aktuellen Kurs auf. Priorität:
 
 1. gültiger und nicht veralteter IBKR-Kurs
 2. anderer gültiger Brokerkurs
-3. Google-Sheets-Import
-4. eigener CSV-Import
-5. externer Marktdatenanbieter
+3. externer Marktdatenanbieter
+4. Google-Sheets-Import
+5. eigener CSV-Import
 6. manuelle Eingabe
 7. Legacy-Kurs
 
