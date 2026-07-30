@@ -13,6 +13,15 @@ Erneut geprüft nach `20260726215222_milestone_2b_5_simplified_portfolio_core.sq
 - Leaked Password Protection bleibt im Free-Tarif deaktiviert und ist zwingender Launch-Blocker vor externer Registrierung.
 - Der Performance Advisor meldet ausschließlich aktuell unbenutzte Indizes. Der neue Eigentümerindex ist unmittelbar nach Anlage erwartungsgemäß noch unbenutzt und wird wegen seiner Fremdschlüsselabdeckung beibehalten.
 
+## Ergänzung Kursquellenauflösung
+
+Stand der Advisor-Abfrage vor Anwendung der additiven Kursquellenmigration am 30. Juli 2026:
+
+- Security: unverändert die unten dokumentierten, absichtlich exponierten und intern geprüften RPC-Hinweise sowie deaktivierte Leaked Password Protection.
+- Performance: unverändert vier INFO-Hinweise zu `positions_sector_idx`, `account_deletion_requests_status_idx`, `portfolio_cash_balances_user_id_idx` und `positions_external_position_id_idx`.
+- `position_price_observations` ist mit RLS, eigenen Select-/Insert-Policies, entzogenen `anon`-Rechten und unveränderlichen Beobachtungen entworfen. Der zugehörige SQL-Test prüft zusätzlich Cross-User-Isolation und den Übergangstrigger.
+- Da Preview und Production dasselbe Supabase-Projekt verwenden und Production in diesem Auftrag unverändert bleiben muss, wird die Migration erst für ein ausdrücklich freigegebenes Preview-Datenbankziel oder den späteren Merge angewendet. Ein Advisor-Lauf nach tatsächlicher Anwendung bleibt deshalb Teil der Deployment-Abnahme.
+
 ## Behoben
 
 - Fehlende Indizes auf `user_invitations.invited_by` und `account_deletion_requests.processed_by` ergänzt.

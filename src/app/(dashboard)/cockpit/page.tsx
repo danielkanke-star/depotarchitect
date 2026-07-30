@@ -7,12 +7,13 @@ import { calculatePortfolio } from "@/lib/calculations/portfolio-calculations";
 import { positionToCalculationInput } from "@/lib/calculations/position-adapter";
 import type { CalculationMetric } from "@/lib/calculations/calculation-types";
 import { pct } from "@/lib/format";
-import { canonicalMarketDataStatus, isUsableRealMarketData, latestUsableFxRate } from "@/lib/market-data";
+import { canonicalMarketDataStatus, latestUsableFxRate } from "@/lib/market-data";
 import { getPortfolioData } from "@/lib/portfolio";
 import { isMarginAccount } from "@/lib/portfolio-entry";
+import { resolvePositionPrice } from "@/lib/price-resolution";
 
 export default async function CockpitPage() {
-  const { portfolio, settings, categories, positions, cashBalances, fxRates } = await getPortfolioData();
+  const { portfolio, settings, categories, positions, cashBalances, fxRates, priceObservations } = await getPortfolioData();
   const activePositions = positions.filter((position) => position.status !== "closed");
   const riskBudget = portfolio.net_liquidity === null || Number(settings.risk_per_trade_pct) <= 0
     ? null
@@ -20,7 +21,7 @@ export default async function CockpitPage() {
   const calculation = calculatePortfolio({
     netLiquidity: portfolio.net_liquidity,
     riskBudget,
-    positions: activePositions.map((position) => positionToCalculationInput(position, portfolio, categories, fxRates, riskBudget)),
+    positions: activePositions.map((position) => positionToCalculationInput(position, portfolio, categories, fxRates, riskBudget, priceObservations)),
   });
   const cash = calculateCashPortfolio(cashBalances.map((balance) => ({
     id: balance.id,
@@ -32,10 +33,9 @@ export default async function CockpitPage() {
       ?? canonicalMarketDataStatus(balance.fx_status, balance.source_type, balance.current_fx_to_base !== null),
   })));
   const securityPositions = activePositions.filter((position) => position.instrument_type !== "cash");
-  const missingPriceCount = securityPositions.filter((position) => {
-    const price = position.current_price_native ?? position.current_price;
-    return price === null || !isUsableRealMarketData(canonicalMarketDataStatus(position.current_price_status, position.source_type, price !== null));
-  }).length;
+  const missingPriceCount = securityPositions.filter((position) =>
+    resolvePositionPrice(position, priceObservations) === null
+  ).length;
   const incompleteValuationCount = calculation.securityPositions.filter((position) => position.positionValueBase.value === null).length;
   const top = [...calculation.securityPositions].sort((a, b) => (b.positionValueBase.value ?? -1) - (a.positionValueBase.value ?? -1)).slice(0, 6);
   const money = new Intl.NumberFormat("de-DE", { style: "currency", currency: portfolio.currency, maximumFractionDigits: 2 });

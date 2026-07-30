@@ -1,7 +1,8 @@
-import type { Portfolio, PortfolioCategory, PortfolioFxRate, Position } from "@/lib/database.types";
+import type { Portfolio, PortfolioCategory, PortfolioFxRate, Position, PositionPriceObservation } from "@/lib/database.types";
 import { canonicalMarketDataStatus, isUsableRealMarketData, latestUsableFxRate } from "@/lib/market-data";
 import type { Direction, InstrumentType, MarginProvenance, PositionCalculationInput } from "./calculation-types";
 import { remainingQuantity } from "@/lib/portfolio-entry";
+import { resolvePositionPrice } from "@/lib/price-resolution";
 
 export function positionToCalculationInput(
   position: Position,
@@ -9,6 +10,7 @@ export function positionToCalculationInput(
   categories: PortfolioCategory[] = [],
   fxRates: PortfolioFxRate[] = [],
   riskBudget: number | null = null,
+  priceObservations: PositionPriceObservation[] = [],
 ): PositionCalculationInput {
   const categoryName = categories.find((category) => category.id === position.category_id)?.name ?? null;
   const instrumentCurrency = position.instrument_currency?.trim().toUpperCase() || null;
@@ -35,12 +37,9 @@ export function positionToCalculationInput(
     : useSharedFx
       ? sharedFx?.status ?? "missing"
       : storedFxStatus;
-  const currentPrice = position.current_price_native ?? position.current_price;
-  const currentPriceStatus = canonicalMarketDataStatus(
-    position.current_price_status,
-    position.source_type,
-    currentPrice !== null,
-  );
+  const resolvedPrice = resolvePositionPrice(position, priceObservations);
+  const currentPrice = resolvedPrice?.price ?? null;
+  const currentPriceStatus = resolvedPrice?.status ?? "missing";
   const marginRate = position.margin_rate ?? (
     position.margin_percent === null ? null : Number(position.margin_percent) / 100
   );

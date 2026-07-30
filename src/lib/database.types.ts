@@ -18,6 +18,14 @@ export type MarketDataStatus =
 export type MarginSource = "broker" | "imported_direct" | "manual_direct" | "estimated" | "missing" | "legacy_untrusted";
 export type MarginConfidence = "trusted" | "estimated" | "untrusted" | "missing" | "not_applicable";
 export type PortfolioAccountType = "cash_account" | "margin_account" | "portfolio_margin_account" | "other";
+export type PositionPriceSourceType =
+  | "ibkr"
+  | "broker"
+  | "google_sheets"
+  | "custom_csv"
+  | "market_data_provider"
+  | "manual"
+  | "legacy";
 
 type Table<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
   Row: Row;
@@ -87,6 +95,19 @@ export type Database = {
         source_name: string; rate_as_of: string;
         status: Exclude<MarketDataStatus, "closing" | "imported" | "manual">;
         created_at?: string; updated_at?: string;
+      }>;
+      position_price_observations: Table<{
+        id: string; user_id: string; portfolio_id: string; position_id: string;
+        ticker: string; currency: string; price_native: number;
+        source_type: PositionPriceSourceType; source_name: string;
+        observed_at: string; status: Exclude<MarketDataStatus, "missing" | "demo" | "closing" | "imported" | "manual">;
+        source_reference: string | null; created_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string; position_id: string;
+        ticker: string; currency: string; price_native: number;
+        source_type: PositionPriceSourceType; source_name: string;
+        observed_at: string; status: Exclude<MarketDataStatus, "missing" | "demo" | "closing" | "imported" | "manual">;
+        source_reference?: string | null; created_at?: string;
       }>;
       positions: Table<{
         id: string; portfolio_id: string; user_id: string; category_id: string | null;
@@ -306,3 +327,4 @@ export type PortfolioImport = Database["public"]["Tables"]["portfolio_imports"][
 export type PortfolioCashBalance = Database["public"]["Tables"]["portfolio_cash_balances"]["Row"];
 export type PortfolioFxRate = Database["public"]["Tables"]["portfolio_fx_rates"]["Row"];
 export type PortfolioCapitalMovement = Database["public"]["Tables"]["portfolio_capital_movements"]["Row"];
+export type PositionPriceObservation = Database["public"]["Tables"]["position_price_observations"]["Row"];

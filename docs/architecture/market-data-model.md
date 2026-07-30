@@ -1,8 +1,8 @@
 # Reale Markt-, FX-, Stopp- und Margindaten
 
-Status: technische und fachliche Grundlage aus Meilenstein 2B.4, in 2B.5 als interne Infrastruktur fortgeführt. Es wird keine automatische Broker- oder Marktdatenanbindung eingeführt.
+Status: technische und fachliche Grundlage aus Meilenstein 2B.4, in 2B.5 als interne Infrastruktur fortgeführt und um eine additive Kursquellenauflösung ergänzt. Es wird noch keine automatische Broker- oder Marktdatenanbindung eingeführt.
 
-Die technischen Kurs-, FX-, Quellen-, Status- und Zeitfelder werden in 2B.5 bewusst nicht im normalen Positionsformular angezeigt. Sie bleiben für spätere Broker- und Marktdatenadapter erhalten. Der reguläre Benutzerweg erfasst nur fachlich notwendige Quelldaten; fehlende Marktdaten bleiben fehlend.
+Die technischen FX-, Provider-, Quellen-, Status- und Zeitfelder werden bewusst nicht im normalen Positionsformular angezeigt. Der aktuelle Kurs ist dagegen eine notwendige fachliche Eingabe: Jede neue normale Position benötigt einen manuellen Rückfallkurs. Importpfade liefern den Kurs mit ihren Positionen. Spätere Broker- und Marktdatenadapter bleiben technisch vorbereitet.
 
 ## Datenstatus
 
@@ -22,9 +22,23 @@ Legacywerte `closing`, `manual` und `imported` bleiben datenbankseitig vorüberg
 
 ## Aktueller Kurs
 
-Fachlich maßgeblich ist `positions.current_price_native` in `instrument_currency`.
+`position_price_observations` speichert Kursbeobachtungen getrennt nach Position, Ticker-Snapshot, Währung, Wert, Zeitpunkt, Status und Quelle. Beobachtungen sind für normale Benutzer unveränderlich; eine neue Beobachtung ersetzt keine ältere Quellenzeile.
 
-Zu jedem Kurs gehören `current_price_source`, `current_price_as_of` und `current_price_status`. `positions.current_price` bleibt ein synchronisierter Kompatibilitätsspiegel für bestehende Imports und Anwendungsteile. Ein gespeicherter Legacy-Marktwert ersetzt keinen fehlenden aktuellen Kurs.
+Die Anwendung löst daraus einen kanonischen aktuellen Kurs auf. Priorität:
+
+1. gültiger und nicht veralteter IBKR-Kurs
+2. anderer gültiger Brokerkurs
+3. Google-Sheets-Import
+4. eigener CSV-Import
+5. externer Marktdatenanbieter
+6. manuelle Eingabe
+7. Legacy-Kurs
+
+Innerhalb derselben Quellqualität gewinnt der neuere Zeitpunkt. Ein als `stale` markierter IBKR-Kurs verdrängt keine nicht veraltete Rückfallquelle. Nur wenn keine nicht veraltete Quelle existiert, darf die beste veraltete Beobachtung sichtbar eingeschränkt verwendet werden. Demo- oder fehlende Kurse werden nie als Ersatz gewählt.
+
+`positions.current_price_native` in `instrument_currency`, `current_price_source`, `current_price_as_of` und `current_price_status` bleiben als synchronisierte Kompatibilitätsfelder für bestehende Imports und Anwendungsteile bestehen. Der Übergangstrigger historisiert echte Änderungen additiv. Ein gespeicherter Legacy-Marktwert ersetzt keinen fehlenden aktuellen Kurs.
+
+Der spätere IBKR-Adapter schreibt neue Beobachtungen mit `source_type = 'ibkr'`. Dadurch korrigiert ein gültiger IBKR-Wert abweichende niedrigere Quellen in allen Berechnungen, ohne deren Herkunft zu vernichten. Ein Google-Sheets-Adapter verwendet `google_sheets`; der bestehende CSV-Pfad wird als `custom_csv` erfasst. Ein konkreter externer Marktdatenanbieter wird erst nach Klärung von Lizenz, Abdeckung, Aktualität und Zugangsdaten angebunden.
 
 ## Wechselkurs
 
@@ -57,4 +71,4 @@ Zusätzlich dokumentieren `margin_currency`, `margin_as_of`, `margin_calculation
 
 Die Berechnungsengine kennt keinen konkreten Broker oder Marktdatenanbieter. Spätere Adapter dürfen Daten aus `manual`, `broker` oder `market_data_provider` liefern, müssen aber vor Speicherung auf die kanonischen Felder, Währungen, Quotes und Statuswerte normalisieren.
 
-Nicht Bestandteil von 2B.4 sind Streaming, WebSockets, automatische Broker-Synchronisation, automatische Orderausführung, Bestellung kostenpflichtiger Marktdaten und eine ungeprüfte öffentliche Kurs-API als Production-Abhängigkeit.
+Nicht Bestandteil dieses Schritts sind Streaming, WebSockets, automatische Broker-Synchronisation, automatische Orderausführung, Bestellung kostenpflichtiger Marktdaten und eine ungeprüfte öffentliche Kurs-API als Production-Abhängigkeit.

@@ -5,12 +5,14 @@ Preview und Production verwenden derzeit dasselbe Supabase-Projekt. Deshalb auss
 ## Ohne Datenmutation
 
 1. `/cockpit`: sechs Kernkennzahlen sichtbar; keine technische Kurs-/FX-Qualitätsmatrix und keine Demo-Kennzahlen.
-2. `/depot?add=position`: nur die vereinfachten Fachfelder sichtbar; keine FX-, Provider-, Quellen-, Status-, ID- oder technischen Zeitfelder.
+2. `/depot?add=position`: nur die vereinfachten Fachfelder einschließlich Pflichtfeld „Aktueller Kurs“ sichtbar; keine FX-, Provider-, Quellen-, Status-, ID- oder technischen Zeitfelder.
 3. Cash-Konto: Margin als nicht zutreffend; manipulierte Marginfelder werden serverseitig ignoriert.
 4. Margin-Konto: Quote oder Betrag auswählbar.
-5. Fehlender Kurs und fehlender Trading-Stopp werden als fehlend beziehungsweise nicht berechenbar gezeigt.
-6. `/einstellungen`: Kontomodell ist auswählbar; technische Cash- und FX-Pflege ist nicht Teil des normalen Wegs.
-7. Der CSV-Import bleibt über das Depot optional erreichbar, ist aber kein Hauptnavigationspunkt.
+5. Vorhandene Legacy-Positionen ohne Kurs und Positionen ohne Trading-Stopp werden als fehlend beziehungsweise nicht berechenbar gezeigt.
+6. Bei einer bearbeiteten Position werden aktiver Kurs, verständliche Quellenbezeichnung und Zeitpunkt gemeinsam angezeigt.
+7. Falls synthetische Beobachtungen mehrerer Quellen geprüft werden: gültiges IBKR schlägt Import/Provider/manuell; veraltetes IBKR schlägt keinen aktuellen Import.
+8. `/einstellungen`: Kontomodell ist auswählbar; technische Cash- und FX-Pflege ist nicht Teil des normalen Wegs.
+9. Der CSV-Import bleibt über das Depot optional erreichbar, ist aber kein Hauptnavigationspunkt.
 
 ## Gezielte synthetische Einzelzeilen
 

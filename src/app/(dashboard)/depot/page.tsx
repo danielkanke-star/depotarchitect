@@ -6,13 +6,14 @@ import { positionToCalculationInput } from "@/lib/calculations/position-adapter"
 import type { CalculationMetric } from "@/lib/calculations/calculation-types";
 import { getPortfolioData } from "@/lib/portfolio";
 import { isMarginAccount, remainingQuantity } from "@/lib/portfolio-entry";
+import { positionPriceSourceLabel, resolvePositionPrice } from "@/lib/price-resolution";
 import { deletePosition, saveCapitalMovement } from "./actions";
 
 type Params = { q?: string; category?: string; view?: string; edit?: string; add?: string };
 
 export default async function DepotPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
-  const { portfolio, settings, categories, positions, fxRates, latestImport, capitalMovements } = await getPortfolioData();
+  const { portfolio, settings, categories, positions, fxRates, priceObservations, latestImport, capitalMovements } = await getPortfolioData();
   const activePositions = positions.filter((position) => position.status !== "closed");
   const riskBudget = portfolio.net_liquidity === null || Number(settings.risk_per_trade_pct) <= 0
     ? null
@@ -20,9 +21,13 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
   const calculation = calculatePortfolio({
     netLiquidity: portfolio.net_liquidity,
     riskBudget,
-    positions: activePositions.map((position) => positionToCalculationInput(position, portfolio, categories, fxRates, riskBudget)),
+    positions: activePositions.map((position) => positionToCalculationInput(position, portfolio, categories, fxRates, riskBudget, priceObservations)),
   });
   const calculatedById = new Map(calculation.positions.map((position) => [position.id, position]));
+  const pricesByPositionId = new Map(positions.map((position) => [
+    position.id,
+    resolvePositionPrice(position, priceObservations),
+  ]));
   const query = (params.q ?? "").toLowerCase();
   const view = params.view ?? "open";
   const filtered = positions.filter((position) => {
@@ -49,7 +54,14 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
         <div><h2 className="font-medium">{editPosition ? `${editPosition.ticker} bearbeiten` : "Neue Position"}</h2><p className="mt-1 text-xs text-muted">Nur die notwendigen fachlichen Angaben werden erfasst.</p></div>
         <Link href="/depot" className="text-xs text-muted">Schließen</Link>
       </div>
-      <PositionForm position={editPosition} categories={categories} accountType={portfolio.account_type} baseCurrency={portfolio.currency} />
+      <PositionForm
+        position={editPosition}
+        categories={categories}
+        accountType={portfolio.account_type}
+        baseCurrency={portfolio.currency}
+        currentPrice={editPosition ? pricesByPositionId.get(editPosition.id)?.price ?? null : null}
+        currentPriceSource={editPosition ? priceSourceDescription(pricesByPositionId.get(editPosition.id) ?? null) : null}
+      />
     </Card>}
 
     <Card>
@@ -64,19 +76,21 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
         <button className="rounded-xl border border-border px-4 py-2 text-sm">Anwenden</button>
       </form>
       {filtered.length === 0 ? <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">Keine passenden Positionen vorhanden.</div> : <div className="overflow-x-auto">
-        <table className="w-full min-w-[1050px] text-sm">
-          <thead className="text-left text-xs text-muted"><tr><th className="pb-3">Position</th><th>Kategorie</th><th>Status</th><th>Menge</th><th>Einstand</th><th>Marktwert</th><th>Risiko bis Stopp</th><th>Margin</th><th></th></tr></thead>
+        <table className="w-full min-w-[1180px] text-sm">
+          <thead className="text-left text-xs text-muted"><tr><th className="pb-3">Position</th><th>Kategorie</th><th>Status</th><th>Menge</th><th>Einstand</th><th>Aktueller Kurs</th><th>Marktwert</th><th>Risiko bis Stopp</th><th>Margin</th><th></th></tr></thead>
           <tbody>{filtered.map((position) => {
             const result = calculatedById.get(position.id);
             const closed = position.status === "closed";
             const partial = !closed && Number(position.sold_quantity ?? 0) > 0;
             const legacyCash = position.instrument_type === "cash";
+            const resolvedPrice = pricesByPositionId.get(position.id) ?? null;
             return <tr key={position.id} className="border-t border-border/60 align-top">
               <td className="py-3"><div className="font-medium">{position.ticker}</div><div className="text-xs text-muted">{instrumentLabel(position.instrument_type)} · {position.instrument_currency}</div>{legacyCash && <div className="mt-1 text-[10px] text-amber-300">Legacy-Cash · nur lesbar</div>}</td>
               <td>{categories.find((category) => category.id === position.category_id)?.name ?? "Keine"}</td>
               <td><Badge tone={closed ? "neutral" : partial ? "warn" : "good"}>{closed ? "Geschlossen" : partial ? "Teilverkauft" : "Offen"}</Badge></td>
               <td><div>{Number(position.quantity).toLocaleString("de-DE")}</div>{partial && <div className="text-xs text-muted">{remainingQuantity(Number(position.quantity), position.sold_quantity).toLocaleString("de-DE")} offen</div>}</td>
               <td>{Number(position.entry_price).toLocaleString("de-DE", { maximumFractionDigits: 6 })} {position.instrument_currency}</td>
+              <td>{closed || legacyCash || !resolvedPrice ? "–" : <div><div>{resolvedPrice.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {resolvedPrice.currency}</div><div className="text-[10px] text-muted">{priceSourceDescription(resolvedPrice)}</div></div>}</td>
               <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueBase} format={(value) => money.format(value)} missing="Aktueller Kurs fehlt" />}</td>
               <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.stopRisk} format={(value) => money.format(value)} missing="Trading-Stopp oder Kurs fehlt" />}</td>
               <td>{!isMarginAccount(portfolio.account_type) ? "Nicht zutreffend" : closed || legacyCash ? "–" : <SimpleMetric metric={result?.marginRequirement} format={(value) => money.format(value)} missing="Marginangabe fehlt" />}</td>
@@ -112,4 +126,14 @@ function instrumentLabel(value: string) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function priceSourceDescription(price: ReturnType<typeof resolvePositionPrice>) {
+  if (!price) return null;
+  const date = price.observedAt
+    ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(price.observedAt))
+    : null;
+  return [positionPriceSourceLabel(price.sourceType), price.status === "stale" ? "veraltet" : null, date]
+    .filter(Boolean)
+    .join(" · ");
 }

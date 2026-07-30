@@ -4,11 +4,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const { supabase, userId } = await requireUser();
-  const [profile, portfolios, categories, positions, cashBalances, capitalMovements, settings, legalAcceptances, importHistory] = await Promise.all([
+  const [profile, portfolios, categories, positions, priceObservations, cashBalances, capitalMovements, settings, legalAcceptances, importHistory] = await Promise.all([
     supabase.from("user_profiles").select("user_id, account_status, plan, created_at, updated_at, last_seen_at, onboarding_completed_at, scheduled_deletion_at").eq("user_id", userId).single(),
     supabase.from("portfolios").select("*").eq("user_id", userId),
     supabase.from("portfolio_categories").select("*").eq("user_id", userId),
     supabase.from("positions").select("*").eq("user_id", userId),
+    supabase.from("position_price_observations").select("*").eq("user_id", userId),
     supabase.from("portfolio_cash_balances").select("*").eq("user_id", userId),
     supabase.from("portfolio_capital_movements").select("*").eq("user_id", userId),
     supabase.from("portfolio_settings").select("*").eq("user_id", userId),
@@ -16,17 +17,20 @@ export async function GET() {
     supabase.from("portfolio_imports").select("id, portfolio_id, source_type, original_filename, imported_at, total_rows, valid_rows, warning_rows, rejected_rows, import_status, replaced_position_count, inserted_position_count, metadata, created_at").eq("user_id", userId),
   ]);
   const queries = [profile, portfolios, categories, positions, cashBalances, capitalMovements, settings, legalAcceptances, importHistory];
-  if (queries.some((query) => query.error)) {
+  const priceTableUnavailable = priceObservations.error?.code === "42P01"
+    || priceObservations.error?.code === "PGRST205";
+  if (queries.some((query) => query.error) || (priceObservations.error && !priceTableUnavailable)) {
     return Response.json({ error: "Der Export konnte nicht erstellt werden." }, { status: 500 });
   }
 
   const body = {
-    export_version: "2b.5",
+    export_version: "2b.6",
     exported_at: new Date().toISOString(),
     user_profile: profile.data,
     portfolios: portfolios.data ?? [],
     categories: categories.data ?? [],
     positions: positions.data ?? [],
+    position_price_observations: priceObservations.data ?? [],
     cash_balances: cashBalances.data ?? [],
     capital_movements: capitalMovements.data ?? [],
     settings: settings.data ?? [],

@@ -17,11 +17,15 @@ export function PositionForm({
   categories,
   accountType,
   baseCurrency,
+  currentPrice,
+  currentPriceSource,
 }: {
   position?: EditablePosition;
   categories: PortfolioCategory[];
   accountType: PortfolioAccountType;
   baseCurrency: string;
+  currentPrice?: number | null;
+  currentPriceSource?: string | null;
 }) {
   const initiallyClosed = position?.status === "closed";
   const initiallyPartial = !initiallyClosed && Number(position?.sold_quantity ?? 0) > 0;
@@ -46,6 +50,8 @@ export function PositionForm({
       <label>Menge<input name="quantity" required inputMode="decimal" defaultValue={position?.quantity ?? 1} /></label>
       <label>Instrumentwährung<input name="instrument_currency" required maxLength={3} defaultValue={position?.instrument_currency ?? baseCurrency} /></label>
       <label>Einstandskurs<input name="entry_price" required inputMode="decimal" defaultValue={position?.entry_price ?? ""} /></label>
+      <label>Aktueller Kurs<input name="current_price" required inputMode="decimal" defaultValue={currentPrice ?? ""} /><span className="mt-1 block text-[11px] text-muted">{currentPriceSource ? `Aktive Quelle: ${currentPriceSource}.` : "Notwendiger Rückfallkurs."} Ein späterer gültiger IBKR-Kurs hat automatisch Vorrang.</span></label>
+      <input type="hidden" name="original_current_price" value={currentPrice ?? ""} />
       <label>Einstiegsdatum<input type="date" name="entry_date" defaultValue={position?.entry_date ?? ""} /></label>
       <label>Trading-Stopp<input name="stop_price" inputMode="decimal" defaultValue={position?.stop_price_native ?? position?.stop_price ?? ""} /></label>
 

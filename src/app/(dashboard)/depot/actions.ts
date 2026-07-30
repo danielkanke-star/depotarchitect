@@ -29,6 +29,8 @@ export async function savePosition(formData: FormData) {
   const requestedInstrumentType = (text(formData, "instrument_type") || "stock") as InstrumentType;
   const quantity = nullableNumber(formData, "quantity");
   const entryPrice = nullableNumber(formData, "entry_price");
+  const currentPrice = nullableNumber(formData, "current_price");
+  const originalCurrentPrice = nullableNumber(formData, "original_current_price");
   const stopPrice = nullableNumber(formData, "stop_price");
   const instrumentCurrency = (text(formData, "instrument_currency") || portfolio.currency).toUpperCase();
   const categoryId = text(formData, "category_id") || null;
@@ -38,8 +40,8 @@ export async function savePosition(formData: FormData) {
   if (!ticker || ticker.length > 40 || !DIRECTIONS.has(direction) || !INSTRUMENT_TYPES.has(requestedInstrumentType)) {
     throw new Error("Die Positionsangaben sind ungültig.");
   }
-  if (quantity === null || quantity <= 0 || entryPrice === null || entryPrice < 0) {
-    throw new Error("Menge und Einstandskurs sind ungültig.");
+  if (quantity === null || quantity <= 0 || entryPrice === null || entryPrice < 0 || currentPrice === null || currentPrice < 0) {
+    throw new Error("Menge, Einstandskurs und aktueller Kurs sind erforderlich und dürfen nicht negativ sein.");
   }
   if (stopPrice !== null && stopPrice < 0) throw new Error("Der Trading-Stopp darf nicht negativ sein.");
   if (!/^[A-Z]{3}$/.test(instrumentCurrency)) throw new Error("Die Instrumentwährung ist ungültig.");
@@ -79,6 +81,10 @@ export async function savePosition(formData: FormData) {
     value: nullableNumber(formData, "margin_value"),
   });
   const now = new Date().toISOString();
+  const shouldWriteManualPrice = !existing
+    || existing.ticker !== ticker
+    || existing.instrument_currency !== instrumentCurrency
+    || currentPrice !== originalCurrentPrice;
 
   const payload = {
     category_id: categoryId,
@@ -104,6 +110,13 @@ export async function savePosition(formData: FormData) {
     notes,
     entry_date: entryDate,
     status: sale.status,
+    ...(shouldWriteManualPrice ? {
+      current_price: currentPrice,
+      current_price_native: currentPrice,
+      current_price_source: "manual",
+      current_price_as_of: now,
+      current_price_status: "manually_updated" as const,
+    } : {}),
     updated_at: now,
   };
 
@@ -111,11 +124,6 @@ export async function savePosition(formData: FormData) {
   if (existing) {
     const technicalInvalidation = {
       ...(existing.ticker !== ticker ? {
-        current_price: null,
-        current_price_native: null,
-        current_price_source: null,
-        current_price_as_of: null,
-        current_price_status: "missing" as const,
         external_position_id: null,
         market_value: null,
         risk_amount: null,
@@ -140,11 +148,6 @@ export async function savePosition(formData: FormData) {
       user_id: userId,
       multiplier: 1,
       source_type: "manual",
-      current_price: null,
-      current_price_native: null,
-      current_price_source: null,
-      current_price_as_of: null,
-      current_price_status: "missing",
       entry_fx_to_base: baseCurrencyPosition ? 1 : null,
       current_fx_to_base: baseCurrencyPosition ? 1 : null,
       current_fx_source: baseCurrencyPosition ? "identity" : null,
