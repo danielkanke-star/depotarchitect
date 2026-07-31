@@ -100,13 +100,18 @@ export async function fetchTwelveDataQuote(
   }: {
     symbol: string;
     currency: string;
-    micCode: string;
+    micCode: string | null;
   },
   options: RequestOptions,
 ): Promise<TwelveDataResult<TwelveDataQuote>> {
+  const normalizedMic = micCode?.trim().toUpperCase() || null;
   const response = await requestJson<QuoteResponse>(
     "/quote",
-    { symbol, mic_code: micCode, timezone: "UTC" },
+    {
+      symbol,
+      timezone: "UTC",
+      ...(normalizedMic ? { mic_code: normalizedMic } : {}),
+    },
     options,
   );
   if (response.status !== "success") return response;
@@ -127,7 +132,7 @@ export async function fetchTwelveDataQuote(
     !instrument
     || instrument.symbol !== symbol.trim().toUpperCase()
     || instrument.currency !== normalizedCurrency
-    || instrument.micCode !== micCode.trim().toUpperCase()
+    || (normalizedMic !== null && instrument.micCode !== normalizedMic)
     || !Number.isFinite(price)
     || price < 0
     || !Number.isFinite(timestamp)

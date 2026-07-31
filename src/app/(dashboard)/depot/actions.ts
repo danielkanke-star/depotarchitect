@@ -6,10 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Direction, InstrumentType } from "@/lib/calculations/calculation-types";
 import type { Database, Position } from "@/lib/database.types";
 import { isMissingMarketDataTable } from "@/lib/market-data-mappings";
-import {
-  getTwelveDataQuote,
-  resolveTwelveDataInstrument,
-} from "@/lib/market-data-providers/twelve-data";
+import { getTwelveDataQuote } from "@/lib/market-data-providers/twelve-data";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
 import { normalizeMarginInput, normalizePositionSale, validateCapitalMovement } from "@/lib/portfolio-entry";
 import { resolveWritableInstrumentType } from "@/lib/portfolio-write-policy";
@@ -25,7 +22,6 @@ type AppSupabaseClient = SupabaseClient<Database>;
 type PriceRefreshOutcome =
   | "updated"
   | "provider-disabled"
-  | "ambiguous"
   | "not-found"
   | "provider-error"
   | "higher-priority-active";
@@ -37,6 +33,60 @@ const nullableNumber = (formData: FormData, key: string) => {
   const value = Number(raw.replace(",", "."));
   return Number.isFinite(value) ? value : null;
 };
+
+export type MarketDataLookupState = {
+  status: "idle" | "disabled" | "not_found" | "error";
+  message?: string;
+} | {
+  status: "success";
+  symbol: string;
+  name: string | null;
+  exchange: string | null;
+  micCode: string;
+  currency: string;
+  price: number;
+  observedAt: string;
+  dataStatus: "delayed" | "end_of_day" | "stale";
+};
+
+export async function lookupPositionMarketData(
+  _previousState: MarketDataLookupState,
+  formData: FormData,
+): Promise<MarketDataLookupState> {
+  await getUserId();
+  const symbol = text(formData, "ticker").toUpperCase();
+  const currency = text(formData, "instrument_currency").toUpperCase();
+  const micCode = text(formData, "market_data_mic").toUpperCase() || null;
+
+  if (!symbol || symbol.length > 40 || !/^[A-Z]{3}$/.test(currency)) {
+    return { status: "error", message: "Bitte Ticker und dreistellige Handelswährung eingeben." };
+  }
+  if (micCode && !MIC_PATTERN.test(micCode)) {
+    return { status: "error", message: "Der optionale Börsenplatz muss ein vierstelliger MIC sein." };
+  }
+
+  const result = await getTwelveDataQuote({ symbol, currency, micCode });
+  if (result.status === "disabled") {
+    return { status: "disabled", message: "Die automatische Kurssuche ist in dieser Umgebung noch nicht aktiviert." };
+  }
+  if (result.status === "not_found") {
+    return { status: "not_found", message: "Für Ticker und Währung wurde keine passende Notierung gefunden." };
+  }
+  if (result.status !== "success") {
+    return { status: "error", message: "Die Kursquelle ist momentan nicht verfügbar. Bitte später erneut versuchen." };
+  }
+  return {
+    status: "success",
+    symbol: result.data.symbol,
+    name: result.data.name,
+    exchange: result.data.exchange,
+    micCode: result.data.micCode,
+    currency: result.data.currency,
+    price: result.data.price,
+    observedAt: result.data.observedAt,
+    dataStatus: result.data.status,
+  };
+}
 
 export async function savePosition(formData: FormData) {
   const supabase = await createClient();
@@ -148,6 +198,7 @@ export async function savePosition(formData: FormData) {
     const technicalInvalidation = {
       ...(existing.ticker !== ticker ? {
         external_position_id: null,
+        instrument_name: null,
         market_value: null,
         risk_amount: null,
       } : {}),
@@ -202,7 +253,7 @@ export async function savePosition(formData: FormData) {
       ticker,
       currency: instrumentCurrency,
       requestedMic: marketDataMic,
-      currentPriceSource: existing?.current_price_source ?? "manual",
+      currentPriceSource: shouldWriteManualPrice ? "manual" : existing?.current_price_source ?? "manual",
     });
   revalidatePortfolioPages();
   redirect(priceOutcome ? `/depot?price=${priceOutcome}` : "/depot");
@@ -341,20 +392,10 @@ async function refreshPositionFromTwelveData({
     && Date.now() - Date.parse(recentObservation.observed_at) < PROVIDER_REFRESH_COOLDOWN_MS
   ) return "updated";
 
-  const instrumentResult = await resolveTwelveDataInstrument({
+  const quoteResult = await getTwelveDataQuote({
     symbol: ticker,
     currency,
     micCode: requestedMic,
-  });
-  if (instrumentResult.status === "disabled") return "provider-disabled";
-  if (instrumentResult.status === "ambiguous") return "ambiguous";
-  if (instrumentResult.status === "not_found") return "not-found";
-  if (instrumentResult.status !== "success") return "provider-error";
-
-  const quoteResult = await getTwelveDataQuote({
-    symbol: instrumentResult.data.symbol,
-    currency: instrumentResult.data.currency,
-    micCode: instrumentResult.data.micCode,
   });
   if (quoteResult.status === "disabled") return "provider-disabled";
   if (quoteResult.status === "not_found") return "not-found";
@@ -379,6 +420,17 @@ async function refreshPositionFromTwelveData({
       updated_at: new Date().toISOString(),
     }, { onConflict: "position_id,provider" });
   if (mappingError && !isMissingMarketDataTable(mappingError)) return "provider-error";
+
+  if (quote.name) {
+    const { error: nameError } = await supabase
+      .from("positions")
+      .update({ instrument_name: quote.name })
+      .eq("id", positionId)
+      .eq("portfolio_id", portfolioId)
+      .eq("user_id", userId)
+      .is("instrument_name", null);
+    if (nameError) return "provider-error";
+  }
 
   const { error: observationError } = await supabase
     .from("position_price_observations")

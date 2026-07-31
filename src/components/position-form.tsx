@@ -1,7 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { savePosition } from "@/app/(dashboard)/depot/actions";
+import { useActionState, useState } from "react";
+import {
+  lookupPositionMarketData,
+  savePosition,
+  type MarketDataLookupState,
+} from "@/app/(dashboard)/depot/actions";
 import type {
   PortfolioAccountType,
   PortfolioCategory,
@@ -16,6 +20,8 @@ type EditablePosition = Pick<Position,
   | "stop_price" | "status" | "notes" | "sold_quantity" | "sale_price" | "sale_date"
   | "margin_rate" | "margin_requirement" | "margin_source"
 >;
+
+const INITIAL_LOOKUP_STATE: MarketDataLookupState = { status: "idle" };
 
 export function PositionForm({
   position,
@@ -38,6 +44,10 @@ export function PositionForm({
   const initiallyPartial = !initiallyClosed && Number(position?.sold_quantity ?? 0) > 0;
   const [positionStatus, setPositionStatus] = useState<"open" | "closed">(initiallyClosed ? "closed" : "open");
   const [partialSale, setPartialSale] = useState(initiallyPartial);
+  const [lookupState, lookupAction, lookupPending] = useActionState(
+    lookupPositionMarketData,
+    INITIAL_LOOKUP_STATE,
+  );
   const marginApplicable = isMarginAccount(accountType);
   const directMargin = position?.margin_source === "manual_direct" || position?.margin_source === "broker";
   const showSale = positionStatus === "closed" || partialSale;
@@ -57,9 +67,15 @@ export function PositionForm({
       <label>Menge<input name="quantity" required inputMode="decimal" defaultValue={position?.quantity ?? 1} /></label>
       <label>Instrumentwährung<input name="instrument_currency" required maxLength={3} defaultValue={position?.instrument_currency ?? baseCurrency} /></label>
       <label>Einstandskurs<input name="entry_price" required inputMode="decimal" defaultValue={position?.entry_price ?? ""} /></label>
-      <label>Aktueller Kurs<input name="current_price" required inputMode="decimal" defaultValue={currentPrice ?? ""} /><span className="mt-1 block text-[11px] text-muted">{currentPriceSource ? `Aktive Quelle: ${currentPriceSource}.` : "Notwendiger Rückfallkurs."} Twelve Data wird automatisch versucht. Ein späterer gültiger IBKR-Kurs hat automatisch Vorrang.</span></label>
+      <label>Aktueller Kurs<input key={lookupState.status === "success" ? `${lookupState.symbol}-${lookupState.micCode}-${lookupState.observedAt}` : "initial"} name="current_price" required inputMode="decimal" defaultValue={lookupState.status === "success" ? lookupState.price : currentPrice ?? ""} /><span className="mt-1 block text-[11px] text-muted">{currentPriceSource ? `Aktive Quelle: ${currentPriceSource}.` : "Notwendiger Rückfallkurs."} Twelve Data wird automatisch versucht. Ein späterer gültiger IBKR-Kurs hat automatisch Vorrang.</span></label>
       <input type="hidden" name="original_current_price" value={currentPrice ?? ""} />
-      <label>Börsenplatz · optional<input name="market_data_mic" maxLength={4} autoCapitalize="characters" placeholder="z. B. XETR" defaultValue={marketDataMapping?.mic_code ?? ""} /><span className="mt-1 block text-[11px] text-muted">Vierstelliger MIC verhindert falsche Listings. {marketDataMapping?.exchange ? `Aktuell: ${marketDataMapping.exchange}.` : "Bei eindeutigen Tickern wird er automatisch ermittelt."}</span></label>
+      <label>Börsenplatz · optional<input name="market_data_mic" maxLength={4} autoCapitalize="characters" placeholder="z. B. XETR" defaultValue={marketDataMapping?.mic_code ?? ""} /><span className="mt-1 block text-[11px] text-muted">Leer lassen für die automatisch gewählte Hauptnotierung. {marketDataMapping?.exchange ? `Aktuell: ${marketDataMapping.exchange}.` : "Ein MIC dient nur zur gezielten Korrektur."}</span></label>
+      <div className="flex items-end">
+        <button formAction={lookupAction} formNoValidate disabled={lookupPending} className="w-full rounded-xl border border-accent/50 px-4 py-2.5 text-sm text-accent disabled:opacity-60">
+          {lookupPending ? "Kurs wird gesucht …" : "Unternehmen & Kurs suchen"}
+        </button>
+      </div>
+      <MarketDataLookupResult state={lookupState} />
       <label>Einstiegsdatum<input type="date" name="entry_date" defaultValue={position?.entry_date ?? ""} /></label>
       <label>Trading-Stopp<input name="stop_price" inputMode="decimal" defaultValue={position?.stop_price_native ?? position?.stop_price ?? ""} /></label>
 
@@ -79,4 +95,31 @@ export function PositionForm({
       <div className="sm:col-span-2 xl:col-span-4"><button className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-[#062218]">Position speichern</button></div>
     </form>
   );
+}
+
+function MarketDataLookupResult({ state }: { state: MarketDataLookupState }) {
+  if (state.status === "idle") {
+    return <div className="rounded-xl border border-border/70 bg-background/30 p-3 text-xs text-muted sm:col-span-2 xl:col-span-4">Ticker und Handelswährung genügen. Die Hauptnotierung wird automatisch ermittelt; der gefundene Kurs wird in das Kursfeld übernommen.</div>;
+  }
+  if (state.status !== "success") {
+    return <div role="status" aria-live="polite" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100 sm:col-span-2 xl:col-span-4">{state.message}</div>;
+  }
+
+  const observedAt = new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(state.observedAt));
+  const statusLabel = state.dataStatus === "delayed"
+    ? "verzögert"
+    : state.dataStatus === "end_of_day"
+      ? "Schlusskurs"
+      : "veraltet";
+
+  return <div role="status" aria-live="polite" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 sm:col-span-2 xl:col-span-4">
+    <div className="font-medium text-emerald-100">{state.name ?? state.symbol}</div>
+    <div className="mt-1 text-xs text-emerald-50/80">
+      {state.symbol} · {state.exchange ?? "Börse nicht benannt"} ({state.micCode}) · {state.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {state.currency} · {statusLabel} · {observedAt}
+    </div>
+    <div className="mt-1 text-[11px] text-emerald-50/60">Quelle: Twelve Data. Ein gültiger IBKR-Kurs überschreibt diese Rückfallquelle später automatisch.</div>
+  </div>;
 }

@@ -34,7 +34,9 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
   const query = (params.q ?? "").toLowerCase();
   const view = params.view ?? "open";
   const filtered = positions.filter((position) => {
-    const matchesQuery = !query || position.ticker.toLowerCase().includes(query);
+    const matchesQuery = !query
+      || position.ticker.toLowerCase().includes(query)
+      || position.instrument_name?.toLowerCase().includes(query);
     const matchesCategory = !params.category || position.category_id === params.category;
     const matchesView = view === "all" || (view === "closed" ? position.status === "closed" : position.status !== "closed");
     return matchesQuery && matchesCategory && matchesView;
@@ -76,7 +78,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
         <Link href="/import" className="text-xs text-accent">{latestImport ? "CSV-Import und Historie" : "Optionaler CSV-Import"}</Link>
       </div>
       <form className="mb-4 grid gap-3 sm:grid-cols-[1fr_200px_170px_auto]">
-        <input name="q" placeholder="Ticker suchen" defaultValue={params.q ?? ""} />
+        <input name="q" placeholder="Ticker oder Unternehmen suchen" defaultValue={params.q ?? ""} />
         <select name="category" defaultValue={params.category ?? ""}><option value="">Alle Kategorien</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
         <select name="view" defaultValue={view}><option value="open">Offen</option><option value="closed">Geschlossen</option><option value="all">Alle</option></select>
         <button className="rounded-xl border border-border px-4 py-2 text-sm">Anwenden</button>
@@ -91,7 +93,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
             const legacyCash = position.instrument_type === "cash";
             const resolvedPrice = pricesByPositionId.get(position.id) ?? null;
             return <tr key={position.id} className="border-t border-border/60 align-top">
-              <td className="py-3"><div className="font-medium">{position.ticker}</div><div className="text-xs text-muted">{instrumentLabel(position.instrument_type)} · {position.instrument_currency}</div>{legacyCash && <div className="mt-1 text-[10px] text-amber-300">Legacy-Cash · nur lesbar</div>}</td>
+              <td className="py-3"><div className="font-medium">{position.ticker}</div>{position.instrument_name && <div className="text-xs text-foreground/80">{position.instrument_name}</div>}<div className="text-xs text-muted">{instrumentLabel(position.instrument_type)} · {position.instrument_currency}</div>{legacyCash && <div className="mt-1 text-[10px] text-amber-300">Legacy-Cash · nur lesbar</div>}</td>
               <td>{categories.find((category) => category.id === position.category_id)?.name ?? "Keine"}</td>
               <td><Badge tone={closed ? "neutral" : partial ? "warn" : "good"}>{closed ? "Geschlossen" : partial ? "Teilverkauft" : "Offen"}</Badge></td>
               <td><div>{Number(position.quantity).toLocaleString("de-DE")}</div>{partial && <div className="text-xs text-muted">{remainingQuantity(Number(position.quantity), position.sold_quantity).toLocaleString("de-DE")} offen</div>}</td>
@@ -152,19 +154,15 @@ function priceNotice(status: string | undefined) {
   const messages: Record<string, { tone: string; text: string }> = {
     updated: {
       tone: "border-emerald-500/30 bg-emerald-500/10 text-emerald-100",
-      text: "Der eindeutig zugeordnete Twelve-Data-Kurs wurde gespeichert. Ein späterer gültiger IBKR-Kurs bleibt vorrangig.",
+      text: "Der Twelve-Data-Kurs der gewählten Hauptnotierung wurde gespeichert. Ein späterer gültiger IBKR-Kurs bleibt vorrangig.",
     },
     "provider-disabled": {
       tone: "border-border bg-panel text-muted",
       text: "Twelve Data ist in dieser Umgebung noch nicht aktiviert. Der vorhandene Rückfallkurs bleibt aktiv.",
     },
-    ambiguous: {
-      tone: "border-amber-500/30 bg-amber-500/10 text-amber-100",
-      text: "Der Ticker ist an mehreren Börsen in derselben Währung gelistet. Bitte beim Bearbeiten den vierstelligen MIC-Börsenplatz ergänzen.",
-    },
     "not-found": {
       tone: "border-amber-500/30 bg-amber-500/10 text-amber-100",
-      text: "Für diese eindeutige Instrumentzuordnung war bei Twelve Data kein Kurs verfügbar. Der vorhandene Rückfallkurs bleibt aktiv.",
+      text: "Für Ticker und Währung war bei Twelve Data kein Kurs verfügbar. Der vorhandene Rückfallkurs bleibt aktiv.",
     },
     "provider-error": {
       tone: "border-amber-500/30 bg-amber-500/10 text-amber-100",

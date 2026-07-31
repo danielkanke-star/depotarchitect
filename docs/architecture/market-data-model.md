@@ -44,7 +44,9 @@ Twelve Data ist als erster optionaler `market_data_provider` implementiert. Der 
 
 ## Eindeutige Instrumentzuordnung
 
-Ein nackter Ticker reicht nicht als globale Instrumentidentität. `position_market_data_mappings` bindet deshalb eine Position an Anbieter, Anbieter-Symbol, Handelswährung und vierstelligen ISO-10383-MIC. Ohne vorgegebenen MIC wird eine Zuordnung nur übernommen, wenn Twelve Data für Ticker und Währung genau einen Treffer liefert. Mehrere Listings führen zu keiner automatischen Kursübernahme und verlangen eine manuelle MIC-Auswahl. Jede Quote wird erneut gegen Symbol, Währung und MIC geprüft.
+Ein nackter Ticker reicht nicht als dauerhafte globale Instrumentidentität. Für die einfache Erfassung fragt DepotArchitect zunächst mit Ticker und Handelswährung die von Twelve Data gewählte kanonische Hauptnotierung ab. Unternehmensname, Börse, vierstelliger ISO-10383-MIC, Kursstatus und Zeitstempel werden vor dem Speichern sichtbar bestätigt. `position_market_data_mappings` bindet die Position anschließend dauerhaft an Anbieter, Anbieter-Symbol, Handelswährung und MIC. Ein Benutzer kann den MIC zur Korrektur ausdrücklich vorgeben; dann muss die Antwort exakt diesem Listing entsprechen. Jede Quote wird mindestens gegen Symbol und Währung, bei vorgegebenem MIC zusätzlich gegen den MIC geprüft.
+
+Der Zwischenablauf ähnelt damit einer Tabellen-Kursfunktion: Ticker und Währung eingeben, „Unternehmen & Kurs suchen“ wählen und die aufgelöste Hauptnotierung prüfen. Er ersetzt keine vertraglich abgesicherte Broker-Marktdatenversorgung. Sobald valide IBKR-Daten verfügbar sind, haben sie in der Quellenauflösung höhere Priorität als Twelve Data, Google Sheets, CSV und manuelle Kurse.
 
 Der Adapter verwendet derzeit den regulären Schluss-/letzten Kurs aus dem Quote-Endpunkt. Solange die konkrete Datenberechtigung keine belastbare Echtzeitklassifizierung liefert, wird ein Kurs bei geöffnetem Markt vorsichtig als `delayed`, bei geschlossenem Markt als `end_of_day` und nach sieben Tagen als `stale` markiert. Er wird nicht ungeprüft als `live` bezeichnet.
 

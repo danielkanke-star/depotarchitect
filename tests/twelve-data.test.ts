@@ -95,6 +95,40 @@ describe("Twelve Data adapter", () => {
     });
   });
 
+  it("uses the provider-selected main listing when no MIC is supplied", async () => {
+    let requestedUrl = "";
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      requestedUrl = String(input);
+      return jsonResponse({
+        symbol: "SAP",
+        name: "SAP SE",
+        exchange: "Xetra",
+        mic_code: "XETR",
+        currency: "EUR",
+        close: "201.45",
+        timestamp: 1785492000,
+        is_market_open: false,
+      });
+    });
+
+    const result = await fetchTwelveDataQuote(
+      { symbol: "SAP", currency: "EUR", micCode: null },
+      { apiKey: "test", fetchImpl, now: new Date("2026-07-31T12:05:00Z") },
+    );
+
+    expect(requestedUrl).not.toContain("mic_code");
+    expect(result).toMatchObject({
+      status: "success",
+      data: {
+        name: "SAP SE",
+        exchange: "Xetra",
+        micCode: "XETR",
+        price: 201.45,
+        status: "end_of_day",
+      },
+    });
+  });
+
   it("rejects a quote from another listing or currency", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({
       symbol: "SAP",

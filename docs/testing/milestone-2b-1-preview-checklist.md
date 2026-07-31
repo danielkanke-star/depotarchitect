@@ -22,9 +22,10 @@ Vor jeder manuellen Prüfung Anzahl und fachlichen Inhalt der vorhandenen Positi
 1. `/depot` öffnen und höchstens eine eindeutig identifizierbare synthetische Wertpapierposition anlegen.
 2. Ohne `TWELVE_DATA_API_KEY` prüfen, dass die Position mit dem manuellen Rückfallkurs gespeichert wird und die Oberfläche den deaktivierten Anbieter verständlich meldet.
 3. Nur in einem isolierten Preview mit bewusst gesetztem Testschlüssel:
-   - eindeutigen synthetischen Ticker samt Währung anlegen und Twelve-Data-Kurs, Quelle, Zeitpunkt und Status gemeinsam prüfen;
-   - einen mehrdeutigen Ticker ohne MIC prüfen: keine automatische Übernahme, manueller Kurs bleibt aktiv;
-   - anschließend einen passenden vierstelligen MIC wie `XNAS`, `XETR` oder `XSWX` ergänzen und die Zuordnung prüfen;
+   - bei einem eindeutig synthetischen Testfall zunächst nur Ticker und Handelswährung eingeben, „Unternehmen & Kurs suchen“ wählen und Unternehmensname, vom Anbieter gewählte Hauptbörse samt MIC, Kurs, Quelle, Zeitpunkt und Status gemeinsam prüfen;
+   - prüfen, dass der gefundene Kurs in das Kursfeld übernommen wird und ein optional vorgegebener MIC eine abweichende Notierung gezielt auswählt beziehungsweise eine unpassende Antwort sicher ablehnt;
+   - bei einem mehrfach gelisteten Ticker prüfen, dass die vom Anbieter zurückgegebene Hauptnotierung vor dem Speichern mit Börse und MIC sichtbar ist;
+   - anschließend einen passenden alternativen vierstelligen MIC wie `XNAS`, `XETR` oder `XSWX` ergänzen und die gezielte Zuordnung prüfen;
    - einen absichtlich nicht verfügbaren Ticker prüfen: Speichern bleibt erfolgreich, Rückfallkurs bleibt aktiv;
    - „Kurs aktualisieren“ prüfen, ohne andere Positionen zu verändern.
 4. Prüfen, dass ein gültiger IBKR-Testwert trotz einer abweichenden Twelve-Data-Quote aktiv bleibt und eine aktuelle Anbieterquote Google Sheets, CSV und manuell überstimmt.

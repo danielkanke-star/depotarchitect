@@ -74,4 +74,11 @@ describe("regular position form boundary", () => {
     expect(source).toContain('name="current_price" required');
     expect(source).toContain("Ein späterer gültiger IBKR-Kurs hat automatisch Vorrang.");
   });
+
+  it("offers a ticker-based company and main-listing quote lookup", () => {
+    expect(source).toContain("Unternehmen & Kurs suchen");
+    expect(source).toContain("lookupPositionMarketData");
+    expect(source).toContain("formNoValidate");
+    expect(source).toContain("automatisch gewählte Hauptnotierung");
+  });
 });
