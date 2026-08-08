@@ -52,6 +52,12 @@ Ein späterer Ausbau trennt Kurs-G&V in Instrumentwährung, Kurs-G&V in Basiswä
 
 Der NetLiq-Hebel ist derzeit marktwertbasiert. Optionen werden noch nicht delta- oder nominalwertbereinigt. Cash geht weder in Long-, Short-, Brutto- oder Netto-Marktwert noch in NetLiq-Hebel oder Wertpapier-Kategoriengewichtung ein. Negative Cashsalden wirken bereits über das separate Quelldatum Nettoliquidität.
 
+## Marktwertdarstellung je Position
+
+Der primäre Marktwert einer Position lautet `offene Menge × aktueller Kurs × Multiplikator` und wird in der Handels-/Instrumentwährung des konkret gewählten Listings angezeigt. Er benötigt weder FX noch Depotbasiswährung, Trading-Stop, Margin, NetLiq oder Risikobudget. Beispiel: `10 AAPL × 313,33 USD × 1 = 3.133,30 USD`.
+
+Die zusätzliche, optional einblendbare Kennzahl `Marktwert {Depotbasiswährung}` multipliziert den primären Marktwert mit `current_fx_to_base`. Fehlt ein gültiger FX-Kurs, bleibt der primäre Marktwert vollständig sichtbar und nur die Zusatzkennzahl wird als `FX fehlt` gekennzeichnet. Der Begriff „Basiswert“ wird hierfür nicht verwendet, weil er bei Derivaten bereits das Underlying bezeichnet.
+
 Cashberechnungen weisen positive, negative und Nullsalden sowie die FX-Vollständigkeit aus. Ein fehlender Fremdwährungs-FX macht den Gesamtcash sichtbar unvollständig.
 
 Übergangsregel in Meilenstein 2B.2: Die Basiswährung darf nur geändert werden, solange weder Positionen noch Währungs-Cashbestände vorhanden sind. Verbindliches Zielbild ab 2C: Die Basiswährung wird bei Depoterstellung festgelegt und ist danach nicht über ein normales Eingabefeld veränderbar. Jede spätere Änderung benötigt einen kontrollierten Migrations- und Neubewertungsvorgang für Positionen, Cash, FX, Margin und Risiko.

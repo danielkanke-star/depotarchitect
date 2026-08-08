@@ -58,7 +58,33 @@ describe("central position calculation engine", () => {
 
   it("marks a missing current FX as incomplete", () => {
     const result = calculatePosition({ ...base, currentFxToBase: null });
+    expect(result.positionValueInstrument).toMatchObject({ value: 1_200, status: "calculated" });
     expect(result.positionValueBase).toMatchObject({ value: null, status: "incomplete", reasons: ["fx_to_base_missing"] });
+  });
+
+  it("always calculates the primary market value in listing currency without FX, stop, margin, NetLiq or risk budget", () => {
+    const result = calculatePosition({
+      ...base,
+      ticker: "AAPL",
+      quantity: 10,
+      currentPrice: 313.33,
+      currentFxToBase: null,
+      netLiquidity: null,
+      riskBudget: null,
+      effectiveStopPrice: null,
+      directMarginRequirement: null,
+      marginRate: null,
+    });
+    expect(result.positionValueInstrument).toMatchObject({ value: 3_133.3, status: "calculated" });
+    expect(result.positionValueBase).toMatchObject({ value: null, reasons: ["fx_to_base_missing"] });
+    expect(result.stopRisk).toMatchObject({ value: null, reasons: ["stop_missing"] });
+    expect(result.marginRequirement).toMatchObject({ value: null, provenance: "missing" });
+  });
+
+  it("adds a base-currency market value only when valid FX exists", () => {
+    const result = calculatePosition({ ...base, quantity: 10, currentPrice: 313.33, currentFxToBase: 0.92 });
+    expect(result.positionValueInstrument.value).toBe(3_133.3);
+    expect(result.positionValueBase.value).toBeCloseTo(2_882.636, 3);
   });
 
   it("marks a missing current price as not calculable", () => {

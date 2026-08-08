@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+[data-depot-base-market-value="false"] .depot-column-base-market-value,
+[data-depot-risk="false"] .depot-column-risk,
+[data-depot-margin="false"] .depot-column-margin,
+[data-depot-price-details="false"] .depot-column-price-details {
+  display: none;
+}
+
 :root {
   --background: #07100e;
   --foreground: #f4f7f5;

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PositionForm } from "@/components/position-form";
+import { DepotViewPreferences } from "@/components/depot-view-preferences";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { calculatePortfolio } from "@/lib/calculations/portfolio-calculations";
 import { positionToCalculationInput } from "@/lib/calculations/position-adapter";
@@ -83,9 +84,9 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
         <select name="view" defaultValue={view}><option value="open">Offen</option><option value="closed">Geschlossen</option><option value="all">Alle</option></select>
         <button className="rounded-xl border border-border px-4 py-2 text-sm">Anwenden</button>
       </form>
-      {filtered.length === 0 ? <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">Keine passenden Positionen vorhanden.</div> : <div className="overflow-x-auto">
-        <table className="w-full min-w-[1180px] text-sm">
-          <thead className="text-left text-xs text-muted"><tr><th className="pb-3">Position</th><th>Kategorie</th><th>Status</th><th>Menge</th><th>Einstand</th><th>Aktueller Kurs</th><th>Marktwert</th><th>Risiko bis Stopp</th><th>Margin</th><th></th></tr></thead>
+      {filtered.length === 0 ? <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">Keine passenden Positionen vorhanden.</div> : <DepotViewPreferences baseCurrency={portfolio.currency}><div className="overflow-x-auto">
+        <table className="w-full min-w-[900px] text-sm">
+          <thead className="text-left text-xs text-muted"><tr><th className="pb-3">Position</th><th>Kategorie</th><th>Status</th><th>Menge</th><th>Einstiegskurs</th><th>Aktueller Kurs</th><th>Marktwert</th><th className="depot-column-base-market-value">Marktwert {portfolio.currency}</th><th className="depot-column-risk">Risiko</th><th className="depot-column-margin">Margin</th><th className="depot-column-price-details">Kursdetails</th><th>Aktionen</th></tr></thead>
           <tbody>{filtered.map((position) => {
             const result = calculatedById.get(position.id);
             const closed = position.status === "closed";
@@ -98,15 +99,17 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
               <td><Badge tone={closed ? "neutral" : partial ? "warn" : "good"}>{closed ? "Geschlossen" : partial ? "Teilverkauft" : "Offen"}</Badge></td>
               <td><div>{Number(position.quantity).toLocaleString("de-DE")}</div>{partial && <div className="text-xs text-muted">{remainingQuantity(Number(position.quantity), position.sold_quantity).toLocaleString("de-DE")} offen</div>}</td>
               <td>{Number(position.entry_price).toLocaleString("de-DE", { maximumFractionDigits: 6 })} {position.instrument_currency}</td>
-              <td>{closed || legacyCash || !resolvedPrice ? "–" : <div><div>{resolvedPrice.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {resolvedPrice.currency}</div><div className="text-[10px] text-muted">{priceSourceDescription(resolvedPrice)}</div></div>}</td>
-              <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueBase} format={(value) => money.format(value)} missing="Aktueller Kurs fehlt" />}</td>
-              <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.stopRisk} format={(value) => money.format(value)} missing="Trading-Stopp oder Kurs fehlt" />}</td>
-              <td>{!isMarginAccount(portfolio.account_type) ? "Nicht zutreffend" : closed || legacyCash ? "–" : <SimpleMetric metric={result?.marginRequirement} format={(value) => money.format(value)} missing="Marginangabe fehlt" />}</td>
+              <td>{closed || legacyCash || !resolvedPrice ? "–" : <div>{resolvedPrice.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {resolvedPrice.currency}</div>}</td>
+              <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueInstrument} format={(value) => formatInstrumentMoney(value, position.instrument_currency)} missing="Aktueller Kurs fehlt" />}</td>
+              <td className="depot-column-base-market-value">{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueBase} format={(value) => money.format(value)} missing={result?.positionValueInstrument.value == null ? "Aktueller Kurs fehlt" : "FX fehlt"} />}</td>
+              <td className="depot-column-risk">{closed || legacyCash ? "–" : (position.stop_price_native ?? position.stop_price) == null ? <span className="text-xs text-muted">Kein Stop</span> : <SimpleMetric metric={result?.stopRisk} format={(value) => money.format(value)} missing="Risiko nicht berechenbar" />}</td>
+              <td className="depot-column-margin">{!isMarginAccount(portfolio.account_type) ? "Nicht zutreffend" : closed || legacyCash ? "–" : <SimpleMetric metric={result?.marginRequirement} format={(value) => money.format(value)} missing="Noch nicht hinterlegt" />}</td>
+              <td className="depot-column-price-details">{closed || legacyCash || !resolvedPrice ? "–" : <PriceDetails price={resolvedPrice} exchange={mappingByPositionId.get(position.id)?.exchange ?? null} micCode={mappingByPositionId.get(position.id)?.mic_code ?? null} />}</td>
               <td><div className="flex flex-wrap items-center gap-3">{!legacyCash && !closed && <form action={refreshPositionPrice}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-accent">Kurs aktualisieren</button></form>}{!legacyCash && <Link href={`/depot?edit=${position.id}`} className="text-xs text-accent">Bearbeiten</Link>}<form action={deletePosition}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-red-300">Löschen</button></form></div></td>
             </tr>;
           })}</tbody>
         </table>
-      </div>}
+      </div></DepotViewPreferences>}
     </Card>
 
     <div id="capital-movements" className="mt-4"><Card>
@@ -126,6 +129,37 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
 
 function SimpleMetric({ metric, format, missing }: { metric?: CalculationMetric; format: (value: number) => string; missing: string }) {
   return metric?.value == null ? <span className="text-xs text-muted">{missing}</span> : <span>{format(metric.value)}</span>;
+}
+
+function formatInstrumentMoney(value: number, currency: string | null) {
+  const normalizedCurrency = currency?.trim().toUpperCase();
+  if (!normalizedCurrency || !/^[A-Z]{3}$/.test(normalizedCurrency)) {
+    return `${value.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${normalizedCurrency ?? ""}`.trim();
+  }
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: normalizedCurrency, currencyDisplay: "code", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
+function PriceDetails({
+  price,
+  exchange,
+  micCode,
+}: {
+  price: NonNullable<ReturnType<typeof resolvePositionPrice>>;
+  exchange: string | null;
+  micCode: string | null;
+}) {
+  const date = price.observedAt
+    ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(price.observedAt))
+    : "Zeitpunkt fehlt";
+  const source = price.sourceName && price.sourceName !== price.sourceType
+    ? price.sourceName
+    : positionPriceSourceLabel(price.sourceType);
+  const status = price.status === "stale" ? "veraltet" : price.status === "end_of_day" ? "Schlusskurs" : price.status === "delayed" ? "verzögert" : "aktuell";
+  return <div className="max-w-52 text-xs text-muted">
+    <div>{source}</div>
+    <div>{exchange ?? "Börse nicht benannt"}{micCode ? ` (${micCode})` : ""}</div>
+    <div>{status} · {date}</div>
+  </div>;
 }
 
 function instrumentLabel(value: string) {
