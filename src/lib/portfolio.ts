@@ -65,6 +65,30 @@ export async function getPortfolioData(): Promise<{
   if (importError) throw new Error("Die Importquelle konnte nicht geladen werden.");
   if (capitalMovementError) throw new Error("Die Ein- und Auszahlungen konnten nicht geladen werden.");
 
-  return { portfolio, settings, categories, positions, cashBalances, fxRates, priceObservations: priceObservations ?? [], latestImport, capitalMovements };
+  const listingIds = [...new Set((positions ?? []).flatMap((position) => position.listing_id ? [position.listing_id] : []))];
+  const { data: listingQuotes, error: listingQuotesError } = listingIds.length > 0
+    ? await supabase.from("market_listing_quotes").select("*").in("listing_id", listingIds)
+    : { data: [], error: null };
+  if (listingQuotesError && listingQuotesError.code !== "42P01" && listingQuotesError.code !== "PGRST205") {
+    throw new Error("Der zentrale Kurscache konnte nicht geladen werden.");
+  }
+  const centralObservations: PositionPriceObservation[] = (positions ?? []).flatMap((position) =>
+    (listingQuotes ?? []).filter((quote) => quote.listing_id === position.listing_id).map((quote) => ({
+      id: `listing:${quote.id}:${position.id}`,
+      user_id: position.user_id,
+      portfolio_id: position.portfolio_id,
+      position_id: position.id,
+      ticker: position.ticker,
+      currency: quote.currency,
+      price_native: quote.price_native,
+      source_type: quote.provider === "ibkr" ? "ibkr" : quote.provider === "broker" ? "broker" : quote.provider === "google_sheets" ? "google_sheets" : quote.provider === "csv" ? "custom_csv" : quote.provider === "manual" ? "manual" : "market_data_provider",
+      source_name: quote.provider === "twelve_data" ? "Twelve Data" : quote.provider,
+      observed_at: quote.observed_at,
+      status: quote.status === "live" || quote.status === "closing" ? "delayed" : quote.status === "imported" || quote.status === "manual" ? "manually_updated" : quote.status,
+      source_reference: `listing:${quote.listing_id}`,
+      created_at: quote.created_at,
+    })));
+
+  return { portfolio, settings, categories, positions, cashBalances, fxRates, priceObservations: [...centralObservations, ...(priceObservations ?? [])], latestImport, capitalMovements };
 }
 import "server-only";

@@ -21,4 +21,6 @@ Der npm-Audit vom 23. Juli 2026 meldet für die über Next.js transitive Abhäng
 
 Der erneute npm-Audit am 31. Juli 2026 führt zusätzlich die transitive `brace-expansion`-DoS-Warnung ohne verfügbaren nicht-brechenden automatischen Fix auf. Der betroffene Pfad gehört zur lokalen ESLint-/Build-Werkzeugkette; die Anwendung verarbeitet darüber keine vom Benutzer gelieferten Glob-Muster zur Laufzeit. Die Abhängigkeit bleibt bis zu einem kompatiblen Upstream-Update zu beobachten. Die 11 als „high“ gezählten Pakete beruhen auf diesen beiden transitiven Wurzelhinweisen (`sharp` und `brace-expansion`), nicht auf 11 unabhängigen Laufzeitlücken.
 
+Beim Audit am 8. August 2026 wurden die kompatibel behebbaren `nanoid`-, `postcss`-, `brace-expansion`- und `js-yaml`-Versionen im Lockfile aktualisiert. `npm audit --omit=dev` meldet danach nur noch zwei High-Zählungen aus demselben transitiven `sharp <0.35.0`-/libvips-Wurzelhinweis. Ein erzwungener Fix würde Next.js außerhalb des freigegebenen Versionsbereichs verändern und wird in diesem Draft nicht vorgenommen. Der oben genannte verbindliche Bildverarbeitungsblocker bleibt bestehen.
+
 Die Erforderlichkeit einer formellen Datenschutz-Folgenabschätzung und eines Datenschutzbeauftragten ist vor Kundenstart fachlich zu prüfen.

@@ -55,7 +55,7 @@ export function PositionForm({
   return (
     <form action={savePosition} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <input type="hidden" name="id" value={position?.id ?? ""} />
-      <label>Ticker<input name="ticker" required maxLength={40} defaultValue={position?.ticker ?? ""} /></label>
+      <label>Ticker oder Unternehmen<input key={lookupState.status === "success" ? `ticker-${lookupState.symbol}` : "ticker-initial"} name="ticker" required maxLength={80} defaultValue={lookupState.status === "success" ? lookupState.symbol : position?.ticker ?? ""} /><span className="mt-1 block text-[11px] text-muted">Für neue Positionen genügt ein Suchbegriff. Name, Börsenplatz, MIC, Währung und Kurs werden gemeinsam aufgelöst.</span></label>
       <label>Kategorie<select name="category_id" defaultValue={position?.category_id ?? ""}><option value="">Keine</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
       <label>Positionstyp<select name="instrument_type" defaultValue={position?.instrument_type ?? "stock"}><option value="stock">Aktie</option><option value="etf">ETF</option><option value="option">Option</option><option value="warrant">Optionsschein</option><option value="knock_out">Knock-out</option><option value="other">Sonstiges</option></select></label>
       <label>Richtung<select name="direction" defaultValue={position?.direction === "short" ? "short" : "long"}><option value="long">Long</option><option value="short">Short</option></select></label>
@@ -65,14 +65,17 @@ export function PositionForm({
         if (nextStatus === "closed") setPartialSale(false);
       }}><option value="open">Offen</option><option value="closed">Geschlossen</option></select></label>
       <label>Menge<input name="quantity" required inputMode="decimal" defaultValue={position?.quantity ?? 1} /></label>
-      <label>Instrumentwährung<input name="instrument_currency" required maxLength={3} defaultValue={position?.instrument_currency ?? baseCurrency} /></label>
+      <label>Instrumentwährung<input key={lookupState.status === "success" ? `currency-${lookupState.currency}` : "currency-initial"} name="instrument_currency" required maxLength={3} readOnly={lookupState.status === "success"} defaultValue={lookupState.status === "success" ? lookupState.currency : position?.instrument_currency ?? baseCurrency} /><span className="mt-1 block text-[11px] text-muted">Wird bei erfolgreicher Notierungswahl automatisch gesetzt; ohne Anbieter bleibt die manuelle Rückfalleingabe möglich.</span></label>
       <label>Einstandskurs<input name="entry_price" required inputMode="decimal" defaultValue={position?.entry_price ?? ""} /></label>
       <label>Aktueller Kurs<input key={lookupState.status === "success" ? `${lookupState.symbol}-${lookupState.micCode}-${lookupState.observedAt}` : "initial"} name="current_price" required inputMode="decimal" defaultValue={lookupState.status === "success" ? lookupState.price : currentPrice ?? ""} /><span className="mt-1 block text-[11px] text-muted">{currentPriceSource ? `Aktive Quelle: ${currentPriceSource}.` : "Notwendiger Rückfallkurs."} Twelve Data wird automatisch versucht. Ein späterer gültiger IBKR-Kurs hat automatisch Vorrang.</span></label>
       <input type="hidden" name="original_current_price" value={currentPrice ?? ""} />
-      <label>Börsenplatz · optional<input name="market_data_mic" maxLength={4} autoCapitalize="characters" placeholder="z. B. XETR" defaultValue={marketDataMapping?.mic_code ?? ""} /><span className="mt-1 block text-[11px] text-muted">Leer lassen für die automatisch gewählte Hauptnotierung. {marketDataMapping?.exchange ? `Aktuell: ${marketDataMapping.exchange}.` : "Ein MIC dient nur zur gezielten Korrektur."}</span></label>
+      <input type="hidden" name="market_data_mic" value={lookupState.status === "success" ? lookupState.micCode : marketDataMapping?.mic_code ?? ""} />
+      {lookupState.status === "success" && lookupState.candidates.length > 1 ? <label>Alternative Notierung<select name="market_listing_selection" defaultValue={`${lookupState.symbol}@${lookupState.micCode}:${lookupState.currency}`}>
+        {lookupState.candidates.map((candidate) => <option key={`${candidate.symbol}@${candidate.micCode}:${candidate.currency}`} value={`${candidate.symbol}@${candidate.micCode}:${candidate.currency}`}>{candidate.symbol} · {candidate.exchange ?? candidate.micCode} ({candidate.micCode}) · {candidate.currency}</option>)}
+      </select><span className="mt-1 block text-[11px] text-muted">Die erste Auswahl folgt ausschließlich der Anbieterrelevanz und ist keine Aussage zur Liquidität. Alternative wählen und erneut laden.</span></label> : <div className="rounded-xl border border-border/70 bg-background/30 p-3 text-xs text-muted">{marketDataMapping?.exchange ? `Aktuelle Zuordnung: ${marketDataMapping.exchange} (${marketDataMapping.mic_code}).` : "Die Notierung wird als vollständiges Tupel aus Symbol, MIC und Währung gespeichert."}</div>}
       <div className="flex items-end">
         <button formAction={lookupAction} formNoValidate disabled={lookupPending} className="w-full rounded-xl border border-accent/50 px-4 py-2.5 text-sm text-accent disabled:opacity-60">
-          {lookupPending ? "Kurs wird gesucht …" : "Unternehmen & Kurs suchen"}
+          {lookupPending ? "Kurs wird gesucht …" : lookupState.status === "success" ? "Ausgewählte Notierung laden" : "Unternehmen & Kurs suchen"}
         </button>
       </div>
       <MarketDataLookupResult state={lookupState} />
@@ -99,7 +102,7 @@ export function PositionForm({
 
 function MarketDataLookupResult({ state }: { state: MarketDataLookupState }) {
   if (state.status === "idle") {
-    return <div className="rounded-xl border border-border/70 bg-background/30 p-3 text-xs text-muted sm:col-span-2 xl:col-span-4">Ticker und Handelswährung genügen. Die Hauptnotierung wird automatisch ermittelt; der gefundene Kurs wird in das Kursfeld übernommen.</div>;
+    return <div className="rounded-xl border border-border/70 bg-background/30 p-3 text-xs text-muted sm:col-span-2 xl:col-span-4">Ticker oder Unternehmensname genügt. Die erste Notierung folgt der Relevanzreihenfolge des Anbieters; bis zu zwei Alternativen werden nur angeboten, wenn Symbol, MIC und Währung eindeutig vorliegen.</div>;
   }
   if (state.status !== "success") {
     return <div role="status" aria-live="polite" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100 sm:col-span-2 xl:col-span-4">{state.message}</div>;
@@ -118,7 +121,7 @@ function MarketDataLookupResult({ state }: { state: MarketDataLookupState }) {
   return <div role="status" aria-live="polite" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 sm:col-span-2 xl:col-span-4">
     <div className="font-medium text-emerald-100">{state.name ?? state.symbol}</div>
     <div className="mt-1 text-xs text-emerald-50/80">
-      {state.symbol} · {state.exchange ?? "Börse nicht benannt"} ({state.micCode}) · {state.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {state.currency} · {statusLabel} · {observedAt}
+      {state.symbol} · {state.exchange ?? "Börse nicht benannt"} ({state.micCode}) · {state.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {state.currency} · {statusLabel} · {state.isMarketOpen ? "Markt laut Anbieter offen" : "Markt laut Anbieter geschlossen"} · {observedAt}
     </div>
     <div className="mt-1 text-[11px] text-emerald-50/60">Quelle: Twelve Data. Ein gültiger IBKR-Kurs überschreibt diese Rückfallquelle später automatisch.</div>
   </div>;

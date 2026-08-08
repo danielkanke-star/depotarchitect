@@ -1,6 +1,6 @@
 # Reale Markt-, FX-, Stopp- und Margindaten
 
-Status: technische und fachliche Grundlage aus Meilenstein 2B.4, in 2B.5 als interne Infrastruktur fortgeführt und um eine additive Kursquellenauflösung ergänzt. Twelve Data ist als optionaler serverseitiger Rückfallanbieter vorbereitet. Eine Brokeranbindung wird noch nicht eingeführt.
+Status: technische und fachliche Grundlage aus Meilenstein 2B.4, nun um das providerneutrale Instrumentenuniversum, konkrete Listings, zentrale Latest-Value-Caches und kostenkontrollierte Abrufe ergänzt. Details stehen in `docs/architecture/instrument-universe.md`. Twelve Data ist nur ein optionaler serverseitiger Rückfallanbieter. Eine Brokeranbindung wird noch nicht eingeführt.
 
 Die technischen FX-, Provider-, Quellen-, Status- und Zeitfelder werden bewusst nicht im normalen Positionsformular angezeigt. Der aktuelle Kurs ist dagegen eine notwendige fachliche Eingabe: Jede neue normale Position benötigt einen manuellen Rückfallkurs. Importpfade liefern den Kurs mit ihren Positionen. Spätere Broker- und Marktdatenadapter bleiben technisch vorbereitet.
 

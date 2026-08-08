@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchTwelveDataQuote,
   findTwelveDataInstrument,
+  searchTwelveDataInstruments,
   quoteStatus,
 } from "../src/lib/market-data-providers/twelve-data-core";
 
@@ -17,6 +18,17 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("Twelve Data adapter", () => {
+  it("preserves provider relevance order and complete listing tuples", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ data: [
+      { symbol: "AAPL", instrument_name: "Apple Inc", exchange: "NASDAQ", mic_code: "XNAS", currency: "USD", country: "United States", exchange_timezone: "America/New_York", access: { global: "Basic" } },
+      { symbol: "APC", instrument_name: "Apple Inc", exchange: "Frankfurt", mic_code: "XFRA", currency: "EUR" },
+    ], status: "ok" }));
+    const result = await searchTwelveDataInstruments("Apple", { apiKey: "test", fetchImpl });
+    expect(result).toMatchObject({ status: "success", data: [
+      { symbol: "AAPL", micCode: "XNAS", currency: "USD", exchangeTimezone: "America/New_York", access: "Basic" },
+      { symbol: "APC", micCode: "XFRA", currency: "EUR" },
+    ] });
+  });
   it("authenticates in a header and never puts the API key in the URL", async () => {
     let requestedUrl = "";
     let requestedAuthorization = "";

@@ -34,6 +34,23 @@ Vor jeder manuellen Prüfung Anzahl und fachlichen Inhalt der vorhandenen Positi
 7. Einen bestätigten manuellen direkten Marginwert `0` speichern: Er bleibt zulässig und wird als manuell direkt, nicht als Brokerwert, gekennzeichnet.
 8. Einen alten oder fehlenden Kurs mit Status `stale` prüfen; er darf nicht ohne Hinweis aktuell wirken.
 9. Prüfen, dass „Cash“ bei einer neuen Position nicht auswählbar ist und ein manipulierter `savePosition`-Aufruf mit `instrument_type=cash` abgelehnt wird.
+
+## Instrumentensuche und kostenkontrollierter Cache
+
+Diese Prüfung ausschließlich im neuen Vercel-Preview ausführen. Production nicht öffnen, promoten oder verändern. Preview und Production nutzen gegenwärtig dieselbe Supabase-Datenbank; deshalb die neue Migration dort nicht anwenden. Bis eine getrennte Preview-Datenbank vorhanden ist, muss die Anwendung kompatibel auf das alte Positions-Mapping zurückfallen.
+
+1. Vorher Positionenzahl, Ticker, Mengen und vorhandene Zuordnungen dokumentieren. Keine aktiven Depotdaten ersetzen.
+2. Mit einer eindeutig synthetischen und anschließend gezielt löschbaren Einzelposition „AAPL“ suchen. Prüfen: Name, Symbol, Börse, MIC, Währung, Kurs, Datenstatus, Provider-Marktoffenstatus und Zeitstempel erscheinen gemeinsam.
+3. Prüfen, dass für die erste Auswahl ausdrücklich nur „Anbieterrelevanz“ erklärt wird und keine Liquiditätsbehauptung erscheint.
+4. Wenn zwei weitere eindeutige Listings kostenlos geliefert werden, eine Alternative wählen, erneut laden und prüfen, dass Symbol, MIC und Währung gemeinsam wechseln. Keine unvollständige Mischzuordnung speichern.
+5. Bei unbekanntem Symbol muss eine klare Nicht-gefunden-Meldung erscheinen; keine leere Position anlegen.
+6. Bei fehlendem Provider-Key beziehungsweise simuliertem Providerfehler bleibt eine manuelle/Sheets-/CSV-Quelle nutzbar und als Rückfallquelle bezeichnet.
+7. Zwei Browser-Tabs gleichzeitig fokussieren. Nach separater Preview-DB-Migration in DB/Mock-Telemetrie bestätigen, dass eine Lease nur einen Anbieterabruf pro Listing zulässt.
+8. Cachetreffer und geschlossenen Markt testen. Es darf kein unnötiger Quote-Abruf entstehen; ein alter Wert bleibt mit Zeit und Status sichtbar.
+9. 429 ausschließlich mit Mock testen. Kein aggressiver Retry; Backoff und alter Cache bleiben wirksam.
+10. Nach der Prüfung synthetische Einzelzeile gezielt löschen und bestätigen, dass Zahl und Inhalt aller zuvor vorhandenen Positionen unverändert sind.
+
+Reale Smoke-Tests sind auf AAPL, MSFT, ein unbekanntes Symbol und optional genau eine alternative Notierung beschränkt. Last-, Budget-, Multi-Tab-, 50/35-Listing-, Marktgeschlossen- und Fehlerfälle ausschließlich mit Mocks beziehungsweise SQL-Tests ausführen.
 10. Eine bereits vorhandene Legacy-Cash-Positionszeile darf gelesen werden, bleibt unveränderbar Cash und ist aus Marktwert, NetLiq-Hebel, Margin, Risiko und Kategorien ausgeschlossen. Für diesen Test keine Legacydaten erzeugen oder löschen.
 11. Die synthetische Wertpapierposition und ihre kaskadierend zugeordneten Mappingdaten gezielt löschen und den dokumentierten Ausgangsbestand abgleichen.
 

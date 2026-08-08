@@ -6,7 +6,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Direction, InstrumentType } from "@/lib/calculations/calculation-types";
 import type { Database, Position } from "@/lib/database.types";
 import { isMissingMarketDataTable } from "@/lib/market-data-mappings";
-import { getTwelveDataQuote } from "@/lib/market-data-providers/twelve-data";
+import { getTwelveDataQuote, searchTwelveData } from "@/lib/market-data-providers/twelve-data";
+import type { TwelveDataInstrument } from "@/lib/market-data-providers/twelve-data-core";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
 import { normalizeMarginInput, normalizePositionSale, validateCapitalMovement } from "@/lib/portfolio-entry";
 import { resolveWritableInstrumentType } from "@/lib/portfolio-write-policy";
@@ -47,25 +48,42 @@ export type MarketDataLookupState = {
   price: number;
   observedAt: string;
   dataStatus: "delayed" | "end_of_day" | "stale";
+  isMarketOpen: boolean;
+  candidates: TwelveDataInstrument[];
 };
 
 export async function lookupPositionMarketData(
-  _previousState: MarketDataLookupState,
+  previousState: MarketDataLookupState,
   formData: FormData,
 ): Promise<MarketDataLookupState> {
+  if (!process.env.TWELVE_DATA_API_KEY?.trim()) {
+    return { status: "disabled", message: "Die automatische Kurssuche ist in dieser Umgebung noch nicht aktiviert." };
+  }
+  const supabase = await createClient();
   await getUserId();
-  const symbol = text(formData, "ticker").toUpperCase();
-  const currency = text(formData, "instrument_currency").toUpperCase();
-  const micCode = text(formData, "market_data_mic").toUpperCase() || null;
+  const searchTerm = text(formData, "ticker");
+  if (!searchTerm || searchTerm.length > 80) return { status: "error", message: "Bitte Ticker oder Unternehmensname eingeben." };
 
-  if (!symbol || symbol.length > 40 || !/^[A-Z]{3}$/.test(currency)) {
-    return { status: "error", message: "Bitte Ticker und dreistellige Handelswährung eingeben." };
+  const selectedKey = text(formData, "market_listing_selection");
+  let candidates = previousState.status === "success" ? previousState.candidates : [];
+  let selected = candidates.find((candidate) => listingSelectionKey(candidate) === selectedKey) ?? null;
+  if (!selected) {
+    if (!await claimInteractiveProviderCredit(supabase, "symbol_search")) {
+      return { status: "error", message: "Das kostenlose Tages- oder Minutenbudget ist reserviert beziehungsweise ausgeschöpft. Bitte später erneut versuchen." };
+    }
+    const searchResult = await searchTwelveData(searchTerm);
+    if (searchResult.status === "disabled") return { status: "disabled", message: "Die automatische Kurssuche ist in dieser Umgebung noch nicht aktiviert." };
+    if (searchResult.status === "not_found") return { status: "not_found", message: "Für den Suchbegriff wurde keine passende Notierung gefunden." };
+    if (searchResult.status !== "success") return { status: "error", message: "Die Instrumentensuche ist momentan nicht verfügbar. Bitte später erneut versuchen." };
+    candidates = distinctListingCandidates(searchResult.data).slice(0, 3);
+    selected = candidates[0] ?? null;
   }
-  if (micCode && !MIC_PATTERN.test(micCode)) {
-    return { status: "error", message: "Der optionale Börsenplatz muss ein vierstelliger MIC sein." };
-  }
+  if (!selected) return { status: "not_found", message: "Für den Suchbegriff wurde keine passende Notierung gefunden." };
 
-  const result = await getTwelveDataQuote({ symbol, currency, micCode });
+  if (!await claimInteractiveProviderCredit(supabase, "quote")) {
+    return { status: "error", message: "Das kostenlose Tages- oder Minutenbudget ist reserviert beziehungsweise ausgeschöpft. Bitte später erneut versuchen." };
+  }
+  const result = await getTwelveDataQuote({ symbol: selected.symbol, currency: selected.currency, micCode: selected.micCode });
   if (result.status === "disabled") {
     return { status: "disabled", message: "Die automatische Kurssuche ist in dieser Umgebung noch nicht aktiviert." };
   }
@@ -85,7 +103,36 @@ export async function lookupPositionMarketData(
     price: result.data.price,
     observedAt: result.data.observedAt,
     dataStatus: result.data.status,
+    isMarketOpen: result.data.isMarketOpen,
+    candidates,
   };
+}
+
+async function claimInteractiveProviderCredit(
+  supabase: AppSupabaseClient,
+  requestKind: "quote" | "symbol_search",
+) {
+  const { data, error } = await supabase.rpc("claim_market_data_request", {
+    target_provider: "twelve_data",
+    request_mode: "interactive",
+    request_kind: requestKind,
+  });
+  if (error && isMissingMarketDataTable(error)) return true;
+  return !error && data === "claimed";
+}
+
+function listingSelectionKey(candidate: Pick<TwelveDataInstrument, "symbol" | "micCode" | "currency">) {
+  return `${candidate.symbol}@${candidate.micCode}:${candidate.currency}`;
+}
+
+function distinctListingCandidates(candidates: TwelveDataInstrument[]) {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = listingSelectionKey(candidate);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function savePosition(formData: FormData) {
@@ -301,6 +348,73 @@ export async function refreshPositionPrice(formData: FormData) {
   redirect(`/depot?price=${outcome}`);
 }
 
+export async function refreshActiveMarketData() {
+  if (!process.env.TWELVE_DATA_API_KEY?.trim()) return { status: "provider-disabled" as const };
+  const supabase = await createClient();
+  const userId = await getUserId();
+  const { data: positions, error: positionError } = await supabase
+    .from("positions")
+    .select("listing_id")
+    .eq("user_id", userId)
+    .eq("status", "open")
+    .neq("instrument_type", "cash")
+    .not("listing_id", "is", null);
+  if (positionError && isMissingMarketDataTable(positionError)) return { status: "schema-pending" as const };
+  if (positionError) return { status: "error" as const };
+  const listingIds = [...new Set((positions ?? []).flatMap((position) => position.listing_id ? [position.listing_id] : []))];
+  if (listingIds.length === 0) return { status: "idle" as const };
+
+  const [{ data: mappings, error: mappingError }, { data: quotes, error: quoteError }] = await Promise.all([
+    supabase.from("market_listing_provider_mappings").select("listing_id,provider_symbol,provider_mic,provider_currency").in("listing_id", listingIds).eq("provider", "twelve_data").eq("provider_status", "verified"),
+    supabase.from("market_listing_quotes").select("listing_id,fetched_at,is_market_open").in("listing_id", listingIds).eq("provider", "twelve_data"),
+  ]);
+  if ((mappingError && isMissingMarketDataTable(mappingError)) || (quoteError && isMissingMarketDataTable(quoteError))) return { status: "schema-pending" as const };
+  if (mappingError || quoteError) return { status: "error" as const };
+
+  for (const mapping of mappings ?? []) {
+    const cached = (quotes ?? []).find((quote) => quote.listing_id === mapping.listing_id);
+    const maximumAgeMs = cached?.is_market_open === false ? 12 * 60 * 60 * 1_000 : 60 * 60 * 1_000;
+    const minimumFetchedAt = new Date(Date.now() - maximumAgeMs).toISOString();
+    const { data: claim, error: claimError } = await supabase.rpc("claim_market_quote_refresh", {
+      target_listing: mapping.listing_id,
+      target_provider: "twelve_data",
+      refresh_mode: "automatic",
+      minimum_fetched_at: minimumFetchedAt,
+    });
+    if (claimError && isMissingMarketDataTable(claimError)) return { status: "schema-pending" as const };
+    if (claimError) return { status: "error" as const };
+    if (!claim || typeof claim !== "object" || Array.isArray(claim) || claim.status !== "claimed" || typeof claim.lease_token !== "string") {
+      if (typeof claim === "object" && !Array.isArray(claim) && claim?.status === "budget_exhausted") return { status: "budget" as const };
+      continue;
+    }
+    const result = await getTwelveDataQuote({ symbol: mapping.provider_symbol, currency: mapping.provider_currency, micCode: mapping.provider_mic });
+    if (result.status !== "success") {
+      const seconds = result.status === "rate_limited" ? 3_600 : result.status === "not_found" ? 86_400 : 900;
+      await supabase.rpc("fail_market_quote_refresh", {
+        target_listing: mapping.listing_id,
+        target_provider: "twelve_data",
+        supplied_lease_token: claim.lease_token,
+        failure: result.status,
+        backoff_seconds: seconds,
+      });
+      return { status: result.status === "rate_limited" ? "rate-limited" as const : "stale" as const };
+    }
+    await supabase.rpc("complete_market_quote_refresh", {
+      target_listing: mapping.listing_id,
+      target_provider: "twelve_data",
+      supplied_lease_token: claim.lease_token,
+      quote_price: result.data.price,
+      quote_currency: result.data.currency,
+      quote_observed_at: result.data.observedAt,
+      quote_status: result.data.status,
+      market_open: result.data.isMarketOpen,
+    });
+    revalidatePortfolioPages();
+    return { status: "updated" as const };
+  }
+  return { status: "fresh" as const };
+}
+
 export async function deletePosition(formData: FormData) {
   const supabase = await createClient();
   const portfolio = await getOrCreatePortfolio();
@@ -402,6 +516,40 @@ async function refreshPositionFromTwelveData({
   if (quoteResult.status !== "success") return "provider-error";
 
   const quote = quoteResult.data;
+  const { data: listingId, error: listingError } = await supabase.rpc("attach_position_listing", {
+    target_position: positionId,
+    provider_name: "twelve_data",
+    listing_symbol: quote.symbol,
+    listing_exchange: quote.exchange ?? "",
+    listing_mic: quote.micCode,
+    listing_currency: quote.currency,
+    instrument_name: quote.name ?? quote.symbol,
+    provider_instrument_type: quote.instrumentType ?? "",
+    listing_country: quote.country,
+    listing_timezone: quote.exchangeTimezone,
+    user_selected: requestedMic !== null,
+  });
+  if (listingError && !isMissingMarketDataTable(listingError)) return "provider-error";
+  if (listingId) {
+    const { data: claim, error: claimError } = await supabase.rpc("claim_market_quote_refresh", {
+      target_listing: listingId,
+      target_provider: "twelve_data",
+      refresh_mode: "interactive",
+      minimum_fetched_at: null,
+    });
+    if (!claimError && claim && typeof claim === "object" && !Array.isArray(claim) && claim.status === "claimed" && typeof claim.lease_token === "string") {
+      await supabase.rpc("complete_market_quote_refresh", {
+        target_listing: listingId,
+        target_provider: "twelve_data",
+        supplied_lease_token: claim.lease_token,
+        quote_price: quote.price,
+        quote_currency: quote.currency,
+        quote_observed_at: quote.observedAt,
+        quote_status: quote.status,
+        market_open: quote.isMarketOpen,
+      });
+    }
+  }
   const { error: mappingError } = await supabase
     .from("position_market_data_mappings")
     .upsert({

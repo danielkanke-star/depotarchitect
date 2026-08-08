@@ -20,6 +20,9 @@ type SymbolSearchResponse = TwelveDataErrorResponse & {
     mic_code?: string;
     instrument_type?: string;
     currency?: string;
+    country?: string;
+    exchange_timezone?: string;
+    access?: { global?: string } | string;
   }>;
 };
 
@@ -42,12 +45,16 @@ export type TwelveDataInstrument = {
   micCode: string;
   currency: string;
   instrumentType: string | null;
+  country: string | null;
+  exchangeTimezone: string | null;
+  access: string | null;
 };
 
 export type TwelveDataQuote = TwelveDataInstrument & {
   price: number;
   observedAt: string;
   status: Extract<MarketDataStatus, "delayed" | "end_of_day" | "stale">;
+  isMarketOpen: boolean;
 };
 
 export type TwelveDataResult<T> =
@@ -71,18 +78,11 @@ export async function findTwelveDataInstrument(
   },
   options: RequestOptions,
 ): Promise<TwelveDataResult<TwelveDataInstrument>> {
-  const response = await requestJson<SymbolSearchResponse>(
-    "/symbol_search",
-    { symbol },
-    options,
-  );
+  const response = await searchTwelveDataInstruments(symbol, options);
   if (response.status !== "success") return response;
-
   const normalizedSymbol = symbol.trim().toUpperCase();
   const normalizedCurrency = currency.trim().toUpperCase();
-  const candidates = (response.data.data ?? [])
-    .map(toInstrument)
-    .filter((candidate): candidate is TwelveDataInstrument => candidate !== null)
+  const candidates = response.data
     .filter((candidate) =>
       candidate.symbol === normalizedSymbol
       && candidate.currency === normalizedCurrency);
@@ -90,6 +90,26 @@ export async function findTwelveDataInstrument(
   if (candidates.length === 0) return { status: "not_found" };
   if (candidates.length > 1) return { status: "ambiguous", candidates };
   return { status: "success", data: candidates[0] };
+}
+
+export async function searchTwelveDataInstruments(
+  searchTerm: string,
+  options: RequestOptions,
+): Promise<TwelveDataResult<TwelveDataInstrument[]>> {
+  const term = searchTerm.trim();
+  if (!term || term.length > 80) return { status: "not_found" };
+  const response = await requestJson<SymbolSearchResponse>(
+    "/symbol_search",
+    { symbol: term },
+    options,
+  );
+  if (response.status !== "success") return response;
+  const candidates = (response.data.data ?? [])
+    .map(toInstrument)
+    .filter((candidate): candidate is TwelveDataInstrument => candidate !== null);
+  return candidates.length > 0
+    ? { status: "success", data: candidates }
+    : { status: "not_found" };
 }
 
 export async function fetchTwelveDataQuote(
@@ -148,6 +168,7 @@ export async function fetchTwelveDataQuote(
       price,
       observedAt: observedAt.toISOString(),
       status: quoteStatus(observedAt, quote.is_market_open === true, options.now ?? new Date()),
+      isMarketOpen: quote.is_market_open === true,
     },
   };
 }
@@ -204,6 +225,9 @@ function toInstrument(value: {
   mic_code?: string;
   instrument_type?: string;
   currency?: string;
+  country?: string;
+  exchange_timezone?: string;
+  access?: { global?: string } | string;
 }): TwelveDataInstrument | null {
   const symbol = value.symbol?.trim().toUpperCase() ?? "";
   const micCode = value.mic_code?.trim().toUpperCase() ?? "";
@@ -216,5 +240,10 @@ function toInstrument(value: {
     micCode,
     currency,
     instrumentType: value.instrument_type?.trim() || null,
+    country: value.country?.trim() || null,
+    exchangeTimezone: value.exchange_timezone?.trim() || null,
+    access: typeof value.access === "string"
+      ? value.access.trim() || null
+      : value.access?.global?.trim() || null,
   };
 }

@@ -31,6 +31,16 @@ Erneut rein lesend geprüft am 31. Juli 2026. Der reale Datenbankstand endet wei
 - Die Advisor-Ergebnisse sind vor Anwendung der beiden Migrationen unverändert: die dokumentierten SECURITY-DEFINER-RPC-Warnungen, deaktivierte Leaked Password Protection und vier unbenutzte Indizes.
 - Nach Anwendung auf einem isolierten Datenbankziel sind Migration, SQL-/RLS-Test und beide Advisors erneut auszuführen. Die gemeinsam genutzte Production-Datenbank ist kein zulässiges Testziel für die neue DDL.
 
+## Ergänzung Instrumentenuniversum und Kostenkontrolle
+
+Erneut rein lesend geprüft am 8. August 2026. Der reale Datenbankstand endet weiterhin bei `20260726215315`. Somit sind auch `20260730120000`, `20260731120000` und `20260808120000_instrument_universe_quote_cache.sql` noch nicht live; Production blieb unverändert und die Datenbank ist nicht weiter als das Repository.
+
+- Security Advisor: unverändert die unten einzeln dokumentierten SECURITY-DEFINER-RPC-Hinweise und deaktivierte Leaked Password Protection. Für die noch nicht angewendeten neuen Tabellen kann der Live-Advisor naturgemäß noch keine Aussage treffen.
+- Performance Advisor: unverändert vier INFO-Hinweise zu `positions_sector_idx`, `account_deletion_requests_status_idx`, `portfolio_cash_balances_user_id_idx` und `positions_external_position_id_idx`.
+- Die neue Migration setzt auf allen sechs öffentlichen Tabellen RLS, entzieht `anon` sämtliche Rechte, verwendet zusammengesetzte Eigentümer-Fremdschlüssel und gibt Quote-/FX-Caches für angemeldete Benutzer ausschließlich lesend frei.
+- Alle fünf neuen `SECURITY DEFINER`-RPCs verwenden einen leeren `search_path`, prüfen `auth.uid()`, geben nur Claimstatus/Lease-Token, Boolean oder Listing-ID zurück und entziehen `anon` die Ausführung. Lease-Token sind kurzlebige interne Deduplizierungswerte und keine Authentifizierungstoken.
+- Nach Einrichtung eines isolierten Supabase-Preview-Projekts müssen Migration, pgTAP-/Cross-User-/Direct-RPC-Tests und beide Advisors dort erneut ausgeführt werden. Bis dahin bleibt der PR aus Datenbanksicht nicht mergebereit.
+
 ## Behoben
 
 - Fehlende Indizes auf `user_invitations.invited_by` und `account_deletion_requests.processed_by` ergänzt.

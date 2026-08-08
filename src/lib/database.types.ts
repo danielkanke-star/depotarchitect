@@ -124,6 +124,43 @@ export type Database = {
         mapping_status?: "verified" | "manual";
         verified_at: string; created_at?: string; updated_at?: string;
       }>;
+      market_instruments: Table<{
+        id: string; user_id: string; name: string; asset_class: "stock" | "etf" | "option" | "warrant" | "knock_out" | "other";
+        isin: string | null; figi: string | null; identification_status: "listing_only" | "stable_identifier" | "broker_verified" | "needs_review";
+        metadata_source: string; metadata_checked_at: string | null; created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; name: string; asset_class: "stock" | "etf" | "option" | "warrant" | "knock_out" | "other";
+        isin?: string | null; figi?: string | null; identification_status?: "listing_only" | "stable_identifier" | "broker_verified" | "needs_review";
+        metadata_source: string; metadata_checked_at?: string | null; created_at?: string; updated_at?: string;
+      }>;
+      market_listings: Table<{
+        id: string; user_id: string; instrument_id: string; symbol: string; exchange: string | null; mic_code: string; currency: string;
+        country: string | null; exchange_timezone: string | null; selection_basis: "provider_relevance" | "user_selected" | "broker_verified" | "imported" | "needs_confirmation";
+        status: "active" | "inactive" | "needs_confirmation"; metadata_source: string; metadata_checked_at: string | null; created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; instrument_id: string; symbol: string; exchange?: string | null; mic_code: string; currency: string;
+        country?: string | null; exchange_timezone?: string | null; selection_basis?: "provider_relevance" | "user_selected" | "broker_verified" | "imported" | "needs_confirmation";
+        status?: "active" | "inactive" | "needs_confirmation"; metadata_source: string; metadata_checked_at?: string | null; created_at?: string; updated_at?: string;
+      }>;
+      market_listing_provider_mappings: Table<{
+        id: string; user_id: string; listing_id: string; provider: "ibkr" | "broker" | "twelve_data" | "google_sheets" | "csv" | "manual";
+        provider_symbol: string; provider_mic: string; provider_currency: string; provider_status: "verified" | "unverified" | "inactive" | "needs_review";
+        verified_at: string | null; created_at: string; updated_at: string;
+      }>;
+      user_instrument_universe: Table<{
+        id: string; user_id: string; instrument_id: string; preferred_listing_id: string | null; watchlisted: boolean;
+        source_type: "position" | "watchlist" | "import" | "broker" | "manual"; first_seen_at: string; last_seen_at: string;
+      }>;
+      market_listing_quotes: Table<{
+        id: string; user_id: string; listing_id: string; provider: "ibkr" | "broker" | "twelve_data" | "google_sheets" | "csv" | "manual";
+        price_native: number; currency: string; observed_at: string; fetched_at: string; status: "live" | "delayed" | "closing" | "end_of_day" | "imported" | "manual" | "stale";
+        is_market_open: boolean | null; failure_code: string | null; backoff_until: string | null; created_at: string; updated_at: string;
+      }>;
+      market_fx_quotes: Table<{
+        id: string; user_id: string; source_currency: string; target_currency: string; provider: "ibkr" | "broker" | "twelve_data" | "google_sheets" | "csv" | "manual" | "identity";
+        rate: number; observed_at: string; fetched_at: string; status: "live" | "delayed" | "closing" | "end_of_day" | "imported" | "manual" | "stale";
+        created_at: string; updated_at: string;
+      }>;
       positions: Table<{
         id: string; portfolio_id: string; user_id: string; category_id: string | null;
         ticker: string; instrument_name: string | null; instrument_type: string; direction: string;
@@ -142,6 +179,7 @@ export type Database = {
         sold_quantity: number; sale_price: number | null; sale_date: string | null;
         external_position_id: string | null; option_type: string | null; strike_price: number | null;
         expiration_date: string | null; source_type: "demo" | "manual" | "csv" | "custom_csv";
+        listing_id: string | null; listing_resolution_status: "confirmed" | "needs_confirmation" | "not_applicable";
         source_import_id: string | null; imported_at: string | null;
         created_at: string; updated_at: string;
       }, {
@@ -162,6 +200,7 @@ export type Database = {
         sold_quantity?: number; sale_price?: number | null; sale_date?: string | null;
         external_position_id?: string | null; option_type?: string | null; strike_price?: number | null;
         expiration_date?: string | null; source_type?: "demo" | "manual" | "csv" | "custom_csv";
+        listing_id?: string | null; listing_resolution_status?: "confirmed" | "needs_confirmation" | "not_applicable";
         source_import_id?: string | null; imported_at?: string | null;
         created_at?: string; updated_at?: string;
       }>;
@@ -318,6 +357,26 @@ export type Database = {
       admin_process_deletion_request: {
         Args: { deletion_request: string; audit_request_id: string };
         Returns: undefined;
+      };
+      claim_market_quote_refresh: {
+        Args: { target_listing: string; target_provider: string; refresh_mode: "automatic" | "interactive"; minimum_fetched_at?: string | null };
+        Returns: Json;
+      };
+      claim_market_data_request: {
+        Args: { target_provider: string; request_mode: "automatic" | "interactive"; request_kind: "quote" | "symbol_search" | "fx" };
+        Returns: string;
+      };
+      complete_market_quote_refresh: {
+        Args: { target_listing: string; target_provider: string; supplied_lease_token: string; quote_price: number; quote_currency: string; quote_observed_at: string; quote_status: string; market_open: boolean | null };
+        Returns: boolean;
+      };
+      attach_position_listing: {
+        Args: { target_position: string; provider_name: string; listing_symbol: string; listing_exchange: string; listing_mic: string; listing_currency: string; instrument_name: string; provider_instrument_type: string; listing_country?: string | null; listing_timezone?: string | null; user_selected?: boolean };
+        Returns: string;
+      };
+      fail_market_quote_refresh: {
+        Args: { target_listing: string; target_provider: string; supplied_lease_token: string; failure: string; backoff_seconds: number };
+        Returns: boolean;
       };
     };
     Enums: {

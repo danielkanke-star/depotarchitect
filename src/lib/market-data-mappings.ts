@@ -20,5 +20,9 @@ export function isMissingMarketDataTable(error: { code?: string } | null) {
 }
 
 function isMissingTable(error: { code?: string } | null) {
-  return error?.code === "42P01" || error?.code === "PGRST205";
+  return error?.code === "42P01"
+    || error?.code === "42703"
+    || error?.code === "PGRST202"
+    || error?.code === "PGRST204"
+    || error?.code === "PGRST205";
 }
