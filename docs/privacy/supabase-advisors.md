@@ -2,6 +2,15 @@
 
 Prüfstand nach den additiven Meilenstein-2B.4-Migrationen `20260723195457` und `20260723195859` am 23. Juli 2026. Arbeitsunterlage.
 
+## Wiederanlaufprüfung am 8. September 2026
+
+Das Free-Projekt war wegen Inaktivität pausiert. Nach Wiederherstellung wurde der Status `ACTIVE_HEALTHY` bestätigt und die Advisor-Abfrage rein lesend erneut ausgeführt. Der angewendete Migrationsstand endet weiterhin bei `20260726215315`; die drei neueren Migrationen des Draft-Branches wurden nicht auf die mit Production gemeinsam genutzte Datenbank angewendet.
+
+- Security: unverändert eine Warnung für die bewusst öffentlich erreichbare, ausschließlich Boolean liefernde Funktion `validate_invitation`, 15 Warnungen für intern autorisierte `authenticated`-RPCs und eine Warnung wegen der im Free-Tarif deaktivierten Leaked Password Protection. Die Einzelbegründungen stehen unter „Bewusst verbleibend“.
+- Performance: 27 INFO-Hinweise zu derzeit unbenutzten Indizes. Nach einem Pausen-/Wiederherstellungsvorgang und geringer Nutzung sind diese Zähler nicht belastbar; sicherheits-, Eigentümer-, Fremdschlüssel- und Abfrageindizes werden deshalb nicht allein aufgrund dieses Laufs entfernt.
+- Es wurden keine Schema-, Rollen-, Authentifizierungs- oder Depotdaten verändert.
+- Die Wiederherstellungs- und Sicherungsroutine ist in `docs/operations/project-continuity.md` festgehalten.
+
 ## Ergänzung Meilenstein 2B.5
 
 Erneut geprüft nach `20260726215222_milestone_2b_5_simplified_portfolio_core.sql` und `20260726215315_index_capital_movement_owner_fk.sql`.
