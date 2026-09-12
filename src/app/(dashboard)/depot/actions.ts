@@ -300,6 +300,7 @@ export async function savePosition(formData: FormData) {
       ticker,
       currency: instrumentCurrency,
       requestedMic: marketDataMic,
+      listingUserSelected: marketDataMic !== null,
       currentPriceSource: shouldWriteManualPrice ? "manual" : existing?.current_price_source ?? "manual",
     });
   revalidatePortfolioPages();
@@ -334,14 +335,40 @@ export async function refreshPositionPrice(formData: FormData) {
     throw new Error("Die Kurszuordnung konnte nicht geprüft werden.");
   }
 
+  let refreshCurrency = position.instrument_currency?.trim().toUpperCase() || null;
+  let refreshMic = mapping?.mic_code ?? null;
+  if (!refreshCurrency) {
+    if (!await claimInteractiveProviderCredit(supabase, "symbol_search")) {
+      revalidatePortfolioPages();
+      redirect("/depot?price=provider-error");
+    }
+    const searchResult = await searchTwelveData(position.ticker);
+    if (searchResult.status === "disabled") {
+      revalidatePortfolioPages();
+      redirect("/depot?price=provider-disabled");
+    }
+    if (searchResult.status !== "success") {
+      revalidatePortfolioPages();
+      redirect(`/depot?price=${searchResult.status === "not_found" ? "not-found" : "provider-error"}`);
+    }
+    const primaryListing = distinctListingCandidates(searchResult.data)[0];
+    if (!primaryListing) {
+      revalidatePortfolioPages();
+      redirect("/depot?price=not-found");
+    }
+    refreshCurrency = primaryListing.currency;
+    refreshMic = primaryListing.micCode;
+  }
+
   const outcome = await refreshPositionFromTwelveData({
     supabase,
     userId,
     portfolioId: portfolio.id,
     positionId: position.id,
     ticker: position.ticker,
-    currency: position.instrument_currency ?? portfolio.currency,
-    requestedMic: mapping?.mic_code ?? null,
+    currency: refreshCurrency,
+    requestedMic: refreshMic,
+    listingUserSelected: false,
     currentPriceSource: position.current_price_source,
   });
   revalidatePortfolioPages();
@@ -479,6 +506,7 @@ async function refreshPositionFromTwelveData({
   ticker,
   currency,
   requestedMic,
+  listingUserSelected,
   currentPriceSource,
 }: {
   supabase: AppSupabaseClient;
@@ -488,6 +516,7 @@ async function refreshPositionFromTwelveData({
   ticker: string;
   currency: string;
   requestedMic: string | null;
+  listingUserSelected: boolean;
   currentPriceSource: Position["current_price_source"];
 }): Promise<PriceRefreshOutcome> {
   const { data: recentObservation, error: recentObservationError } = await supabase
@@ -529,7 +558,7 @@ async function refreshPositionFromTwelveData({
     provider_instrument_type: quote.instrumentType ?? "",
     listing_country: quote.country,
     listing_timezone: quote.exchangeTimezone,
-    user_selected: requestedMic !== null,
+    user_selected: listingUserSelected,
   });
   if (listingError && !isMissingMarketDataTable(listingError)) return "provider-error";
   if (listingId) {
