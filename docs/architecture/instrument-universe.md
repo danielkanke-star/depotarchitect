@@ -39,6 +39,10 @@ Discovery (`/symbol_search`) ist nur bei erstmaliger Anlage, bewusstem Listingwe
 
 Die Oberfläche zeigt den Cache sofort. Nur bei sichtbarer beziehungsweise fokussierter angemeldeter Anwendung wird in kurzen Aufrufen höchstens eine stale Notierung aktualisiert. Die Datenbank vergibt dafür eine kurze Lease, sodass parallele Tabs und Vercel Functions denselben Abruf nicht duplizieren. Externe HTTP-Aufrufe laufen außerhalb einer Datenbanktransaktion. Erfolg oder Fehler wird anschließend atomar abgeschlossen. Bei 429 gilt eine einstündige Sperre; andere vorübergehende Fehler erhalten eine konservative Sperre. Es gibt keinen aggressiven Sofort-Retry und keinen 24/7-Cron.
 
+Der automatische Ablauf setzt zwei serverseitige Betriebsbedingungen voraus: Die drei additiven Kursmigrationen müssen auf der Zielumgebung angewendet sein und `TWELVE_DATA_API_KEY` muss dort als ausschließlich serverseitige Variable gesetzt sein. Fehlt eine Bedingung, zeigt die Anwendung den konkreten Zustand an, statt lediglich keinen Kurs darzustellen. Der Schlüssel darf niemals als `NEXT_PUBLIC_*` gesetzt oder in Git gespeichert werden.
+
+Bestehende Positionen ohne bestätigte Listing-ID werden nicht stillschweigend anhand eines mehrdeutigen Tickers einer Börse zugeordnet. Für jede solche Altposition ist einmal „Kurs aktualisieren“ beziehungsweise die Notierungssuche erforderlich. Danach verwendet die automatische Aktualisierung die gespeicherte Kombination aus Symbol, MIC und Währung. Neu angelegte Positionen durchlaufen diese Zuordnung bereits beim Speichern.
+
 Aktive Positionen: Zielalter höchstens 60 Minuten während aktiver Nutzung. Bei vom Provider als geschlossen gemeldetem Markt wird der Cache konservativ bis zu 12 Stunden verwendet. Reine Watchlist-Einträge werden deutlich seltener beziehungsweise auf Anforderung aktualisiert.
 
 ## Migration
@@ -46,4 +50,3 @@ Aktive Positionen: Zielalter höchstens 60 Minuten während aktiver Nutzung. Bei
 `20260808120000_instrument_universe_quote_cache.sql` ist rein additiv. Nur vollständig verifizierte alte `position_market_data_mappings` werden anhand des exakten Tupels zurückgefüllt. Ohne stabile Wertpapierkennung entsteht zunächst eine eigene Instrumentidentität je Listing. Mehrdeutige Altpositionen bleiben `needs_confirmation`; keine Altposition wird gelöscht.
 
 Eine spätere IBKR-Anbindung darf bestehende Providerdaten korrigieren, Identitäten mit stabilen Brokerkennungen verifizieren und wegen ihrer höheren Priorität aktive Twelve-/Sheets-/CSV-/manuelle Werte überstimmen.
-

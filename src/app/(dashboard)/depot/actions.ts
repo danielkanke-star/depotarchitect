@@ -354,15 +354,17 @@ export async function refreshActiveMarketData() {
   const userId = await getUserId();
   const { data: positions, error: positionError } = await supabase
     .from("positions")
-    .select("listing_id")
+    .select("id,listing_id")
     .eq("user_id", userId)
     .eq("status", "open")
-    .neq("instrument_type", "cash")
-    .not("listing_id", "is", null);
+    .neq("instrument_type", "cash");
   if (positionError && isMissingMarketDataTable(positionError)) return { status: "schema-pending" as const };
   if (positionError) return { status: "error" as const };
+  const unassignedPositionCount = (positions ?? []).filter((position) => !position.listing_id).length;
   const listingIds = [...new Set((positions ?? []).flatMap((position) => position.listing_id ? [position.listing_id] : []))];
-  if (listingIds.length === 0) return { status: "idle" as const };
+  if (listingIds.length === 0) {
+    return { status: unassignedPositionCount > 0 ? "mapping-required" as const : "idle" as const };
+  }
 
   const [{ data: mappings, error: mappingError }, { data: quotes, error: quoteError }] = await Promise.all([
     supabase.from("market_listing_provider_mappings").select("listing_id,provider_symbol,provider_mic,provider_currency").in("listing_id", listingIds).eq("provider", "twelve_data").eq("provider_status", "verified"),
@@ -412,7 +414,7 @@ export async function refreshActiveMarketData() {
     revalidatePortfolioPages();
     return { status: "updated" as const };
   }
-  return { status: "fresh" as const };
+  return { status: unassignedPositionCount > 0 ? "mapping-required" as const : "fresh" as const };
 }
 
 export async function deletePosition(formData: FormData) {
