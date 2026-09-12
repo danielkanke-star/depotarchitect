@@ -201,23 +201,66 @@ create or replace function public.claim_market_data_request(
 language plpgsql security definer set search_path = ''
 as $$
 declare
-  caller uuid := (select auth.uid()); policy app_private.market_data_provider_policies%rowtype;
-  minute_start timestamptz := date_trunc('minute',now()); day_start timestamptz := date_trunc('day',now());
-  minute_count integer; day_count integer;
+  caller uuid := (select auth.uid());
+  provider_policy app_private.market_data_provider_policies%rowtype;
+  minute_start timestamptz := date_trunc('minute', now());
+  day_start timestamptz := date_trunc('day', now());
+  minute_count integer;
+  day_count integer;
+  minute_limit integer;
+  day_limit integer;
 begin
-  if caller is null or request_mode not in ('automatic','interactive') or request_kind not in ('quote','symbol_search','fx') then return 'denied'; end if;
-  select * into policy from app_private.market_data_provider_policies where provider=target_provider;
-  if not found then return 'unsupported'; end if;
-  insert into app_private.market_data_usage_buckets values(target_provider,'minute',minute_start,0) on conflict do nothing;
-  insert into app_private.market_data_usage_buckets values(target_provider,'day',day_start,0) on conflict do nothing;
-  select request_count into minute_count from app_private.market_data_usage_buckets where provider=target_provider and bucket_kind='minute' and bucket_start=minute_start for update;
-  select request_count into day_count from app_private.market_data_usage_buckets where provider=target_provider and bucket_kind='day' and bucket_start=day_start for update;
-  if minute_count >= case when request_mode='automatic' then policy.automatic_minute_limit else policy.provider_minute_limit end
-    or day_count >= case when request_mode='automatic' then policy.automatic_day_limit else policy.provider_day_limit end then return 'budget_exhausted'; end if;
-  update app_private.market_data_usage_buckets set request_count=request_count+1 where provider=target_provider and bucket_kind='minute' and bucket_start=minute_start;
-  update app_private.market_data_usage_buckets set request_count=request_count+1 where provider=target_provider and bucket_kind='day' and bucket_start=day_start;
+  if caller is null
+    or request_mode not in ('automatic', 'interactive')
+    or request_kind not in ('quote', 'symbol_search', 'fx') then
+    return 'denied';
+  end if;
+
+  select * into provider_policy
+  from app_private.market_data_provider_policies
+  where provider = target_provider;
+
+  if not found then
+    return 'unsupported';
+  end if;
+
+  if request_mode = 'automatic' then
+    minute_limit := provider_policy.automatic_minute_limit;
+    day_limit := provider_policy.automatic_day_limit;
+  else
+    minute_limit := provider_policy.provider_minute_limit;
+    day_limit := provider_policy.provider_day_limit;
+  end if;
+
+  insert into app_private.market_data_usage_buckets(provider, bucket_kind, bucket_start, request_count)
+  values (target_provider, 'minute', minute_start, 0)
+  on conflict do nothing;
+  insert into app_private.market_data_usage_buckets(provider, bucket_kind, bucket_start, request_count)
+  values (target_provider, 'day', day_start, 0)
+  on conflict do nothing;
+
+  select request_count into minute_count
+  from app_private.market_data_usage_buckets
+  where provider = target_provider and bucket_kind = 'minute' and bucket_start = minute_start
+  for update;
+  select request_count into day_count
+  from app_private.market_data_usage_buckets
+  where provider = target_provider and bucket_kind = 'day' and bucket_start = day_start
+  for update;
+
+  if minute_count >= minute_limit or day_count >= day_limit then
+    return 'budget_exhausted';
+  end if;
+
+  update app_private.market_data_usage_buckets
+  set request_count = request_count + 1
+  where provider = target_provider and bucket_kind = 'minute' and bucket_start = minute_start;
+  update app_private.market_data_usage_buckets
+  set request_count = request_count + 1
+  where provider = target_provider and bucket_kind = 'day' and bucket_start = day_start;
   return 'claimed';
-end $$;
+end;
+$$;
 revoke all on function public.claim_market_data_request(text,text,text) from public, anon;
 grant execute on function public.claim_market_data_request(text,text,text) to authenticated;
 
@@ -231,19 +274,34 @@ language plpgsql security definer set search_path = ''
 as $$
 declare
   caller uuid := (select auth.uid());
-  policy app_private.market_data_provider_policies%rowtype;
+  provider_policy app_private.market_data_provider_policies%rowtype;
   minute_start timestamptz := date_trunc('minute', now());
   day_start timestamptz := date_trunc('day', now());
   minute_count integer;
   day_count integer;
+  minute_limit integer;
+  day_limit integer;
   token uuid;
 begin
-  if caller is null or refresh_mode not in ('automatic','interactive') then return jsonb_build_object('status','denied'); end if;
+  if caller is null or refresh_mode not in ('automatic','interactive') then
+    return jsonb_build_object('status','denied');
+  end if;
   if not exists (select 1 from public.market_listings l where l.id = target_listing and l.user_id = caller and l.status = 'active') then
     return jsonb_build_object('status','denied');
   end if;
-  select * into policy from app_private.market_data_provider_policies where provider = target_provider;
-  if not found then return jsonb_build_object('status','unsupported'); end if;
+  select * into provider_policy
+  from app_private.market_data_provider_policies
+  where provider = target_provider;
+  if not found then
+    return jsonb_build_object('status','unsupported');
+  end if;
+  if refresh_mode = 'automatic' then
+    minute_limit := provider_policy.automatic_minute_limit;
+    day_limit := provider_policy.automatic_day_limit;
+  else
+    minute_limit := provider_policy.provider_minute_limit;
+    day_limit := provider_policy.provider_day_limit;
+  end if;
   if minimum_fetched_at is not null and exists (
     select 1 from public.market_listing_quotes q where q.listing_id = target_listing
       and q.provider = target_provider and q.fetched_at >= minimum_fetched_at and (q.backoff_until is null or q.backoff_until <= now())
@@ -261,17 +319,17 @@ begin
     on conflict do nothing;
   select request_count into minute_count from app_private.market_data_usage_buckets where provider=target_provider and bucket_kind='minute' and bucket_start=minute_start for update;
   select request_count into day_count from app_private.market_data_usage_buckets where provider=target_provider and bucket_kind='day' and bucket_start=day_start for update;
-  if minute_count >= case when refresh_mode='automatic' then policy.automatic_minute_limit else policy.provider_minute_limit end
-    or day_count >= case when refresh_mode='automatic' then policy.automatic_day_limit else policy.provider_day_limit end then
+  if minute_count >= minute_limit or day_count >= day_limit then
     return jsonb_build_object('status','budget_exhausted');
   end if;
   update app_private.market_data_usage_buckets set request_count=request_count+1 where provider=target_provider and bucket_kind='minute' and bucket_start=minute_start;
   update app_private.market_data_usage_buckets set request_count=request_count+1 where provider=target_provider and bucket_kind='day' and bucket_start=day_start;
   token := gen_random_uuid();
   insert into app_private.market_data_refresh_leases(listing_id,provider,user_id,lease_token,lease_until)
-    values(target_listing,target_provider,caller,token,now()+make_interval(secs=>policy.lease_seconds));
+    values(target_listing,target_provider,caller,token,now()+make_interval(secs=>provider_policy.lease_seconds));
   return jsonb_build_object('status','claimed','lease_token',token);
-end $$;
+end;
+$$;
 
 create or replace function public.complete_market_quote_refresh(
   target_listing uuid, target_provider text, supplied_lease_token uuid,
@@ -299,7 +357,8 @@ begin
   delete from app_private.market_data_provider_backoffs where listing_id=target_listing and provider=target_provider;
   delete from app_private.market_data_refresh_leases where listing_id=target_listing and provider=target_provider and lease_token=supplied_lease_token;
   return true;
-end $$;
+end;
+$$;
 
 revoke all on function public.claim_market_quote_refresh(uuid,text,text,timestamptz) from public, anon;
 revoke all on function public.complete_market_quote_refresh(uuid,text,uuid,numeric,text,timestamptz,text,boolean) from public, anon;
@@ -346,7 +405,8 @@ begin
   values(caller,instrument,listing,false,'position')
   on conflict (user_id,instrument_id) do update set preferred_listing_id=excluded.preferred_listing_id,last_seen_at=now();
   return listing;
-end $$;
+end;
+$$;
 
 revoke all on function public.attach_position_listing(uuid,text,text,text,text,text,text,text,text,text,boolean) from public, anon;
 grant execute on function public.attach_position_listing(uuid,text,text,text,text,text,text,text,text,text,boolean) to authenticated;
@@ -369,7 +429,8 @@ begin
     where listing_id=target_listing and provider=target_provider and user_id=caller;
   delete from app_private.market_data_refresh_leases where listing_id=target_listing and provider=target_provider and lease_token=supplied_lease_token;
   return true;
-end $$;
+end;
+$$;
 revoke all on function public.fail_market_quote_refresh(uuid,text,uuid,text,integer) from public, anon;
 grant execute on function public.fail_market_quote_refresh(uuid,text,uuid,text,integer) to authenticated;
 
@@ -401,7 +462,8 @@ begin
     values(legacy.user_id,new_listing,'twelve_data',legacy.provider_symbol,legacy.mic_code,legacy.currency,'verified',legacy.verified_at)
     on conflict (listing_id,provider) do nothing;
   end loop;
-end $$;
+end;
+$$;
 
 update public.positions p set listing_id=l.id, listing_resolution_status='confirmed'
 from public.position_market_data_mappings m join public.market_listings l

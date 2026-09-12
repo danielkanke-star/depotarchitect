@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const sql = readFileSync(new URL("../supabase/migrations/20260808120000_instrument_universe_quote_cache.sql", import.meta.url), "utf8");
+const observationHardeningSql = readFileSync(
+  new URL("../supabase/migrations/20260913003500_harden_price_observation_trigger.sql", import.meta.url),
+  "utf8",
+);
 
 describe("instrument-universe migration contract", () => {
   it("enables RLS and removes anon access for every public table", () => {
@@ -34,5 +38,11 @@ describe("instrument-universe migration contract", () => {
     expect(sql).toContain("('twelve_data', 8, 800, 6, 650, 150, 30)");
     expect(sql).toContain("market_data_refresh_leases");
     expect(sql).toContain("market_data_provider_backoffs");
+  });
+
+  it("keeps legacy imports without an instrument currency writable", () => {
+    expect(observationHardeningSql).toContain("new.instrument_currency is null");
+    expect(observationHardeningSql).toContain("upper(btrim(new.instrument_currency)) !~ '^[A-Z]{3}$'");
+    expect(observationHardeningSql).toContain("return new;");
   });
 });
