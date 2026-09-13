@@ -4,6 +4,28 @@ export type AppRole = "user" | "admin";
 export type AccountStatus = "active" | "invited" | "suspended" | "deletion_requested" | "deleted";
 export type LegalDocumentType = "privacy_notice" | "terms_of_use" | "risk_notice";
 export type DeletionRequestStatus = "pending" | "confirmed" | "processing" | "completed" | "rejected";
+export type MarketDataStatus =
+  | "live"
+  | "delayed"
+  | "end_of_day"
+  | "manually_updated"
+  | "stale"
+  | "missing"
+  | "demo"
+  | "closing"
+  | "imported"
+  | "manual";
+export type MarginSource = "broker" | "imported_direct" | "manual_direct" | "estimated" | "missing" | "legacy_untrusted";
+export type MarginConfidence = "trusted" | "estimated" | "untrusted" | "missing" | "not_applicable";
+export type PortfolioAccountType = "cash_account" | "margin_account" | "portfolio_margin_account" | "other";
+export type PositionPriceSourceType =
+  | "ibkr"
+  | "broker"
+  | "google_sheets"
+  | "custom_csv"
+  | "market_data_provider"
+  | "manual"
+  | "legacy";
 
 type Table<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
   Row: Row;
@@ -17,10 +39,14 @@ export type Database = {
     Tables: {
       portfolios: Table<{
         id: string; user_id: string; name: string; currency: string; net_liquidity: number | null;
+        cash_balance: number | null; data_as_of: string | null;
+        account_type: PortfolioAccountType;
         margin_used_pct: number | null; risk_budget_used_pct: number | null; risk_profile: string;
         created_at: string; updated_at: string;
       }, {
         id?: string; user_id: string; name?: string; currency?: string; net_liquidity?: number | null;
+        cash_balance?: number | null; data_as_of?: string | null;
+        account_type?: PortfolioAccountType;
         margin_used_pct?: number | null; risk_budget_used_pct?: number | null; risk_profile?: string;
         created_at?: string; updated_at?: string;
       }>;
@@ -40,26 +66,141 @@ export type Database = {
         max_margin_pct?: number; max_position_pct?: number; max_sector_pct?: number;
         max_drawdown_pct?: number; updated_at?: string;
       }>;
+      portfolio_cash_balances: Table<{
+        id: string; user_id: string; portfolio_id: string; broker_account_id: string | null;
+        currency: string; balance_native: number; settled_cash_native: number | null;
+        current_fx_to_base: number | null; value_base: number | null;
+        balance_as_of: string; fx_as_of: string | null; source_type: "manual" | "custom_csv" | "broker" | "demo" | "legacy";
+        source_reference: string | null; fx_source: string | null; fx_status: Exclude<MarketDataStatus, "closing" | "imported" | "manual"> | null;
+        created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string; broker_account_id?: string | null;
+        currency: string; balance_native: number; settled_cash_native?: number | null;
+        current_fx_to_base?: number | null; value_base?: number | null;
+        balance_as_of: string; fx_as_of?: string | null; source_type?: "manual" | "custom_csv" | "broker" | "demo" | "legacy";
+        source_reference?: string | null; fx_source?: string | null; fx_status?: Exclude<MarketDataStatus, "closing" | "imported" | "manual"> | null;
+        created_at?: string; updated_at?: string;
+      }>;
+      portfolio_fx_rates: Table<{
+        id: string; user_id: string; portfolio_id: string;
+        source_currency: string; target_currency: string; rate: number;
+        source_type: "manual" | "broker" | "market_data_provider" | "demo";
+        source_name: string; rate_as_of: string;
+        status: Exclude<MarketDataStatus, "closing" | "imported" | "manual">;
+        created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string;
+        source_currency: string; target_currency: string; rate: number;
+        source_type: "manual" | "broker" | "market_data_provider" | "demo";
+        source_name: string; rate_as_of: string;
+        status: Exclude<MarketDataStatus, "closing" | "imported" | "manual">;
+        created_at?: string; updated_at?: string;
+      }>;
+      position_price_observations: Table<{
+        id: string; user_id: string; portfolio_id: string; position_id: string;
+        ticker: string; currency: string; price_native: number;
+        source_type: PositionPriceSourceType; source_name: string;
+        observed_at: string; status: Exclude<MarketDataStatus, "missing" | "demo" | "closing" | "imported" | "manual">;
+        source_reference: string | null; created_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string; position_id: string;
+        ticker: string; currency: string; price_native: number;
+        source_type: PositionPriceSourceType; source_name: string;
+        observed_at: string; status: Exclude<MarketDataStatus, "missing" | "demo" | "closing" | "imported" | "manual">;
+        source_reference?: string | null; created_at?: string;
+      }>;
+      position_market_data_mappings: Table<{
+        id: string; user_id: string; portfolio_id: string; position_id: string;
+        provider: "twelve_data"; provider_symbol: string;
+        exchange: string | null; mic_code: string; currency: string;
+        instrument_name: string | null; instrument_type: string | null;
+        mapping_status: "verified" | "manual";
+        verified_at: string; created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string; position_id: string;
+        provider?: "twelve_data"; provider_symbol: string;
+        exchange?: string | null; mic_code: string; currency: string;
+        instrument_name?: string | null; instrument_type?: string | null;
+        mapping_status?: "verified" | "manual";
+        verified_at: string; created_at?: string; updated_at?: string;
+      }>;
+      market_instruments: Table<{
+        id: string; user_id: string; name: string; asset_class: "stock" | "etf" | "option" | "warrant" | "knock_out" | "other";
+        isin: string | null; figi: string | null; identification_status: "listing_only" | "stable_identifier" | "broker_verified" | "needs_review";
+        metadata_source: string; metadata_checked_at: string | null; created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; name: string; asset_class: "stock" | "etf" | "option" | "warrant" | "knock_out" | "other";
+        isin?: string | null; figi?: string | null; identification_status?: "listing_only" | "stable_identifier" | "broker_verified" | "needs_review";
+        metadata_source: string; metadata_checked_at?: string | null; created_at?: string; updated_at?: string;
+      }>;
+      market_listings: Table<{
+        id: string; user_id: string; instrument_id: string; symbol: string; exchange: string | null; mic_code: string; currency: string;
+        country: string | null; exchange_timezone: string | null; selection_basis: "provider_relevance" | "user_selected" | "broker_verified" | "imported" | "needs_confirmation";
+        status: "active" | "inactive" | "needs_confirmation"; metadata_source: string; metadata_checked_at: string | null; created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; instrument_id: string; symbol: string; exchange?: string | null; mic_code: string; currency: string;
+        country?: string | null; exchange_timezone?: string | null; selection_basis?: "provider_relevance" | "user_selected" | "broker_verified" | "imported" | "needs_confirmation";
+        status?: "active" | "inactive" | "needs_confirmation"; metadata_source: string; metadata_checked_at?: string | null; created_at?: string; updated_at?: string;
+      }>;
+      market_listing_provider_mappings: Table<{
+        id: string; user_id: string; listing_id: string; provider: "ibkr" | "broker" | "twelve_data" | "google_sheets" | "csv" | "manual";
+        provider_symbol: string; provider_mic: string; provider_currency: string; provider_status: "verified" | "unverified" | "inactive" | "needs_review";
+        verified_at: string | null; created_at: string; updated_at: string;
+      }>;
+      user_instrument_universe: Table<{
+        id: string; user_id: string; instrument_id: string; preferred_listing_id: string | null; watchlisted: boolean;
+        source_type: "position" | "watchlist" | "import" | "broker" | "manual"; first_seen_at: string; last_seen_at: string;
+      }>;
+      market_listing_quotes: Table<{
+        id: string; user_id: string; listing_id: string; provider: "ibkr" | "broker" | "twelve_data" | "google_sheets" | "csv" | "manual";
+        price_native: number; currency: string; observed_at: string; fetched_at: string; status: "live" | "delayed" | "closing" | "end_of_day" | "imported" | "manual" | "stale";
+        is_market_open: boolean | null; failure_code: string | null; backoff_until: string | null; created_at: string; updated_at: string;
+      }>;
+      market_fx_quotes: Table<{
+        id: string; user_id: string; source_currency: string; target_currency: string; provider: "ibkr" | "broker" | "twelve_data" | "google_sheets" | "csv" | "manual" | "identity";
+        rate: number; observed_at: string; fetched_at: string; status: "live" | "delayed" | "closing" | "end_of_day" | "imported" | "manual" | "stale";
+        created_at: string; updated_at: string;
+      }>;
       positions: Table<{
         id: string; portfolio_id: string; user_id: string; category_id: string | null;
         ticker: string; instrument_name: string | null; instrument_type: string; direction: string;
-        quantity: number; multiplier: number; entry_price: number; current_price: number | null;
-        stop_price: number | null; market_value: number; risk_amount: number | null;
-        margin_requirement: number | null; margin_percent: number | null; sector: string | null;
-        entry_date: string | null; status: string; notes: string | null;
+        quantity: number; multiplier: number; entry_price: number; current_price: number | null; current_price_native: number | null;
+        instrument_currency: string | null; fx_to_base: number | null; data_as_of: string | null;
+        entry_fx_to_base: number | null; current_fx_to_base: number | null;
+        current_fx_as_of: string | null; current_fx_source: string | null; current_fx_status: MarketDataStatus | null;
+        current_price_as_of: string | null; current_price_source: string | null; current_price_status: MarketDataStatus | null;
+        stop_price: number | null; stop_price_native: number | null; stop_updated_at: string | null; stop_comment: string | null;
+        market_value: number | null; risk_amount: number | null;
+        margin_requirement: number | null; margin_percent: number | null; margin_rate: number | null;
+        margin_source: MarginSource; margin_currency: string | null; margin_as_of: string | null;
+        margin_calculation_type: "direct_requirement" | "rate_estimate" | "not_applicable" | null;
+        margin_confidence: MarginConfidence; sector: string | null;
+        strategy: string | null; entry_date: string | null; status: string; notes: string | null;
+        sold_quantity: number; sale_price: number | null; sale_date: string | null;
         external_position_id: string | null; option_type: string | null; strike_price: number | null;
         expiration_date: string | null; source_type: "demo" | "manual" | "csv" | "custom_csv";
+        listing_id: string | null; listing_resolution_status: "confirmed" | "needs_confirmation" | "not_applicable";
         source_import_id: string | null; imported_at: string | null;
         created_at: string; updated_at: string;
       }, {
         id?: string; portfolio_id: string; user_id: string; category_id?: string | null;
         ticker: string; instrument_name?: string | null; instrument_type?: string; direction?: string;
-        quantity?: number; multiplier?: number; entry_price?: number; current_price?: number | null;
-        stop_price?: number | null; market_value?: number; risk_amount?: number | null;
-        margin_requirement?: number | null; margin_percent?: number | null; sector?: string | null;
-        entry_date?: string | null; status?: string; notes?: string | null;
+        quantity?: number; multiplier?: number; entry_price?: number; current_price?: number | null; current_price_native?: number | null;
+        instrument_currency?: string | null; fx_to_base?: number | null; data_as_of?: string | null;
+        entry_fx_to_base?: number | null; current_fx_to_base?: number | null;
+        current_fx_as_of?: string | null; current_fx_source?: string | null; current_fx_status?: MarketDataStatus | null;
+        current_price_as_of?: string | null; current_price_source?: string | null; current_price_status?: MarketDataStatus | null;
+        stop_price?: number | null; stop_price_native?: number | null; stop_updated_at?: string | null; stop_comment?: string | null;
+        market_value?: number | null; risk_amount?: number | null;
+        margin_requirement?: number | null; margin_percent?: number | null; margin_rate?: number | null;
+        margin_source?: MarginSource; margin_currency?: string | null; margin_as_of?: string | null;
+        margin_calculation_type?: "direct_requirement" | "rate_estimate" | "not_applicable" | null;
+        margin_confidence?: MarginConfidence; sector?: string | null;
+        strategy?: string | null; entry_date?: string | null; status?: string; notes?: string | null;
+        sold_quantity?: number; sale_price?: number | null; sale_date?: string | null;
         external_position_id?: string | null; option_type?: string | null; strike_price?: number | null;
         expiration_date?: string | null; source_type?: "demo" | "manual" | "csv" | "custom_csv";
+        listing_id?: string | null; listing_resolution_status?: "confirmed" | "needs_confirmation" | "not_applicable";
         source_import_id?: string | null; imported_at?: string | null;
         created_at?: string; updated_at?: string;
       }>;
@@ -73,6 +214,17 @@ export type Database = {
         original_filename: string; imported_at?: string; total_rows: number; valid_rows: number;
         warning_rows: number; rejected_rows: number; import_status: "processing" | "completed" | "failed";
         replaced_position_count?: number; inserted_position_count?: number; metadata?: Json; created_at?: string;
+      }>;
+      portfolio_capital_movements: Table<{
+        id: string; user_id: string; portfolio_id: string;
+        movement_type: "deposit" | "withdrawal"; amount_native: number;
+        currency: string; movement_date: string; comment: string | null;
+        created_at: string; updated_at: string;
+      }, {
+        id?: string; user_id: string; portfolio_id: string;
+        movement_type: "deposit" | "withdrawal"; amount_native: number;
+        currency: string; movement_date: string; comment?: string | null;
+        created_at?: string; updated_at?: string;
       }>;
       app_runtime_settings: Table<{
         singleton: boolean; registration_mode: string; updated_at: string;
@@ -151,6 +303,32 @@ export type Database = {
         };
         Returns: Json;
       };
+      replace_portfolio_snapshot_v2: {
+        Args: {
+          target_portfolio: string;
+          original_filename: string;
+          normalized_positions: Json;
+          new_categories: string[];
+          total_rows: number;
+          warning_rows: number;
+          rejected_rows: number;
+          import_metadata?: Json;
+        };
+        Returns: Json;
+      };
+      replace_portfolio_snapshot_v3: {
+        Args: {
+          target_portfolio: string;
+          original_filename: string;
+          normalized_positions: Json;
+          new_categories: string[];
+          total_rows: number;
+          warning_rows: number;
+          rejected_rows: number;
+          import_metadata?: Json;
+        };
+        Returns: Json;
+      };
       get_admin_summary: { Args: Record<PropertyKey, never>; Returns: Json };
       get_admin_user_directory: {
         Args: Record<PropertyKey, never>;
@@ -180,6 +358,26 @@ export type Database = {
         Args: { deletion_request: string; audit_request_id: string };
         Returns: undefined;
       };
+      claim_market_quote_refresh: {
+        Args: { target_listing: string; target_provider: string; refresh_mode: "automatic" | "interactive"; minimum_fetched_at?: string | null };
+        Returns: Json;
+      };
+      claim_market_data_request: {
+        Args: { target_provider: string; request_mode: "automatic" | "interactive"; request_kind: "quote" | "symbol_search" | "fx" };
+        Returns: string;
+      };
+      complete_market_quote_refresh: {
+        Args: { target_listing: string; target_provider: string; supplied_lease_token: string; quote_price: number; quote_currency: string; quote_observed_at: string; quote_status: string; market_open: boolean | null };
+        Returns: boolean;
+      };
+      attach_position_listing: {
+        Args: { target_position: string; provider_name: string; listing_symbol: string; listing_exchange: string; listing_mic: string; listing_currency: string; instrument_name: string; provider_instrument_type: string; listing_country?: string | null; listing_timezone?: string | null; user_selected?: boolean };
+        Returns: string;
+      };
+      fail_market_quote_refresh: {
+        Args: { target_listing: string; target_provider: string; supplied_lease_token: string; failure: string; backoff_seconds: number };
+        Returns: boolean;
+      };
     };
     Enums: {
       app_role: AppRole;
@@ -200,3 +398,8 @@ export type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"];
 export type LegalAcceptance = Database["public"]["Tables"]["legal_acceptances"]["Row"];
 export type AccountDeletionRequest = Database["public"]["Tables"]["account_deletion_requests"]["Row"];
 export type PortfolioImport = Database["public"]["Tables"]["portfolio_imports"]["Row"];
+export type PortfolioCashBalance = Database["public"]["Tables"]["portfolio_cash_balances"]["Row"];
+export type PortfolioFxRate = Database["public"]["Tables"]["portfolio_fx_rates"]["Row"];
+export type PortfolioCapitalMovement = Database["public"]["Tables"]["portfolio_capital_movements"]["Row"];
+export type PositionPriceObservation = Database["public"]["Tables"]["position_price_observations"]["Row"];
+export type PositionMarketDataMapping = Database["public"]["Tables"]["position_market_data_mappings"]["Row"];

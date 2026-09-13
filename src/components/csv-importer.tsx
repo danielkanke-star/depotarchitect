@@ -20,10 +20,11 @@ import type { PortfolioImport } from "@/lib/database.types";
 type Props = {
   currentPositionCount: number;
   categoryNames: string[];
+  baseCurrency: string;
   imports: PortfolioImport[];
 };
 
-export function CsvImporter({ currentPositionCount, categoryNames, imports }: Props) {
+export function CsvImporter({ currentPositionCount, categoryNames, baseCurrency, imports }: Props) {
   const router = useRouter();
   const [filename, setFilename] = useState("");
   const [parsed, setParsed] = useState<ParsedCsv | null>(null);
@@ -36,8 +37,8 @@ export function CsvImporter({ currentPositionCount, categoryNames, imports }: Pr
   const [pending, startTransition] = useTransition();
 
   const analysis = useMemo(
-    () => parsed ? analyzeImport(parsed, mapping, categoryNames, categoryResolutions) : null,
-    [parsed, mapping, categoryNames, categoryResolutions],
+    () => parsed ? analyzeImport(parsed, mapping, categoryNames, categoryResolutions, baseCurrency) : null,
+    [parsed, mapping, categoryNames, categoryResolutions, baseCurrency],
   );
   const unresolvedCategories = analysis?.unknownCategories.filter((category) => !categoryResolutions[category]) ?? [];
   const ready = Boolean(
@@ -157,7 +158,7 @@ export function CsvImporter({ currentPositionCount, categoryNames, imports }: Pr
 
       <Card>
         <h2 className="font-medium">Spaltenzuordnung</h2>
-        <p className="mt-1 text-sm text-muted">Jede automatische Zuordnung kann geändert werden. Depotweite Felder wie NetLiq werden bewusst nicht als Positionsmarktwert interpretiert.</p>
+        <p className="mt-1 text-sm text-muted">Jede automatische Zuordnung kann geändert werden. Depotweite Felder wie NetLiq werden bewusst nicht als Positionsmarktwert interpretiert. Berechnete Ergebnisfelder aus einer Datei dienen nur dem Abweichungsvergleich.</p>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead className="text-left text-xs text-muted"><tr><th className="pb-3">Erkannte CSV-Spalte</th><th>Beispielwert</th><th>DepotArchitect-Feld</th></tr></thead>
@@ -183,7 +184,7 @@ export function CsvImporter({ currentPositionCount, categoryNames, imports }: Pr
           <div>Wahrscheinlich identische Zeilen: {analysis.probableDuplicateRows.join(", ") || "keine"}</div>
           <div>Fehlende Mindestwerte: {analysis.missingRequiredRows.join(", ") || "keine"}</div>
         </div>}
-        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Zeile</th><th>Status</th><th>Ticker</th><th>Bezeichnung</th><th>Menge</th><th>Kategorie</th><th>Hinweise</th></tr></thead><tbody>{analysis.rows.slice(0, 50).map((row) => <tr key={row.rowNumber} className="border-t border-border/60 align-top"><td className="py-3">{row.rowNumber}</td><td><Badge tone={row.status === "valid" ? "good" : row.status === "warning" ? "warn" : "danger"}>{row.status === "valid" ? "gültig" : row.status === "warning" ? "Warnung" : "Fehler"}</Badge></td><td className="font-medium">{row.position?.ticker || mappedCell(row.raw, mapping, "ticker") || "–"}</td><td>{row.position?.instrument_name || mappedCell(row.raw, mapping, "instrument_name") || "–"}</td><td>{row.position?.quantity ?? (mappedCell(row.raw, mapping, "quantity") || "–")}</td><td>{row.position?.category_name || mappedCell(row.raw, mapping, "category_name") || "Nicht zugeordnet"}</td><td className="max-w-[420px] text-xs"><div className="space-y-1 text-red-200">{row.errors.map((message) => <div key={message}>{message}</div>)}</div><div className="space-y-1 text-amber-200">{row.warnings.map((message) => <div key={message}>{message}</div>)}</div></td></tr>)}</tbody></table></div>
+        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[1260px] text-sm"><thead className="text-left text-xs text-muted"><tr><th className="pb-3">Zeile</th><th>Status</th><th>Ticker</th><th>Bezeichnung</th><th>Menge</th><th>Währung / aktueller FX</th><th>Margin Original</th><th>Normalisierte Quote</th><th>Margin Requirement</th><th>Kategorie</th><th>Berechnet</th><th>Hinweise</th></tr></thead><tbody>{analysis.rows.slice(0, 50).map((row) => <tr key={row.rowNumber} className="border-t border-border/60 align-top"><td className="py-3">{row.rowNumber}</td><td><Badge tone={row.status === "valid" ? "good" : row.status === "warning" ? "warn" : "danger"}>{row.status === "valid" ? "gültig" : row.status === "warning" ? "Warnung" : "Fehler"}</Badge></td><td className="font-medium">{row.position?.ticker || mappedCell(row.raw, mapping, "ticker") || "–"}</td><td>{row.position?.instrument_name || mappedCell(row.raw, mapping, "instrument_name") || "–"}</td><td>{row.position?.quantity ?? (mappedCell(row.raw, mapping, "quantity") || "–")}</td><td className="text-xs text-muted">{row.position?.instrument_currency ?? "–"} / {row.position?.current_fx_to_base ?? "–"}</td><td className="text-xs">{row.marginPreview.original ?? "–"}</td><td className="text-xs">{row.marginPreview.normalizedRate === null ? "–" : row.marginPreview.normalizedRate.toFixed(4)}</td><td className="text-xs">{row.marginPreview.calculatedRequirement === null ? "Nicht berechenbar" : row.marginPreview.calculatedRequirement.toFixed(2)}</td><td>{row.position?.category_name || mappedCell(row.raw, mapping, "category_name") || "Nicht zugeordnet"}</td><td className="text-xs text-emerald-300">{row.derivedFields.join(", ") || "–"}</td><td className="max-w-[420px] text-xs"><div className="space-y-1 text-red-200">{row.errors.map((message) => <div key={message}>{message}</div>)}</div><div className="space-y-1 text-amber-200">{row.warnings.map((message) => <div key={message}>{message}</div>)}</div></td></tr>)}</tbody></table></div>
       </Card>
 
       <Card className="border-amber-500/30">

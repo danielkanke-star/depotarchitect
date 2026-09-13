@@ -26,6 +26,8 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 
 Alle weiteren Variablen sind in `.env.example` dokumentiert. Production bleibt bis zur rechtlichen und betrieblichen Freigabe im Registrierungsmodus `closed` und im öffentlichen Modus `private`. Der Registrierungsmodus muss zusätzlich bewusst in `public.app_runtime_settings` synchronisiert werden. `PUBLIC_SITE_MODE=preview` ist ausschließlich für kontrollierte Preview-Abnahmen vorgesehen; `public` wird bei fehlender rechtlicher Freigabe serverseitig auf `private` zurückgestuft.
 
+`TWELVE_DATA_API_KEY` aktiviert optional den serverseitigen Kursadapter. Der Schlüssel darf nie als `NEXT_PUBLIC_*` gesetzt werden. Ohne Schlüssel bleiben Google-Sheets-/CSV-/manuelle Kurse verfügbar. Die Kurspriorität lautet: IBKR, anderer Broker, Twelve Data beziehungsweise ein anderer Marktdatenanbieter, Google Sheets, CSV, manuell.
+
 ## Aktueller Stand
 
 - geschützte Anmeldung
@@ -39,6 +41,9 @@ Alle weiteren Variablen sind in `.env.example` dokumentiert. Production bleibt b
 - geschlossenes, einladungsbasiertes oder offenes Registrierungsmodell mit Production-Launch-Guard
 - versionierte Kenntnisnahmen, Rollenmodell und Admin-TOTP
 - Eigendatenexport und manuell geprüfte Löschanfragen
+- brokerneutraler benutzerdefinierter CSV-Snapshot
+- zentrale, dezimalgenaue Positions- und Portfolioberechnung mit sichtbarer Datenvollständigkeit
+- nachvollziehbare Kursquellen mit optionaler Twelve-Data-Abfrage und eindeutiger MIC-Börsenzuordnung
 
 DepotArchitect zeigt Depotstruktur, Hebel, Margin, Positionsgrößen, Risiko bis Stop, Konzentrationen und selbst gesetzte Warnschwellen. Es erteilt keine individuellen Kauf-/Verkaufsempfehlungen, trifft keine Orderentscheidungen, führt keine Orders aus und ersetzt keine Anlageberatung.
 

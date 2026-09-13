@@ -7,6 +7,7 @@ Arbeitsunterlage; Vertragsstände und Anbieterlisten müssen unmittelbar vor Kun
 | Supabase | Authentifizierung, PostgreSQL, RLS | Projekt/Datenbank in `eu-central-1` | DPA rechtsverbindlich anfordern/abschließen; Unterauftragsverarbeiter, Speicherorte, Drittlandtransfers und Garantien prüfen |
 | Vercel | Hosting, Build, Next.js Functions | Projektregion per Repository auf `fra1`; tatsächliche Deploymentregion noch je Preview zu bestätigen | DPA beziehungsweise geeigneten Tarif prüfen/abschließen; Unterauftragsverarbeiter, Logdaten und Drittlandtransfers prüfen |
 | GitHub | Quellcode und CI/Git-Integration | Repository enthält keine vorgesehenen Kundendaten oder `.env`-Werte | Organisations-, Zugriffs-, Aufbewahrungs- und Vertragskonfiguration prüfen |
+| Twelve Data | Optionale serverseitige Kursabfrage anhand Symbol und MIC | Adapter im Code vorhanden, ohne `TWELVE_DATA_API_KEY` deaktiviert; keine Benutzerkennung oder Depotkennzahl wird übertragen | Vor Aktivierung Tarif, Lizenz zur Anzeige/Weitergabe, Börsenabdeckung, DPA-/Datenschutzrolle, Unterauftragsverarbeiter, Speicherorte und Drittlandtransfers prüfen |
 
 Nicht eingesetzt: Google Analytics, Meta Pixel, Marketingautomation, Nutzertracking, Session Replay und Fingerprinting.
 

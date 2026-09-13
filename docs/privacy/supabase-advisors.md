@@ -1,12 +1,61 @@
 # Supabase Security- und Performance-Advisors
 
-Prüfstand nach der brokerneutralen Meilenstein-2A-Ergänzung am 22. Juli 2026. Arbeitsunterlage.
+Prüfstand nach den additiven Meilenstein-2B.4-Migrationen `20260723195457` und `20260723195859` am 23. Juli 2026. Arbeitsunterlage.
+
+## Wiederanlaufprüfung am 8. September 2026
+
+Das Free-Projekt war wegen Inaktivität pausiert. Nach Wiederherstellung wurde der Status `ACTIVE_HEALTHY` bestätigt und die Advisor-Abfrage rein lesend erneut ausgeführt. Der angewendete Migrationsstand endet weiterhin bei `20260726215315`; die drei neueren Migrationen des Draft-Branches wurden nicht auf die mit Production gemeinsam genutzte Datenbank angewendet.
+
+- Security: unverändert eine Warnung für die bewusst öffentlich erreichbare, ausschließlich Boolean liefernde Funktion `validate_invitation`, 15 Warnungen für intern autorisierte `authenticated`-RPCs und eine Warnung wegen der im Free-Tarif deaktivierten Leaked Password Protection. Die Einzelbegründungen stehen unter „Bewusst verbleibend“.
+- Performance: 27 INFO-Hinweise zu derzeit unbenutzten Indizes. Nach einem Pausen-/Wiederherstellungsvorgang und geringer Nutzung sind diese Zähler nicht belastbar; sicherheits-, Eigentümer-, Fremdschlüssel- und Abfrageindizes werden deshalb nicht allein aufgrund dieses Laufs entfernt.
+- Es wurden keine Schema-, Rollen-, Authentifizierungs- oder Depotdaten verändert.
+- Die Wiederherstellungs- und Sicherungsroutine ist in `docs/operations/project-continuity.md` festgehalten.
+
+## Ergänzung Meilenstein 2B.5
+
+Erneut geprüft nach `20260726215222_milestone_2b_5_simplified_portfolio_core.sql` und `20260726215315_index_capital_movement_owner_fk.sql`.
+
+- Die neue Tabelle `portfolio_capital_movements` hat RLS, nur eigene Select-/Insert-Policies und keine Rechte für `anon`.
+- Der zusammengesetzte Eigentümer-Fremdschlüssel `(portfolio_id, user_id)` ist durch einen passenden Index abgedeckt.
+- Der Security Advisor meldet für 2B.5 keine neue Warnung.
+- Die bestehenden bewusst exponierten SECURITY-DEFINER-RPC-Warnungen bleiben unverändert; ihre Rollen-, Eigentums- und AAL-Prüfungen werden in den SQL-Sicherheitstests abgedeckt.
+- Leaked Password Protection bleibt im Free-Tarif deaktiviert und ist zwingender Launch-Blocker vor externer Registrierung.
+- Der Performance Advisor meldet ausschließlich aktuell unbenutzte Indizes. Der neue Eigentümerindex ist unmittelbar nach Anlage erwartungsgemäß noch unbenutzt und wird wegen seiner Fremdschlüsselabdeckung beibehalten.
+
+## Ergänzung Kursquellenauflösung
+
+Stand der Advisor-Abfrage vor Anwendung der additiven Kursquellenmigration am 30. Juli 2026:
+
+- Security: unverändert die unten dokumentierten, absichtlich exponierten und intern geprüften RPC-Hinweise sowie deaktivierte Leaked Password Protection.
+- Performance: unverändert vier INFO-Hinweise zu `positions_sector_idx`, `account_deletion_requests_status_idx`, `portfolio_cash_balances_user_id_idx` und `positions_external_position_id_idx`.
+- `position_price_observations` ist mit RLS, eigenen Select-/Insert-Policies, entzogenen `anon`-Rechten und unveränderlichen Beobachtungen entworfen. Der zugehörige SQL-Test prüft zusätzlich Cross-User-Isolation und den Übergangstrigger.
+- Da Preview und Production dasselbe Supabase-Projekt verwenden und Production in diesem Auftrag unverändert bleiben muss, wird die Migration erst für ein ausdrücklich freigegebenes Preview-Datenbankziel oder den späteren Merge angewendet. Ein Advisor-Lauf nach tatsächlicher Anwendung bleibt deshalb Teil der Deployment-Abnahme.
+
+## Ergänzung Twelve Data
+
+Erneut rein lesend geprüft am 31. Juli 2026. Der reale Datenbankstand endet weiterhin bei `20260726215315`; die Kursbeobachtungsmigration `20260730120000` und die neue Mappingmigration `20260731120000` sind ausschließlich im Branch vorhanden. Die Datenbank ist damit nicht weiter als der Migrationsstand im Repository. Production wurde nicht verändert.
+
+- `position_market_data_mappings` ist additiv mit Eigentümer-RLS, expliziten `authenticated`-Policies, entzogenen `anon`-Rechten und Cross-User-Test entworfen.
+- Ticker, Währung und vierstelliger MIC werden gemeinsam gespeichert; API-Schlüssel gehören nicht in diese Tabelle.
+- Die Advisor-Ergebnisse sind vor Anwendung der beiden Migrationen unverändert: die dokumentierten SECURITY-DEFINER-RPC-Warnungen, deaktivierte Leaked Password Protection und vier unbenutzte Indizes.
+- Nach Anwendung auf einem isolierten Datenbankziel sind Migration, SQL-/RLS-Test und beide Advisors erneut auszuführen. Die gemeinsam genutzte Production-Datenbank ist kein zulässiges Testziel für die neue DDL.
+
+## Ergänzung Instrumentenuniversum und Kostenkontrolle
+
+Erneut rein lesend geprüft am 8. August 2026. Der reale Datenbankstand endet weiterhin bei `20260726215315`. Somit sind auch `20260730120000`, `20260731120000` und `20260808120000_instrument_universe_quote_cache.sql` noch nicht live; Production blieb unverändert und die Datenbank ist nicht weiter als das Repository.
+
+- Security Advisor: unverändert die unten einzeln dokumentierten SECURITY-DEFINER-RPC-Hinweise und deaktivierte Leaked Password Protection. Für die noch nicht angewendeten neuen Tabellen kann der Live-Advisor naturgemäß noch keine Aussage treffen.
+- Performance Advisor: unverändert vier INFO-Hinweise zu `positions_sector_idx`, `account_deletion_requests_status_idx`, `portfolio_cash_balances_user_id_idx` und `positions_external_position_id_idx`.
+- Die neue Migration setzt auf allen sechs öffentlichen Tabellen RLS, entzieht `anon` sämtliche Rechte, verwendet zusammengesetzte Eigentümer-Fremdschlüssel und gibt Quote-/FX-Caches für angemeldete Benutzer ausschließlich lesend frei.
+- Alle fünf neuen `SECURITY DEFINER`-RPCs verwenden einen leeren `search_path`, prüfen `auth.uid()`, geben nur Claimstatus/Lease-Token, Boolean oder Listing-ID zurück und entziehen `anon` die Ausführung. Lease-Token sind kurzlebige interne Deduplizierungswerte und keine Authentifizierungstoken.
+- Nach Einrichtung eines isolierten Supabase-Preview-Projekts müssen Migration, pgTAP-/Cross-User-/Direct-RPC-Tests und beide Advisors dort erneut ausgeführt werden. Bis dahin bleibt der PR aus Datenbanksicht nicht mergebereit.
 
 ## Behoben
 
 - Fehlende Indizes auf `user_invitations.invited_by` und `account_deletion_requests.processed_by` ergänzt.
 - Doppelte permissive Select-Policies für Profile und Löschanfragen jeweils zu einer Policy zusammengeführt.
 - Auf internen Konfigurations-, Rollen-, Berechtigungs- und Einladungstabellen explizite Deny-Policies ergänzt. Zusätzlich bleiben die Tabellenrechte für `anon`/`authenticated` entzogen.
+- `portfolio_fx_rates` besitzt vollständige Eigentümer-RLS, keine Rechte für `anon` und einen erfolgreichen Cross-User-Isolationstest. Der aktuelle Advisor meldet dafür keine neue Warnung.
 
 ## Bewusst verbleibend
 
@@ -21,6 +70,8 @@ Der Security Advisor meldet ausführbare `SECURITY DEFINER`-Funktionen als Warnu
 | `touch_user_profile` | `authenticated` | ausschließlich `auth.uid()`, zeitlich gedrosselt | keine Daten |
 | `request_account_deletion` | `authenticated` | ausschließlich `auth.uid()` | eigene Anfrage-ID |
 | `replace_portfolio_snapshot` | `authenticated` | `auth.uid()`, Eigentum des Zielportfolios, vollständige normalisierte Nutzlast, Zähler und Kategorien | Import-ID und ausschließlich aggregierte Importzähler; Bestandsersatz und Historie atomar |
+| `replace_portfolio_snapshot_v2` | `authenticated` | `auth.uid()`, Eigentum des Zielportfolios, vollständige Quellen-/Cache-Nutzlast, Zähler und Kategorien | Import-ID und ausschließlich aggregierte Importzähler; neuer Engine-Import atomar |
+| `replace_portfolio_snapshot_v3` | `authenticated` | `auth.uid()`, Eigentum des Zielportfolios, kanonische Margin-/FX-Nutzlast, Statuswerte, Zähler und Kategorien | Import-ID und ausschließlich aggregierte Importzähler; 2B.1-Import atomar |
 | `validate_invitation` | nur `anon` | Modus `invite`, normalisierte E-Mail, exakt 64-stelliger hexadezimaler SHA-256-Hash, Ablauf und Nichtverwendung müssen gemeinsam stimmen | ausschließlich Boolean |
 | `get_admin_summary` | `authenticated` | Adminrolle und JWT-AAL2 | ausschließlich aggregierte Zähler |
 | `get_admin_user_directory` | `authenticated` | Adminrolle und JWT-AAL2 | fest definierte Konto-Metadaten, keine Depotfelder |
@@ -50,7 +101,7 @@ Der Performance Advisor meldet derzeit ausschließlich INFO-Hinweise zu noch unb
 
 - `positions_sector_idx`
 - `account_deletion_requests_status_idx`
-- `positions_source_import_id_idx`
+- `portfolio_cash_balances_user_id_idx`
 - `positions_external_position_id_idx`
 
-Die beiden noch gemeldeten neuen Importindizes sind vor dem ersten dauerhaften Import erwartungsgemäß unbenutzt. Der Advisor meldet den Index für die chronologische Importhistorie nach den Preview-Abnahmen nicht mehr. Hinweise zu unbenutzten Indizes werden nach realer Nutzung erneut bewertet; sicherheits-, Historien- und FK-relevante Indizes werden nicht vorschnell entfernt.
+Der neue Cash-User-Index ist unmittelbar nach der Migration erwartungsgemäß noch unbenutzt und unterstützt Datenschutzexporte sowie benutzerbezogene Löschvorgänge. Hinweise zu unbenutzten Indizes werden nach realer Nutzung erneut bewertet; sicherheits-, Historien- und FK-relevante Indizes werden nicht vorschnell entfernt.

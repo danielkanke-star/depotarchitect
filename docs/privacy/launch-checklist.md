@@ -16,6 +16,7 @@ Der Meilenstein 1.1 eröffnet **keine** öffentliche Registrierung und keine öf
 - [ ] Preview-Build, CSP, Cookies, Server Actions, Eigendatenexport und Löschantrag getestet.
 - [ ] Vercel-Deploymentmetadaten bestätigen `fra1` statt `iad1`.
 - [ ] Repository- und Client-Bundle-Scan bestätigen: keine `.env`, Service-Role-/Secret-Keys oder personenbezogene Logs.
+- [ ] Unabhängigen, getesteten Sicherungs- und Wiederherstellungsprozess gemäß `docs/operations/project-continuity.md` festlegen; Plattformaktivität gilt nicht als Backup.
 
 ## Verbindlich manuell vor Kundenstart
 
