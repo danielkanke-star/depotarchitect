@@ -11,6 +11,11 @@ export function RiskIndicator({ tone, children, title }: { tone: RiskTone; child
 export function formatMoney(value: number | null | undefined, currency = "EUR") {
   return value == null || !Number.isFinite(value) ? "—" : new Intl.NumberFormat("de-DE", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
 }
+export function formatPrice(value: number | null | undefined, currency: string | null) {
+  return value == null || !Number.isFinite(value) || !currency ? "—" : new Intl.NumberFormat("de-DE", {
+    style:"currency",currency,currencyDisplay:"code",minimumFractionDigits:2,maximumFractionDigits:Math.abs(value)<1?6:4,
+  }).format(value);
+}
 export function formatRatio(value: number | null | undefined) {
   return value == null ? "—" : new Intl.NumberFormat("de-DE", { style: "percent", maximumFractionDigits: 2 }).format(value);
 }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui";
 import { InfoTip } from "./info-tip";
-import { RiskIndicator, formatMoney, formatRatio } from "@/components/risk-indicator";
+import { RiskIndicator, formatMoney, formatPrice, formatRatio } from "@/components/risk-indicator";
 import { calculateSizing, budgetTone, depotRiskBudget } from "@/lib/risk-rules";
 import { lookupPositionMarketData, type MarketDataLookupState } from "@/app/(dashboard)/depot/actions";
 
@@ -92,7 +92,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
         {lookup && lookup.status !== "success" && <p role="status" className="mb-4 text-sm text-amber-300">{lookup.message}</p>}
         {(market || demo) && <div role="status" aria-live="polite" className="mb-4 rounded-xl border border-accent/30 bg-accent/5 p-3">
           <div className="text-sm text-muted">{market?.name ?? ticker} · {market?.exchange ?? "Beispiel"} · {currency}</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">{formatMoney(quote, currency)}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{formatPrice(quote, currency)}</div>
           <p className="mt-1 text-xs text-muted">{market ? `${market.dataStatus === "stale" ? "Älterer Kurs" : market.dataStatus === "live" ? "Echtzeitversorgung" : market.dataStatus === "manually_updated" ? "Depotbewertung · kein bestätigter Echtzeitkurs" : market.dataStatus === "end_of_day" ? "Schlusskurs" : "Verzögerter Kurs"} · ${market.sourceName?.startsWith("IBKR") ? "Abgerufen " : ""}${new Date(market.observedAt).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })} · ${market.sourceName ?? "Twelve Data"}` : "Fiktiver Beispielkurs"}</p>
           {currency !== baseCurrency && <div className="mt-2 flex items-center gap-1.5 text-xs text-muted"><span>Automatische Umrechnung in {baseCurrency}</span><InfoTip label="Währungsumrechnung">{fx !== null ? `1 ${currency} = ${fx.toLocaleString("de-DE", { maximumFractionDigits: 6 })} ${baseCurrency}` : "Wechselkurs wird nicht geliefert."}{market?.fxSource ? ` · ${market.fxSource}` : ""}{market?.fxAsOf ? ` · Stand ${new Date(market.fxAsOf).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}` : ""}</InfoTip></div>}
           {market?.fxStale && <p className="mt-2 text-xs text-amber-300">Der Wechselkurs ist älter. Die Berechnung verwendet den angezeigten Referenzstand.</p>}
@@ -121,7 +121,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
           <Fact label="Vorgesehener Risikobetrag" value={formatMoney(computed?.plannedRisk, baseCurrency)} />
           <Fact label="Stückzahl" value={computed ? computed.quantity.toLocaleString("de-DE", { maximumFractionDigits: 6 }) : "—"} />
           <Fact label={`Positionswert ${currency}`} value={formatMoney(computed?.nativeValue, currency)} />
-          <Fact label={`Positionswert ${baseCurrency}`} value={formatMoney(computed?.baseValue, baseCurrency)} />
+          {currency!==baseCurrency&&<Fact label={`Positionswert ${baseCurrency}`} value={formatMoney(computed?.baseValue, baseCurrency)} />}
           <Fact label="Anteil an NetLiq" value={formatRatio(computed?.netLiqShare)} />
           <Fact label="Tatsächliches Risiko nach Abrundung" value={formatMoney(computed?.actualRisk, baseCurrency)} />
         </div>
