@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { looksLikeOptionContract } from "@/lib/source-instrument";
 import { Fragment } from "react";
 import { PositionJournalDetails } from "@/components/position-journal-details";
 import { RiskIndicator } from "@/components/risk-indicator";
@@ -97,7 +98,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
             const legacyCash = position.instrument_type === "cash";
             const resolvedPrice = pricesByPositionId.get(position.id) ?? null;
             return <Fragment key={position.id}><tr className="border-t border-border/60 align-top">
-              <td className="py-3"><div className="font-medium">{position.ticker}</div>{position.instrument_name && <div className="text-xs text-foreground/80">{position.instrument_name}</div>}<div className="text-xs text-muted">{instrumentLabel(position.instrument_type)} · {position.instrument_currency}</div>{legacyCash && <div className="mt-1 text-[10px] text-amber-300">Legacy-Cash · nur lesbar</div>}</td>
+              <td className="py-3"><div className="font-medium">{position.ticker}</div>{position.instrument_name && <div className="text-xs text-foreground/80">{position.instrument_name}</div>}<div className="text-xs text-muted">{instrumentLabel(position.instrument_type, position.ticker)} · {position.instrument_currency}</div>{legacyCash && <div className="mt-1 text-[10px] text-amber-300">Legacy-Cash · nur lesbar</div>}</td>
               <td>{categories.find((category) => category.id === position.category_id)?.name ?? "Keine"}</td>
               <td><Badge tone={closed ? "neutral" : partial ? "warn" : "good"}>{closed ? "Geschlossen" : partial ? "Teilverkauft" : "Offen"}</Badge></td>
               <td><div>{(closed ? Number(position.quantity) : remainingQuantity(Number(position.quantity), position.sold_quantity)).toLocaleString("de-DE", { maximumFractionDigits: 6 })}</div>{partial && <div className="text-xs text-muted">von {Number(position.quantity).toLocaleString("de-DE")} beim Einstieg</div>}</td>
@@ -165,7 +166,8 @@ function PriceDetails({
   </div>;
 }
 
-function instrumentLabel(value: string) {
+function instrumentLabel(value: string, ticker: string) {
+  if (value === "stock" && looksLikeOptionContract(ticker)) return "Derivat · Kontrakt prüfen";
   return ({ stock: "Aktie", etf: "ETF", option: "Option", warrant: "Optionsschein", knock_out: "Knock-out", cash: "Cash", other: "Sonstiges" } as Record<string, string>)[value] ?? value;
 }
 

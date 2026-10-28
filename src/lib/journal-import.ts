@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 import { parseDate, parseDelimited, parseLocalizedNumber, MAX_FILE_SIZE_BYTES, MAX_IMPORT_ROWS } from "./csv-import";
 import { berlinDate } from "./risk-rules";
+import { looksLikeOptionContract } from "./source-instrument";
 
 export type JournalEntry = {
   source_key: string; ticker: string; category: string; instrument_type: "stock" | "etf"; direction: "long" | "short";
@@ -80,6 +81,7 @@ export async function analyzeJournalCsv(text: string, baseCurrency = "EUR", now 
     const type = label(raw("instrument_type") || "stock");
     const instrumentType = ["stock", "aktie"].includes(type) ? "stock" : type === "etf" ? "etf" : null;
     if (!instrumentType) errors.push("Der Journalimport unterstützt Aktien und ETFs. Derivate benötigen geprüfte Vertragsdaten.");
+    if (looksLikeOptionContract(ticker)) errors.push("Optionskontrakt im Ticker erkannt. Kontraktzahl, Multiplikator und Vertragsdaten müssen vor der Übernahme geprüft werden.");
     let currency = raw("instrument_currency").toUpperCase(), currentFx = num("current_fx_to_base");
     if (sheetFormat && /^[A-Z]{6}$/.test(currency)) {
       const from = currency.slice(0, 3), to = currency.slice(3);
