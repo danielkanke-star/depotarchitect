@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { parseDate, parseDelimited, parseLocalizedNumber, MAX_FILE_SIZE_BYTES, MAX_IMPORT_ROWS } from "./csv-import";
 import { berlinDate } from "./risk-rules";
 import { looksLikeOptionContract } from "./source-instrument";
+import type { JournalSourceValues } from "./journal-source-reference";
 
 export type JournalEntry = {
   source_key: string; ticker: string; category: string; instrument_type: "stock" | "etf"; direction: "long" | "short";
@@ -9,6 +10,7 @@ export type JournalEntry = {
   instrument_currency: string; entry_fx_to_base: number | null; current_fx_to_base: number | null;
   current_price: number | null; stop_price: number | null; stop_updated_at: string | null; margin_rate: number | null;
   entry_margin_base: number | null; tradingview_url: string | null; notes: string | null;
+  source_reference?: JournalSourceValues;
   sales: { quantity: number; price: number; sale_date: string; fx_to_base: number | null; fx_source: string | null }[];
 };
 export type JournalImportRow = { row: number; ticker: string; errors: string[]; warnings: string[]; entry: JournalEntry | null };
@@ -131,6 +133,9 @@ export async function analyzeJournalCsv(text: string, baseCurrency = "EUR", now 
       entry_price: entry, entry_date: entryDate, instrument_currency: currency, entry_fx_to_base: entryFx, current_fx_to_base: currentFx,
       current_price: price, stop_price: stop, stop_updated_at: stopDate ? `${stopDate}T12:00:00+01:00` : null, margin_rate: margin, entry_margin_base: marginBase,
       tradingview_url: url, notes: [raw("notes"), !url && raw("tradingview_url") ? `TradingView: ${raw("tradingview_url")}` : ""].filter(Boolean).join("\n").slice(0,1000) || null, sales,
+      ...(sheetFormat && currentFx !== null ? {source_reference:{version:1 as const,capturedAt:now.toISOString(),documentId:null,sheet:"Google-Sheets-CSV",row:chosen.header+i+2,
+        ticker,category:raw("category")||null,direction,currency,units:new Decimal(quantity).mul(multiplier).toNumber(),entryPrice:entry,entryDate,
+        marginRate:margin,fxToBase:currentFx,sale:sales.length ? {units:new Decimal(sales[0].quantity).mul(multiplier).toNumber(),price:sales[0].price,date:sales[0].sale_date}:null,reportedPnlBase:null}} : {}),
     };
     rows.push({ row: chosen.header + i + 2, ticker, errors, warnings, entry: normalized });
   }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui";
+import { InfoTip } from "./info-tip";
 import { RiskIndicator, formatMoney, formatRatio } from "@/components/risk-indicator";
 import { calculateSizing, budgetTone, depotRiskBudget } from "@/lib/risk-rules";
 import { lookupPositionMarketData, type MarketDataLookupState } from "@/app/(dashboard)/depot/actions";
@@ -73,7 +74,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
     <div className="grid gap-3 sm:grid-cols-3">
       <Fact label="Nettoliquidität" value={formatMoney(initialNetLiquidity, baseCurrency)} />
       <Fact label="Bestehendes Stopprisiko" value={riskComplete ? formatMoney(existingRisk, baseCurrency) : "Unvollständig"} />
-      <Fact label="Berechnungsbasis nach Stopprisiko" value={initialNetLiquidity !== null && existingRisk !== null && riskComplete ? formatMoney(initialNetLiquidity - existingRisk, baseCurrency) : "Nicht berechenbar"} />
+      <Fact label="Verfügbare Berechnungsbasis" value={initialNetLiquidity !== null && existingRisk !== null && riskComplete ? formatMoney(initialNetLiquidity - existingRisk, baseCurrency) : "—"} />
     </div>
     {!riskComplete && riskIssues.length > 0 && <div role="status" className="rounded-xl border border-amber-500/40 p-4 text-sm">
       <p className="font-medium text-amber-200">Diese Angaben fehlen für die Stückzahlberechnung</p>
@@ -83,7 +84,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
       </li>)}</ul>
     </div>}
     <div className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
-      <Card><h2 className="mb-4 font-medium">Einstieg planen</h2>
+      <Card><div className="mb-5 flex items-center justify-between"><h2 className="font-medium">Einstieg planen</h2><InfoTip label="Einstiegsplanung">Beim ersten Laden wird der aktuelle Kurs als Einstieg übernommen. Du kannst einen eigenen Orderkurs und Stopp eintragen. Diese Planung führt keine Order aus.</InfoTip></div>
         <form onSubmit={event => { event.preventDefault(); if (!demo && term) load(term); }} className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
           <label>Ticker oder Unternehmen<input name="ticker" value={ticker} onChange={event => { request.current++; setTicker(event.target.value); }} autoComplete="off" spellCheck={false} maxLength={80} required placeholder="Zum Beispiel AMZN" /></label>
           <button disabled={pending || demo || !term} className="self-end rounded-xl border border-accent/50 px-4 py-2.5 text-accent disabled:opacity-50">{pending ? "Lädt …" : "Aktualisieren"}</button>
@@ -93,7 +94,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
           <div className="text-sm text-muted">{market?.name ?? ticker} · {market?.exchange ?? "Beispiel"} · {currency}</div>
           <div className="mt-1 text-2xl font-semibold tabular-nums">{formatMoney(quote, currency)}</div>
           <p className="mt-1 text-xs text-muted">{market ? `${market.dataStatus === "stale" ? "Älterer Kurs" : market.dataStatus === "live" ? "Echtzeitversorgung" : market.dataStatus === "manually_updated" ? "Depotbewertung · kein bestätigter Echtzeitkurs" : market.dataStatus === "end_of_day" ? "Schlusskurs" : "Verzögerter Kurs"} · ${market.sourceName?.startsWith("IBKR") ? "Abgerufen " : ""}${new Date(market.observedAt).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })} · ${market.sourceName ?? "Twelve Data"}` : "Fiktiver Beispielkurs"}</p>
-          {currency !== baseCurrency && <p className="mt-2 text-xs text-muted">{fx !== null ? `Automatische Umrechnung: 1 ${currency} = ${fx.toLocaleString("de-DE", { maximumFractionDigits: 6 })} ${baseCurrency}` : "Wechselkurs wird nicht geliefert."}{market?.fxSource ? ` · ${market.fxSource}` : ""}{market?.fxAsOf ? ` · Stand ${new Date(market.fxAsOf).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}` : ""}</p>}
+          {currency !== baseCurrency && <div className="mt-2 flex items-center gap-1.5 text-xs text-muted"><span>Automatische Umrechnung in {baseCurrency}</span><InfoTip label="Währungsumrechnung">{fx !== null ? `1 ${currency} = ${fx.toLocaleString("de-DE", { maximumFractionDigits: 6 })} ${baseCurrency}` : "Wechselkurs wird nicht geliefert."}{market?.fxSource ? ` · ${market.fxSource}` : ""}{market?.fxAsOf ? ` · Stand ${new Date(market.fxAsOf).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}` : ""}</InfoTip></div>}
           {market?.fxStale && <p className="mt-2 text-xs text-amber-300">Der Wechselkurs ist älter. Die Berechnung verwendet den angezeigten Referenzstand.</p>}
         </div>}
         {market && market.candidates.length > 1 && <label className="mb-4 block">Handelsplatz<select value={listingKey(market)} disabled={pending} onChange={event => load(term, event.target.value, market)}>
@@ -107,15 +108,15 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
           <button type="button" disabled={quote === null} onClick={() => setEntryOverride(null)} className="rounded-xl border border-border p-2 text-sm disabled:opacity-40">Aktuellen Kurs übernehmen</button>
           <button type="button" disabled={entry === null} onClick={() => setStopOverride(null)} className="rounded-xl border border-border p-2 text-sm disabled:opacity-40">Stopp 10 % {direction === "long" ? "unter" : "über"} Einstieg</button>
         </div>
-        <p className="mt-3 text-xs leading-5 text-muted">Der aktuelle Kurs wird beim ersten Laden als Einstieg übernommen. Du kannst einen eigenen Orderkurs und Stopp eintragen. Die Planung führt keine Order aus.</p>
         <details className="mt-4 border-t border-border pt-3"><summary className="cursor-pointer text-sm text-muted">Stückelung und Umrechnung anpassen</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Numeric label="Zulässige Stückelung" value={step} set={value => setStepOverride({ key: instrumentKey, value })} />
           <Numeric label="Multiplikator" value={multiplier} set={value => setMultiplierOverride({ key: instrumentKey, value })} />
           {currency !== baseCurrency && <Numeric label={`Referenzkurs · 1 ${currency} in ${baseCurrency}`} value={fx} set={value => setFxOverride({ key: fxKey, value })} />}
         </div><p className="mt-2 text-xs text-muted">Die erlaubte Stückelung hängt von deinem Handelszugang ab. Für Bruchstücke zum Beispiel 0,001 angeben.</p></details>
       </Card>
-      <Card><h2 className="mb-4 font-medium">Geplante Position</h2>
-        {issue && <p role="status" className="mb-4 rounded-xl border border-amber-500/40 p-3 text-sm text-amber-200">{issue}{riskIssues.length === 0 && result.error === "Das bestehende Stopprisiko ist unvollständig." && " Bitte fehlende Kurse, Wechselkurse oder Stopps im Depot ergänzen."}</p>}
+      <Card><div className="mb-5 flex items-center justify-between"><h2 className="font-medium">Geplante Position</h2><InfoTip label="Positionsberechnung">Berechnungsbasis = Nettoliquidität minus gesamtes bestehendes Stopprisiko. Davon wird dein Risiko je Trade angesetzt. Die Stückzahl wird auf die zulässige Stückelung abgerundet. Ein Stopp garantiert keine Verlustobergrenze.</InfoTip></div>
+        {issue && <div role="status" className={"mb-4 rounded-lg p-4 text-sm leading-6 "+(!term||pending?"border border-dashed border-border text-muted":"border border-amber-500/30 text-amber-200")}>{issue}{riskIssues.length === 0 && result.error === "Das bestehende Stopprisiko ist unvollständig." && " Bitte fehlende Kurse, Wechselkurse oder Stopps im Depot ergänzen."}</div>}
+        {computed&&<>
         <div className="grid gap-3 sm:grid-cols-2">
           <Fact label="Vorgesehener Risikobetrag" value={formatMoney(computed?.plannedRisk, baseCurrency)} />
           <Fact label="Stückzahl" value={computed ? computed.quantity.toLocaleString("de-DE", { maximumFractionDigits: 6 }) : "—"} />
@@ -128,7 +129,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
         {computed && computed.quantity === 0 && <p className="mt-3 text-sm text-amber-300">Innerhalb dieses Risikobetrags ist mit der gewählten Stückelung keine positive Menge möglich.</p>}
         {computed?.utilizationAfter != null && computed.utilizationAfter >= 1 && <p className="mt-3 text-sm text-amber-300">Das persönliche Depotrisikobudget wäre ausgeschöpft oder überschritten. Die Stückzahl wurde deshalb nicht automatisch gekappt.</p>}
         <details className="mt-5 border-t border-border pt-3"><summary className="cursor-pointer text-sm text-muted">Ergänzende Zielkurse</summary><div className="mt-3 space-y-2">{computed?.targets.map((target, i) => <div key={i} className="flex justify-between text-sm"><span>CRV {i + 1}:1</span><span>{target >= 0 ? formatMoney(target, currency) : "Kein positiver Zielkurs"}</span></div>)}</div></details>
-        <p className="mt-5 text-xs leading-5 text-muted">Berechnungsbasis = NetLiq − bestehendes Stopprisiko. Davon wird dein Risiko je Trade angesetzt. Stopprisiko ist ein Szenario mit Ausführung zum Stoppkurs, keine garantierte Verlustobergrenze.</p>
+        </>}
       </Card>
     </div>
   </div>;

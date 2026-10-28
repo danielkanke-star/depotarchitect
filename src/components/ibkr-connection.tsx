@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Card } from "./ui";
+import { InfoTip } from "./info-tip";
 import { createIbkrPairing, ibkrConnectionStatus, refreshIbkrMarketData, revokeIbkrConnection } from "@/app/(dashboard)/einstellungen/ibkr-actions";
 
 type Status = Awaited<ReturnType<typeof ibkrConnectionStatus>>;
@@ -25,9 +26,8 @@ export function IbkrConnection() {
     : !status.gatewayAuthenticated || !status.brokerageAuthenticated ? "Bitte bei IBKR anmelden"
     : status.attention ? "IBKR-Verbindung benötigt Aufmerksamkeit" : "Verbunden · ausschließlich lesend";
   return <Card>
-    <h2 className="font-medium">Interactive Brokers / Estably</h2>
+    <div className="flex items-center justify-between"><h2 className="font-medium">Interactive Brokers / Estably</h2><InfoTip label="Brokerverbindung">Der lokale Dienst übernimmt verfügbare Kurse und Depotbewertungen. Die Kursversorgung ändert keine Teilpositionen, Kategorien oder Stopps und sendet keine Orders. Datenpakete werden nicht automatisch gebucht.</InfoTip></div>
     <p role="status" className={`mt-3 text-sm ${online && status?.gatewayAuthenticated && !status.attention ? "text-emerald-300" : "text-amber-200"}`}>{label}</p>
-    <p className="mt-3 text-sm leading-6 text-muted">Der lokale Kursdienst übernimmt verfügbare Brokerkurse und Depotbewertungen. Deine Teilpositionen, Kategorien und Stopps bleiben von der Kursversorgung unabhängig. Es werden keine Orders gesendet und keine Datenpakete gebucht.</p>
     {status?.lastSeenAt && <p className="mt-2 text-xs text-muted">Letzte Verbindung: {new Date(status.lastSeenAt).toLocaleString("de-DE")}</p>}
     <div className="mt-4 flex flex-wrap gap-3">
       <button disabled={pending} className="rounded-xl border border-accent/50 px-4 py-2 text-sm text-accent disabled:opacity-50" onClick={() => start(async () => {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, Gauge, Menu, Settings, ShieldCheck, Table2, UserRoundCog, X } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 const items = [
   { href: "/cockpit", label: "Cockpit", icon: Gauge },
@@ -14,28 +14,20 @@ const items = [
   { href: "/konto/datenschutz", label: "Konto & Datenschutz", icon: ShieldCheck },
 ];
 
-export function AppShell({ children, profile, isAdmin = false }: { children: React.ReactNode; profile: string; isAdmin?: boolean }) {
+export function AppShell({ children, profile, isAdmin = false, accountAction }: { children: ReactNode; profile: string; isAdmin?: boolean; accountAction?: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const navigationItems = isAdmin
     ? [...items, { href: "/admin", label: "Administration", icon: UserRoundCog }]
     : items;
 
+  const links = (mobile=false) => <nav aria-label={mobile?"Mobile Hauptnavigation":"Hauptnavigation"}>{navigationItems.map(({href,label,icon:Icon},index)=><div key={href}>{index===0&&<div className="nav-section">Arbeitsbereich</div>}{index===4&&<div className="nav-section">Verwaltung</div>}<Link href={href} onClick={()=>mobile&&setOpen(false)} aria-current={pathname===href?"page":undefined} className="nav-item"><Icon size={16} strokeWidth={1.6}/>{label}</Link></div>)}</nav>;
+  const footer = <div className="sidebar-footer"><div className="profile-caption">Trading-Profil</div><div className="profile-value">{profile}</div>{accountAction}</div>;
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_75%_0%,#14352a_0,transparent_30%)] bg-background text-foreground lg:grid lg:grid-cols-[240px_1fr]">
-      <aside className="hidden min-h-screen border-r border-border/80 bg-sidebar/80 p-5 lg:block">
+    <div className="app-frame min-h-screen text-foreground">
+      <aside className="app-sidebar">
         <Brand />
-        <nav className="mt-10 space-y-1.5">
-          {navigationItems.map(({ href, label, icon: Icon }) => (
-            <Link key={href} href={href} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${pathname === href ? "border border-border bg-panel text-foreground" : "text-muted hover:bg-panel/50 hover:text-foreground"}`}>
-              <Icon size={17} />{label}
-            </Link>
-          ))}
-        </nav>
-        <div className="mt-10 rounded-xl border border-border bg-panel/60 p-3 text-xs text-muted">
-          <div className="mb-1 text-foreground">Aktives Profil</div>
-          {profile}
-        </div>
+        {links()}{footer}
       </aside>
 
       <div className="min-w-0">
@@ -45,22 +37,18 @@ export function AppShell({ children, profile, isAdmin = false }: { children: Rea
         </header>
         {open && (
           <div className="fixed inset-0 z-50 bg-black/60 lg:hidden" onClick={() => setOpen(false)}>
-            <aside className="h-full w-72 bg-sidebar p-5" onClick={(event) => event.stopPropagation()}>
-              <div className="flex items-center justify-between"><Brand /><button onClick={() => setOpen(false)}><X size={20} /></button></div>
-              <nav className="mt-8 space-y-2">
-                {navigationItems.map(({ href, label, icon: Icon }) => (
-                  <Link key={href} href={href} onClick={() => setOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm ${pathname === href ? "bg-panel text-foreground" : "text-muted"}`}><Icon size={17} />{label}</Link>
-                ))}
-              </nav>
+            <aside className="flex h-full w-72 flex-col bg-sidebar p-5" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between"><Brand /><button aria-label="Navigation schließen" onClick={() => setOpen(false)}><X size={20} /></button></div>
+              {links(true)}{footer}
             </aside>
           </div>
         )}
-        <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="app-main">{children}</main>
       </div>
     </div>
   );
 }
 
 function Brand() {
-  return <Link href="/cockpit" className="text-lg font-semibold tracking-tight">Depot<span className="text-accent">Architect</span></Link>;
+  return <Link href="/cockpit" className="app-brand"><span className="brand-mark"><BarChart3 size={16} strokeWidth={1.7}/></span><span>Depot<span className="text-accent">Architect</span></span></Link>;
 }

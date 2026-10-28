@@ -10,9 +10,8 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [portfolio, role] = await Promise.all([getOrCreatePortfolio(), getCurrentRole()]);
-  return <AppShell profile={portfolio.risk_profile} isAdmin={role === "admin"}>
+  return <AppShell profile={portfolio.risk_profile} isAdmin={role === "admin"} accountAction={<form action={signOut}><button>Abmelden</button></form>}>
     <MarketDataHeartbeat />
-    <div className="mb-4 flex justify-end"><form action={signOut}><button className="text-xs text-muted hover:text-foreground">Abmelden</button></form></div>
     {children}
   </AppShell>;
 }

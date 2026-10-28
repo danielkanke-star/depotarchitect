@@ -9,7 +9,7 @@ export function RiskIndicator({ tone, children, title }: { tone: RiskTone; child
   return <span title={title ?? labels[tone]} className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${tones[tone]}`}><span aria-hidden="true">{tone === "danger" ? "!" : tone === "high" || tone === "watch" ? "△" : tone === "good" ? "●" : "—"}</span><span className="sr-only">{labels[tone]}: </span>{children}</span>;
 }
 export function formatMoney(value: number | null | undefined, currency = "EUR") {
-  return value == null ? "Nicht berechenbar" : new Intl.NumberFormat("de-DE", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
+  return value == null || !Number.isFinite(value) ? "—" : new Intl.NumberFormat("de-DE", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
 }
 export function formatRatio(value: number | null | undefined) {
   return value == null ? "—" : new Intl.NumberFormat("de-DE", { style: "percent", maximumFractionDigits: 2 }).format(value);

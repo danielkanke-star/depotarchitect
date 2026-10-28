@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { allRows } from "./paged-query";
+import type { JournalSourceReference } from "./journal-source-reference";
 import type { Portfolio, PortfolioCapitalMovement, PortfolioCashBalance, PortfolioCategory, PortfolioFxRate, PortfolioImport, PortfolioSettings, Position, PositionSale, PositionPriceObservation } from "@/lib/database.types";
 
 export async function getUserId() {
@@ -38,6 +39,7 @@ export async function getPortfolioData(): Promise<{
   capitalMovements: PortfolioCapitalMovement[];
   sales: PositionSale[];
   journalAvailable: boolean;
+  journalReferences: JournalSourceReference[];
 }> {
   const supabase = await createClient();
   const portfolio = await getOrCreatePortfolio();
@@ -94,6 +96,8 @@ export async function getPortfolioData(): Promise<{
 
   const { data: sales, error: salesError } = await allRows((from,to)=>supabase.from("position_sales").select("*").eq("portfolio_id", portfolio.id).order("sale_date").order("id").range(from,to));
   if (salesError && !["42P01", "PGRST205"].includes(salesError.code)) throw new Error("Die Verkaufshistorie konnte nicht geladen werden.");
-  return { portfolio, settings, categories, positions: positions.filter(p => p.source_type !== "demo"), cashBalances, fxRates, sales: sales ?? [], journalAvailable: !salesError, priceObservations: [...centralObservations, ...(priceObservations ?? [])], latestImport, capitalMovements };
+  const {data:journalReferences,error:referenceError}=await allRows((from,to)=>supabase.from("journal_source_references").select("*").eq("portfolio_id",portfolio.id).order("id").range(from,to));
+  if(referenceError && !["42P01","PGRST205"].includes(referenceError.code)) throw new Error("Die Statistikreferenzen konnten nicht geladen werden.");
+  return { portfolio, settings, categories, positions: positions.filter(p => p.source_type !== "demo"), cashBalances, fxRates, sales: sales ?? [], journalAvailable: !salesError, journalReferences:journalReferences??[], priceObservations: [...centralObservations, ...(priceObservations ?? [])], latestImport, capitalMovements };
 }
 import "server-only";

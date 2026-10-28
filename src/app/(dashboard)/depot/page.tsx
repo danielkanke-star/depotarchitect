@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { looksLikeOptionContract } from "@/lib/source-instrument";
-import { Fragment } from "react";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { PositionJournalDetails } from "@/components/position-journal-details";
-import { RiskIndicator } from "@/components/risk-indicator";
-import { depotRiskBudget, positionRiskTone, stopAge } from "@/lib/risk-rules";
+import { depotRiskBudget, stopAge } from "@/lib/risk-rules";
+import { PositionRows } from "@/components/position-rows";
+import { PositionRiskCell } from "@/components/position-risk-cell";
+import { InfoTip } from "@/components/info-tip";
 import { PositionForm } from "@/components/position-form";
 import { DepotViewPreferences } from "@/components/depot-view-preferences";
-import { Badge, Card, PageHeader } from "@/components/ui";
+import { Card, PageHeader } from "@/components/ui";
 import { calculatePortfolio } from "@/lib/calculations/portfolio-calculations";
 import { positionToCalculationInput } from "@/lib/calculations/position-adapter";
 import type { CalculationMetric } from "@/lib/calculations/calculation-types";
@@ -16,11 +18,11 @@ import { isMarginAccount, remainingQuantity } from "@/lib/portfolio-entry";
 import { positionPriceSourceLabel, resolvePositionPrice } from "@/lib/price-resolution";
 import { deletePosition, refreshPositionPrice, saveCapitalMovement } from "./actions";
 
-type Params = { q?: string; category?: string; view?: string; edit?: string; add?: string; price?: string };
+type Params = { q?: string; category?: string; view?: string; edit?: string; add?: string; price?: string; sort?:string; page?:string };
 
 export default async function DepotPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
-  const { portfolio, categories, positions, fxRates, priceObservations, latestImport, capitalMovements, sales, journalAvailable } = await getPortfolioData();
+  const { portfolio, categories, positions, fxRates, priceObservations, latestImport, capitalMovements, sales, journalAvailable, journalReferences } = await getPortfolioData();
   const marketDataMappings = await getPositionMarketDataMappings(portfolio.id);
   const mappingByPositionId = new Map(marketDataMappings.map((mapping) => [mapping.position_id, mapping]));
   const activePositions = positions.filter((position) => position.status !== "closed");
@@ -45,6 +47,13 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
     const matchesView = view === "all" || (view === "closed" ? position.status === "closed" : position.status !== "closed");
     return matchesQuery && matchesCategory && matchesView;
   });
+  if(params.sort==="risk") filtered.sort((a,b)=>(calculatedById.get(b.id)?.stopRisk.value??-1)-(calculatedById.get(a.id)?.stopRisk.value??-1));
+  if(params.sort==="stop-age") filtered.sort((a,b)=>(stopAge(b.stop_updated_at).days??Infinity)-(stopAge(a.stop_updated_at).days??Infinity));
+  if(params.sort==="name") filtered.sort((a,b)=>a.ticker.localeCompare(b.ticker));
+  const pages=Math.max(1,Math.ceil(filtered.length/50));
+  const page=Math.max(1,Math.min(pages,Math.floor(Number(params.page)||1)));
+  const visible=filtered.slice((page-1)*50,page*50);
+  const pageLink=(target:number)=>"/depot?"+new URLSearchParams({q:params.q??"",category:params.category??"",view,sort:params.sort??"source",page:String(target)}).toString();
   const editPosition = positions.find((position) => position.id === params.edit && position.instrument_type !== "cash");
   const showPositionForm = params.add === "position" || Boolean(editPosition);
   const showMovementForm = params.add === "movement";
@@ -79,41 +88,40 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
 
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="font-medium">Positionen</h2><p className="mt-1 text-xs text-muted">Geschlossene und teilverkaufte Positionen bleiben nachvollziehbar.</p></div>
+        <div className="flex items-center gap-2"><h2 className="font-medium">Positionen</h2><InfoTip label="Positionsjournal">Geschlossene und teilverkaufte Positionen bleiben im Journal erhalten. Öffne eine Zeile für Details und Verkäufe.</InfoTip></div>
         <Link href="/import" className="text-xs text-accent">{latestImport ? "CSV-Import und Historie" : "Optionaler CSV-Import"}</Link>
       </div>
-      <form className="mb-4 grid gap-3 sm:grid-cols-[1fr_200px_170px_auto]">
-        <input name="q" placeholder="Ticker oder Unternehmen suchen" defaultValue={params.q ?? ""} />
-        <select name="category" defaultValue={params.category ?? ""}><option value="">Alle Kategorien</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
-        <select name="view" defaultValue={view}><option value="open">Offen</option><option value="closed">Geschlossen</option><option value="all">Alle</option></select>
-        <button className="rounded-xl border border-border px-4 py-2 text-sm">Anwenden</button>
+      <form className="table-toolbar">
+        <div className="relative min-w-[200px] flex-1"><Search size={15} className="pointer-events-none absolute left-3 top-3 text-muted"/><input name="q" aria-label="Positionen suchen" placeholder="Ticker oder Unternehmen suchen" defaultValue={params.q??""} className="pl-9"/></div>
+        <select name="category" aria-label="Kategorie" defaultValue={params.category??""}><option value="">Alle Kategorien</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
+        <select name="view" aria-label="Positionsstatus" defaultValue={view}><option value="open">Offene Positionen</option><option value="closed">Geschlossene Positionen</option><option value="all">Alle Positionen</option></select>
+        <select name="sort" aria-label="Positionen sortieren" defaultValue={params.sort??"source"}><option value="source">Meine Reihenfolge</option><option value="risk">Höchstes Risiko</option><option value="stop-age">Älteste Stopps</option><option value="name">Ticker A–Z</option></select>
+        <button className="toolbar-button">Anwenden</button>
       </form>
-      {filtered.length === 0 ? <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted">Keine passenden Positionen vorhanden.</div> : <DepotViewPreferences baseCurrency={portfolio.currency}><div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-sm">
-          <thead className="text-left text-xs text-muted"><tr><th className="pb-3">Position</th><th>Kategorie</th><th>Status</th><th>Menge</th><th>Einstiegskurs</th><th>Aktueller Kurs</th><th>Marktwert</th><th className="depot-column-base-market-value">Marktwert {portfolio.currency}</th><th className="depot-column-risk">Risiko</th><th className="depot-column-margin">Margin</th><th className="depot-column-price-details">Kursdetails</th><th>Aktionen</th></tr></thead>
-          <tbody>{filtered.map((position) => {
-            const result = calculatedById.get(position.id);
-            const closed = position.status === "closed";
-            const partial = !closed && Number(position.sold_quantity ?? 0) > 0;
-            const legacyCash = position.instrument_type === "cash";
-            const resolvedPrice = pricesByPositionId.get(position.id) ?? null;
-            return <Fragment key={position.id}><tr className="border-t border-border/60 align-top">
-              <td className="py-3"><div className="font-medium">{position.ticker}</div>{position.instrument_name && <div className="text-xs text-foreground/80">{position.instrument_name}</div>}<div className="text-xs text-muted">{instrumentLabel(position.instrument_type, position.ticker)} · {position.instrument_currency}</div>{legacyCash && <div className="mt-1 text-[10px] text-amber-300">Legacy-Cash · nur lesbar</div>}</td>
-              <td>{categories.find((category) => category.id === position.category_id)?.name ?? "Keine"}</td>
-              <td><Badge tone={closed ? "neutral" : partial ? "warn" : "good"}>{closed ? "Geschlossen" : partial ? "Teilverkauft" : "Offen"}</Badge></td>
-              <td><div>{(closed ? Number(position.quantity) : remainingQuantity(Number(position.quantity), position.sold_quantity)).toLocaleString("de-DE", { maximumFractionDigits: 6 })}</div>{partial && <div className="text-xs text-muted">von {Number(position.quantity).toLocaleString("de-DE")} beim Einstieg</div>}</td>
-              <td>{Number(position.entry_price).toLocaleString("de-DE", { maximumFractionDigits: 6 })} {position.instrument_currency}<div className="text-xs text-muted">{position.entry_date ?? "Datum unbekannt"}</div></td>
-              <td>{closed || legacyCash || !resolvedPrice ? "–" : <div>{resolvedPrice.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {resolvedPrice.currency}{["google_sheets", "custom_csv"].includes(resolvedPrice.sourceType) && <div className="mt-1 text-xs text-amber-200">Tabellenreferenz · kein automatischer Börsenkurs</div>}</div>}</td>
-              <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueInstrument} format={(value) => formatInstrumentMoney(value, position.instrument_currency)} missing="Aktueller Kurs fehlt" />}</td>
-              <td className="depot-column-base-market-value">{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueBase} format={(value) => money.format(value)} missing={result?.positionValueInstrument.value == null ? "Aktueller Kurs fehlt" : "Wechselkurs fehlt"} />}</td>
-              <td className="depot-column-risk">{closed || legacyCash ? "–" : <div className="space-y-1"><RiskIndicator tone={positionRiskTone(result?.riskToNetLiquidity.value ?? null, portfolio.risk_profile)}><SimpleMetric metric={result?.stopRisk} format={(value) => money.format(value)} missing="Risiko unvollständig" /></RiskIndicator><div className="text-xs text-muted">Stopp: {position.stop_price_native ?? position.stop_price ?? "fehlt"}</div><RiskIndicator tone={stopAge(position.stop_updated_at).tone}>{stopAge(position.stop_updated_at).label}</RiskIndicator></div>}</td>
-              <td className="depot-column-margin">{!isMarginAccount(portfolio.account_type) ? "Nicht zutreffend" : closed || legacyCash ? "–" : <SimpleMetric metric={result?.marginRequirement} format={(value) => money.format(value)} missing="Noch nicht hinterlegt" />}</td>
-              <td className="depot-column-price-details">{closed || legacyCash || !resolvedPrice ? "–" : <PriceDetails price={resolvedPrice} exchange={mappingByPositionId.get(position.id)?.exchange ?? null} micCode={mappingByPositionId.get(position.id)?.mic_code ?? null} />}</td>
-              <td><div className="flex flex-wrap items-center gap-3">{!legacyCash && !closed && <form action={refreshPositionPrice}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-accent">Kurs aktualisieren</button></form>}{!legacyCash && <Link href={`/depot?edit=${position.id}`} className="text-xs text-accent">Bearbeiten</Link>}{Number(position.sold_quantity ?? 0) === 0 && <form action={deletePosition}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-red-300">Löschen</button></form>}</div></td>
-            </tr>{!legacyCash && <tr><td colSpan={12}><PositionJournalDetails position={position} result={result} sales={sales} baseCurrency={portfolio.currency} profile={portfolio.risk_profile} available={journalAvailable} /></td></tr>}</Fragment>;
-          })}</tbody>
-        </table>
+      {filtered.length===0?<div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-muted">Keine passenden Positionen.</div>:<DepotViewPreferences baseCurrency={portfolio.currency}><div className="-mx-2 overflow-x-auto">
+        <table className="financial-table min-w-[960px]"><thead><tr><th>Position</th><th className="number">Bestand</th><th className="number">Einstieg</th><th className="number">Aktueller Kurs</th><th className="depot-column-risk"><span className="inline-flex items-center gap-1">Stopp & Risiko <InfoTip label="Stopp und Risiko">Risiko ab dem aktuellen Kurs bis zur hinterlegten Stopporder, in der Handelswährung. Darunter die Euro-Umrechnung und der NetLiq-Anteil. Ein Stopp ist keine garantierte Verlustobergrenze. Das Alter bezieht sich auf die letzte tatsächliche Stoppänderung.</InfoTip></span></th><th className="number">Positionswert</th><th className="number depot-column-margin">Margin</th><th className="depot-column-price-details">Kursquelle</th><th><span className="sr-only">Aktionen</span></th></tr></thead>
+          <tbody>{visible.map(position=>{
+            const result=calculatedById.get(position.id),closed=position.status==="closed",partial=!closed&&Number(position.sold_quantity??0)>0,legacyCash=position.instrument_type==="cash";
+            const resolvedPrice=pricesByPositionId.get(position.id)??null;
+            const category=categories.find(c=>c.id===position.category_id)?.name??"Ohne Kategorie";
+            return <PositionRows key={position.id} id={position.id} ticker={position.ticker} colSpan={9}
+              identity={<><strong>{position.ticker}</strong>{position.instrument_name&&<div className="secondary max-w-[200px] truncate" title={position.instrument_name}>{position.instrument_name}</div>}<div className="mt-1.5 flex flex-wrap gap-1"><span className="table-kind">{category}</span><span className="table-kind">{instrumentLabel(position.instrument_type,position.ticker)}</span>{closed&&<span className="table-kind">Geschlossen</span>}{partial&&<span className="table-kind text-amber-200">Teilverkauft</span>}</div></>}
+              cells={<>
+                <td className="number"><span className="font-medium">{(closed?Number(position.quantity):remainingQuantity(Number(position.quantity),position.sold_quantity)).toLocaleString("de-DE",{maximumFractionDigits:6})}</span>{position.instrument_type==="option"&&<div className="secondary">Kontrakt · ×{position.multiplier}</div>}{partial&&<div className="secondary">von {Number(position.quantity).toLocaleString("de-DE")}</div>}</td>
+                <td className="number">{formatInstrumentPrice(Number(position.entry_price),position.instrument_currency)}<div className="secondary">{position.entry_date?formatDate(position.entry_date):"Datum offen"}</div></td>
+                <td className="number">{closed||legacyCash||!resolvedPrice?"—":<><span className="font-medium">{formatInstrumentPrice(resolvedPrice.price,resolvedPrice.currency)}</span>{["google_sheets","custom_csv"].includes(resolvedPrice.sourceType)&&<div className="secondary">Tabellenreferenz</div>}</>}</td>
+                <td className="depot-column-risk risk-cell">{closed||legacyCash?"—":<PositionRiskCell position={position} result={result} baseCurrency={portfolio.currency} profile={portfolio.risk_profile}/>}</td>
+                <td className="number">{closed||legacyCash?"—":<><SimpleMetric metric={result?.positionValueInstrument} format={v=>formatInstrumentMoney(v,position.instrument_currency)} missing="Kurs offen"/>{position.instrument_currency!==portfolio.currency&&<div className="secondary depot-column-base-market-value"><SimpleMetric metric={result?.positionValueBase} format={v=>money.format(v)} missing="Umrechnung offen"/></div>}</>}</td>
+                <td className="number depot-column-margin">{!isMarginAccount(portfolio.account_type)||closed||legacyCash?"—":<SimpleMetric metric={result?.marginRequirement} format={v=>money.format(v)} missing="Margin offen"/>}</td>
+                <td className="depot-column-price-details">{closed||legacyCash||!resolvedPrice?"—":<PriceDetails price={resolvedPrice} exchange={mappingByPositionId.get(position.id)?.exchange??null} micCode={mappingByPositionId.get(position.id)?.mic_code??null}/>}</td>
+                <td><InfoTip menu label={"Aktionen für "+position.ticker}>{!legacyCash&&!closed&&<form action={refreshPositionPrice}><input type="hidden" name="id" value={position.id}/><button>Kurs aktualisieren</button></form>}{!legacyCash&&<Link href={"/depot?edit="+position.id}>Position bearbeiten</Link>}{Number(position.sold_quantity??0)===0&&<form action={deletePosition}><input type="hidden" name="id" value={position.id}/><button className="text-red-300">Position löschen</button></form>}</InfoTip></td>
+              </>}
+              details={legacyCash?null:<PositionJournalDetails bare position={position} result={result} sales={sales} baseCurrency={portfolio.currency} profile={portfolio.risk_profile} available={journalAvailable} references={journalReferences}/>}
+            />;
+          })}</tbody></table>
       </div></DepotViewPreferences>}
+      <div className="table-pagination"><span>{filtered.length} {filtered.length===1?"Teilposition":"Teilpositionen"}{filtered.length>50?" · "+((page-1)*50+1)+"–"+Math.min(page*50,filtered.length):""}</span>{pages>1&&<div className="flex items-center gap-3">{page>1?<Link aria-label="Vorherige Positionen" href={pageLink(page-1)} className="rounded-lg border border-border p-2"><ChevronLeft size={15}/></Link>:<span className="p-2 opacity-30"><ChevronLeft size={15}/></span>}<span>{page} / {pages}</span>{page<pages?<Link aria-label="Nächste Positionen" href={pageLink(page+1)} className="rounded-lg border border-border p-2"><ChevronRight size={15}/></Link>:<span className="p-2 opacity-30"><ChevronRight size={15}/></span>}</div>}</div>
+
     </Card>
 
     <div id="capital-movements" className="mt-4"><Card>
@@ -141,6 +149,10 @@ function formatInstrumentMoney(value: number, currency: string | null) {
     return `${value.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${normalizedCurrency ?? ""}`.trim();
   }
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: normalizedCurrency, currencyDisplay: "code", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
+function formatInstrumentPrice(value:number,currency:string|null) {
+  return currency?new Intl.NumberFormat("de-DE",{style:"currency",currency,currencyDisplay:"code",minimumFractionDigits:2,maximumFractionDigits:6}).format(value):"—";
 }
 
 function PriceDetails({

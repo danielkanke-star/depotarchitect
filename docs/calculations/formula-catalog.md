@@ -78,3 +78,7 @@ Aktuelle Kurse und Wechselkurse führen jeweils Wert, Quelle, Zeitpunkt und Stat
 - `positions.fx_to_base`: nur Rückwärtskompatibilität; aktuelle Berechnungen verwenden `current_fx_to_base`.
 - `positions.market_value` und `positions.risk_amount`: Import-/Kompatibilitätscaches; die Berechnungsengine bleibt maßgeblich.
 - `portfolios.margin_used_pct` und `portfolios.risk_budget_used_pct`: Legacyfelder; letzteres bleibt bis zur fachlichen Definition in Meilenstein 2D ungenutzt.
+
+## Historische Journalreferenzen
+
+Für aus der bisherigen Tabelle übernommene Abschlüsse können feste, getrennte Quellenreferenzen fehlende historische Werte ergänzen. Sie werden nicht in kanonische Broker-Ausführungsdaten umbenannt. Berechnungen, Matching-Regeln, Abdeckung und der Umgang mit fehlenden Verkaufstagen stehen in [Journal-Quellenabgleich](../operations/journal-source-recovery.md). Die Hauptkennzahl ist die Marginrendite vor Kosten; ihre Basis bleibt nach der Erfassung unverändert. Echte historische Ausführungs-FX und Einstiegsmargins haben Vorrang.
