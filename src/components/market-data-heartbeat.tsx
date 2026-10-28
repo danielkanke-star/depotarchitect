@@ -3,19 +3,33 @@
 import { startTransition, useEffect, useRef, useState } from "react";
 import { refreshActiveMarketData } from "@/app/(dashboard)/depot/actions";
 import { refreshPortfolioFx } from "@/app/(dashboard)/depot/journal-actions";
+import { refreshIbkrMarketData } from "@/app/(dashboard)/einstellungen/ibkr-actions";
+import { useRouter } from "next/navigation";
 
 const ACTIVE_REFRESH_TICK_MS = 12_000;
 type RefreshStatus = Awaited<ReturnType<typeof refreshActiveMarketData>>["status"];
 
 export function MarketDataHeartbeat() {
+  const router = useRouter();
   const pendingRef = useRef(false);
   const nextQuoteRef = useRef(0);
   const nextFxRef = useRef(0);
+  const nextIbkrRef = useRef(0);
   const [status, setStatus] = useState<RefreshStatus | null>(null);
+  const [ibkrAttention, setIbkrAttention] = useState<string | null>(null);
+  const [brokerComplete, setBrokerComplete] = useState(false);
 
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState !== "visible" || pendingRef.current) return;
+      if (Date.now() >= nextIbkrRef.current) {
+        nextIbkrRef.current = Date.now() + 30_000;
+        void refreshIbkrMarketData().then(result => {
+          setIbkrAttention(result.attention);
+          setBrokerComplete(result.complete);
+          if (result.updated) router.refresh();
+        }).catch(() => { /* Existing quote sources remain available. */ });
+      }
       if (Date.now() >= nextFxRef.current) {
         nextFxRef.current = Date.now() + 300_000;
         void refreshPortfolioFx().catch(() => { /* Stored currency rates remain visible. */ });
@@ -43,9 +57,12 @@ export function MarketDataHeartbeat() {
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("focus", refresh);
     };
-  }, []);
+  }, [router]);
 
-  const message = marketDataStatusMessage(status);
+  const message = ibkrAttention === "device_offline" ? "Der IBKR-Kursdienst auf deinem Mac ist nicht erreichbar. Neue Brokerkurse werden erst nach seinem Start geladen."
+    : ibkrAttention === "login_required" || ibkrAttention === "gateway_offline" ? "Bitte den lokalen IBKR-Gateway starten und erneut beim Broker anmelden."
+    : ibkrAttention ? "Die IBKR-Verbindung benötigt Aufmerksamkeit. Bitte unter Einstellungen den Verbindungsstatus prüfen."
+    : brokerComplete && ["provider-disabled", "mapping-required", "budget", "rate-limited"].includes(status ?? "") ? null : marketDataStatusMessage(status);
   return message ? <div role="status" aria-live="polite" className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
     <span className="font-medium">Aktuelle Kurse:</span> {message}
   </div> : null;

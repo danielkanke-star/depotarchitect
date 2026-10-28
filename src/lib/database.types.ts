@@ -37,6 +37,17 @@ type Table<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
 export type Database = {
   public: {
     Tables: {
+      ibkr_connections: Table<{
+        id: string; user_id: string; portfolio_id: string; state: "pending" | "paired" | "revoked";
+        gateway_authenticated: boolean; brokerage_authenticated: boolean; last_seen_at: string | null;
+        last_requested_at: string | null; last_error: string | null; created_at: string;
+      }>;
+      ibkr_quotes: Table<{ connection_id: string; user_id: string; conid: number; quote: Json; fetched_at: string }>;
+      ibkr_quote_requests: Table<{
+        id: string; connection_id: string; user_id: string; query: string; conid: number | null;
+        state: "pending" | "processing" | "completed"; result: Json | null; created_at: string; expires_at: string;
+        lease: string | null; lease_until: string | null;
+      }>;
       position_sales: Table<{
         id: string; user_id: string; portfolio_id: string; position_id: string;
         quantity: number; price: number; sale_date: string; fx_to_base: number | null;
@@ -291,6 +302,13 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      create_ibkr_pairing: { Args: { target_portfolio: string; code_hash: string }; Returns: string };
+      revoke_ibkr_connection: { Args: { target_portfolio: string }; Returns: undefined };
+      mark_ibkr_active: { Args: { target_portfolio: string }; Returns: undefined };
+      request_ibkr_quote: { Args: { target_portfolio: string; search_query: string; contract_id?: number | null }; Returns: string };
+      ibkr_bridge_pair: { Args: { pairing_code: string; device_token: string }; Returns: string };
+      ibkr_bridge_poll: { Args: { device_token: string; gateway_ok: boolean; brokerage_ok: boolean; error_code?: string | null; quotes?: Json }; Returns: Json };
+      ibkr_bridge_complete: { Args: { device_token: string; request_id: string; request_lease: string; response: Json }; Returns: boolean };
       claim_portfolio_fx_refresh: { Args: { target_portfolio: string; from_currency: string; to_currency: string }; Returns: string | null };
       finish_portfolio_fx_refresh: { Args: { lease: string; wait_seconds: number }; Returns: undefined };
       correct_position_sale: { Args: { target_sale: string; sale_quantity: number; sale_price_native: number; executed_on: string; sale_fx: number | null; correction_reason: string }; Returns: string };

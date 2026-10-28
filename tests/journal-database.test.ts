@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { beforeAll, beforeEach, afterEach, afterAll, describe, expect, it } from "vitest";
 
 // Real SQL/RLS in an isolated WASM PostgreSQL. Auth is a minimal test fixture;
@@ -134,5 +135,63 @@ describe("journal SQL guarantees", () => {
     const id = (await db.query<{id:string}>("select public.initialize_default_portfolio() as id")).rows[0].id;
     expect((await db.query<{net_liquidity:null}>("select net_liquidity from portfolios where id=$1",[id])).rows[0].net_liquidity).toBeNull();
     expect((await db.query("select * from positions")).rows).toHaveLength(0);
+  });
+});
+
+describe("IBKR paired-device SQL boundaries", () => {
+  const code = "c".repeat(43), token = "t".repeat(43);
+  const codeHash = createHash("sha256").update(code).digest("hex");
+  async function paired() {
+    const id = (await db.query<{id:string}>("select public.create_ibkr_pairing($1,$2) as id", [portfolio, codeHash])).rows[0].id;
+    await db.exec("set local role anon");
+    expect((await db.query<{id:string}>("select public.ibkr_bridge_pair($1,$2) as id", [code, token])).rows[0].id).toBe(id);
+    await db.exec("set local role authenticated");
+    return id;
+  }
+  it("allows one-time pairing, hashes credentials and denies direct credential access", async () => {
+    await paired();
+    await rejected("select * from app_private.ibkr_credentials");
+    await rejected("select public.ibkr_bridge_pair($1,$2)", [code, "x".repeat(43)]);
+    await rejected("select public.create_ibkr_pairing($1,$2)", [secondPortfolio, codeHash]);
+    await rejected("update public.ibkr_connections set state='paired'");
+    await db.exec("set local role anon");
+    await rejected("select * from public.ibkr_quotes");
+    await rejected("select public.ibkr_bridge_poll($1,true,true)", ["x".repeat(43)]);
+  });
+  it("leases quote requests and only accepts the owning device's current lease", async () => {
+    await paired();
+    const job = (await db.query<{id:string}>("select public.request_ibkr_quote($1,'TEST') as id", [portfolio])).rows[0].id;
+    await db.exec("set local role anon");
+    const first = (await db.query<{result:{jobs:{id:string;lease:string}[]}}>("select public.ibkr_bridge_poll($1,true,true) as result", [token])).rows[0].result;
+    expect(first.jobs).toHaveLength(1); expect(first.jobs[0].id).toBe(job);
+    expect((await db.query<{result:{jobs:unknown[]}}>("select public.ibkr_bridge_poll($1,true,true) as result", [token])).rows[0].result.jobs).toHaveLength(0);
+    expect((await db.query<{ok:boolean}>("select public.ibkr_bridge_complete($1,$2,gen_random_uuid(),'{\"status\":\"not_subscribed\"}') as ok", [token,job])).rows[0].ok).toBe(false);
+    expect((await db.query<{ok:boolean}>("select public.ibkr_bridge_complete($1,$2,$3,'{\"status\":\"not_subscribed\"}') as ok", [token,job,first.jobs[0].lease])).rows[0].ok).toBe(true);
+    await db.exec("set local role authenticated");
+    expect((await db.query<{state:string}>("select state from public.ibkr_quote_requests where id=$1",[job])).rows[0].state).toBe("completed");
+    await db.query("select set_config('request.jwt.claim.sub',$1,true)",[other]);
+    expect((await db.query("select * from public.ibkr_quote_requests")).rows).toHaveLength(0);
+    await rejected("select public.request_ibkr_quote($1,'TEST')", [portfolio]);
+  });
+  it("stores quote observations independently of positions and immediately honors revocation", async () => {
+    await seed(); await paired();
+    const payload = JSON.stringify([{conid:123,symbol:"TEST",currency:"EUR",assetClass:"STK",quality:"broker_valuation",price:12.5,multiplier:1,observedAt:new Date().toISOString(),fetchedAt:new Date().toISOString()}]);
+    await db.exec("set local role anon");
+    await db.query("select public.ibkr_bridge_poll($1,true,true,null,$2::jsonb)",[token,payload]);
+    await db.exec("set local role authenticated");
+    expect((await db.query("select * from public.ibkr_quotes")).rows).toHaveLength(1);
+    expect(Number((await db.query<{quantity:string}>("select quantity from public.positions where id=$1",[position])).rows[0].quantity)).toBe(10);
+    await db.query("select public.revoke_ibkr_connection($1)",[portfolio]);
+    await db.exec("set local role anon");
+    await rejected("select public.ibkr_bridge_poll($1,true,true)",[token]);
+  });
+  it("rejects expired pairing codes and malformed quote payloads", async () => {
+    await paired();
+    await db.exec("set local role anon");
+    await rejected("select public.ibkr_bridge_poll($1,true,true,null,'[{\"conid\":123,\"price\":1}]'::jsonb)",[token]);
+    await db.exec("set local role authenticated");
+    await db.query("select public.create_ibkr_pairing($1,$2)",[portfolio,codeHash]);
+    await db.exec("reset role; update app_private.ibkr_credentials set pairing_expires_at=now()-interval '1 second'; set local role anon");
+    await rejected("select public.ibkr_bridge_pair($1,$2)",[code,token]);
   });
 });

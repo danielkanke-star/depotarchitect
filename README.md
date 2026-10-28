@@ -69,4 +69,8 @@ npm run grant-admin -- --email konkrete-adresse@example.com
 
 Das Skript prüft den vorhandenen Supabase-Auth-Benutzer und vergibt Rolle plus Audit-Eintrag atomar. Eine Wiederholung erzeugt weder eine zweite Rolle noch einen zweiten Vergabe-Audit. Anschließend muss dieser Benutzer unter `/mfa/setup` Supabase TOTP einrichten. Datenschutz- und Betriebsarbeitsstände liegen unter `docs/privacy/`.
 
-Neue Konten starten ohne Beispielbestände und ohne erfundene Nettoliquidität. Frühere Demozeilen bleiben gespeichert, werden aber aus dem echten Depotbereich herausgehalten. Die Brokeranbindung ist eine spätere gesonderte Aufgabe.
+Neue Konten starten ohne Beispielbestände und ohne erfundene Nettoliquidität. Frühere Demozeilen bleiben gespeichert, werden aber aus dem echten Depotbereich herausgehalten.
+
+## Lesende IBKR-Kursverbindung
+
+Zusätzlich zum ersten brauchbaren Stand ist eine gesondert beauftragte, ausschließlich lesende IBKR-/Estably-Kursversorgung vorhanden. Ein lokal angemeldeter offizieller Gateway und ein gekoppelter Dienst liefern verfügbare Kurse beziehungsweise gekennzeichnete Depotbewertungen. Die Web-App übernimmt keine Orders, Mengenänderungen oder Kategoriezuordnungen automatisch. Einrichtung, Datenqualität und Grenzen: [IBKR-Verbindung](docs/operations/ibkr-connection.md).

@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const { supabase, userId } = await requireUser();
-  const [profile, portfolios, categories, positions, priceObservations, marketDataMappings, cashBalances, capitalMovements, settings, legalAcceptances, importHistory, sales, saleRevisions, fxRates] = await Promise.all([
+  const [profile, portfolios, categories, positions, priceObservations, marketDataMappings, cashBalances, capitalMovements, settings, legalAcceptances, importHistory, sales, saleRevisions, fxRates, ibkrConnections, ibkrQuotes, ibkrRequests] = await Promise.all([
     supabase.from("user_profiles").select("user_id, account_status, plan, created_at, updated_at, last_seen_at, onboarding_completed_at, scheduled_deletion_at").eq("user_id", userId).single(),
     supabase.from("portfolios").select("*").eq("user_id", userId),
     supabase.from("portfolio_categories").select("*").eq("user_id", userId),
@@ -20,6 +20,9 @@ export async function GET() {
     allRows((from,to)=>supabase.from("position_sales").select("*").eq("user_id", userId).order("id").range(from,to)),
     allRows((from,to)=>supabase.from("position_sale_revisions").select("*").eq("user_id", userId).order("id").range(from,to)),
     supabase.from("portfolio_fx_rates").select("*").eq("user_id", userId),
+    supabase.from("ibkr_connections").select("*").eq("user_id", userId),
+    allRows((from,to)=>supabase.from("ibkr_quotes").select("*").eq("user_id", userId).order("connection_id").order("conid").range(from,to)),
+    allRows((from,to)=>supabase.from("ibkr_quote_requests").select("id,connection_id,user_id,query,conid,state,result,created_at,expires_at").eq("user_id", userId).order("id").range(from,to)),
   ]);
   const queries = [profile, portfolios, categories, positions, cashBalances, capitalMovements, settings, legalAcceptances, importHistory, fxRates];
   const priceTableUnavailable = isMissingTable(priceObservations.error);
@@ -30,6 +33,7 @@ export async function GET() {
     || (saleRevisions.error && !isMissingTable(saleRevisions.error))
     || (priceObservations.error && !priceTableUnavailable)
     || (marketDataMappings.error && !mappingTableUnavailable)
+    || [ibkrConnections, ibkrQuotes, ibkrRequests].some(q => q.error && !isMissingTable(q.error))
   ) {
     return Response.json({ error: "Der Export konnte nicht erstellt werden." }, { status: 500 });
   }
@@ -51,6 +55,9 @@ export async function GET() {
     settings: settings.data ?? [],
     legal_acceptances: legalAcceptances.data ?? [],
     import_history: importHistory.data ?? [],
+    ibkr_connections: ibkrConnections.data ?? [],
+    ibkr_quotes: ibkrQuotes.data ?? [],
+    ibkr_quote_requests: ibkrRequests.data ?? [],
   };
 
   return new Response(JSON.stringify(body, null, 2), {
