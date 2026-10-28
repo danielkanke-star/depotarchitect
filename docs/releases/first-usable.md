@@ -56,3 +56,11 @@ Lokale Prüfung dieser Korrektur: 153 Vitest-Tests, ESLint und TypeScript erfolg
 Es wurde kein zusätzlicher Auth-Benutzer angelegt. Die automatische Freigabe lehnte eine direkte Auth-Testfixture in Production ab. Die normale Registrierung bleibt geschlossen. Ein vollständiger Browserdurchlauf mit bestehendem Konto setzt die eigene Anmeldung des Benutzers voraus; diese Prüfung darf nicht mit synthetischen Vorschauwerten als erledigt bezeichnet werden.
 
 Der reale Kurs-Smoke-Test des Produktionsbuilds `depotarchitect-nitiyts49-dk-stars.vercel.app` war erfolgreich: AMZN/USD, MIC-Zuordnung, Kurszeitpunkt, aktuelles USD/EUR und die CHF/EUR-Tagesreferenz wurden geprüft. Mit synthetischer Nettoliquidität von 100.000 EUR, 10.000 EUR bestehendem Stopprisiko, 1,2 % Risiko je Trade und 10 % Stoppabstand ergibt der Test maximal 1.080 EUR Risiko; die berechnete Stückzahl auf 0,001 gerundet bleibt darunter. Keine privaten Depotwerte wurden für diesen Test übertragen.
+
+## Nachprüfung in einer angemeldeten Sitzung
+
+Der automatische Kursabruf wurde im bestehenden Konto im Browser bestätigt: Tickereingabe ohne Suchklick, Kurs und Handelswährung, automatische Euro-Umrechnung, Kursübernahme, eigener Einstiegskurs sowie der richtungsabhängige 10-%-Stopp funktionieren. Beim Tickerwechsel werden Werte des vorherigen Instruments entfernt und anschließend die neue Notierung übernommen.
+
+Bei unvollständigem bestehendem Stopprisiko bleibt die Stückzahl wie vorgesehen gesperrt. Der Rechner nennt jetzt die betroffenen Teilpositionen samt fehlenden Angaben und verlinkt direkt auf deren Bearbeitung. Die Freigabe einer Stückzahl darf erst erfolgen, wenn die tatsächlichen Stoppangaben vollständig sind; eine berechenbare Teilsumme darf den vollständigen Risikoabzug nicht ersetzen.
+
+Bei Altbeständen ohne Einstiegsdatum bleibt das Datumsfeld leer. Die Pflege eines Stopps verlangt dort kein erfundenes Einstiegsdatum. Für neue Käufe ist ein gültiges Datum erforderlich; bekannte historische Daten dürfen nicht entfernt werden. Die serverseitige Validierung wird nach der Eigentumsprüfung aufgerufen. Zusätzliche Tests prüfen diese drei Fälle und ungültige beziehungsweise zukünftige Daten. Bei dieser Browserprüfung wurden keine Bestandspositionen verändert.

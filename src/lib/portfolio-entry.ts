@@ -2,6 +2,13 @@ import type { PortfolioAccountType } from "@/lib/database.types";
 
 export type CapitalMovementType = "deposit" | "withdrawal";
 
+// A missing historical date must not force invented data when maintaining a legacy stop.
+export function validatePositionEntryDate(value: string | null, existing: { entry_date: string | null } | null, today: string) {
+  if (value !== null && (!isIsoDate(value) || value > today)) throw new Error("Ein gültiges Einstiegsdatum bis heute ist erforderlich.");
+  if (value === null && (!existing || existing.entry_date !== null)) throw new Error("Das Einstiegsdatum ist erforderlich. Ein bekanntes Datum darf nicht entfernt werden.");
+  return value;
+}
+
 export function isMarginAccount(accountType: PortfolioAccountType) {
   return accountType === "margin_account" || accountType === "portfolio_margin_account";
 }

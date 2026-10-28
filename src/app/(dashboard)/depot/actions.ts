@@ -9,7 +9,7 @@ import { isMissingMarketDataTable } from "@/lib/market-data-mappings";
 import { getTwelveDataQuote, searchTwelveData } from "@/lib/market-data-providers/twelve-data";
 import type { TwelveDataInstrument } from "@/lib/market-data-providers/twelve-data-core";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
-import { normalizeMarginInput, normalizePositionSale, validateCapitalMovement } from "@/lib/portfolio-entry";
+import { normalizeMarginInput, normalizePositionSale, validateCapitalMovement, validatePositionEntryDate } from "@/lib/portfolio-entry";
 import { resolveWritableInstrumentType } from "@/lib/portfolio-write-policy";
 import { createClient } from "@/lib/supabase/server";
 import Decimal from "decimal.js";
@@ -176,7 +176,6 @@ export async function savePosition(formData: FormData) {
   const notes = text(formData, "notes") || null;
   const marketDataMic = text(formData, "market_data_mic").toUpperCase() || null;
   const entryDate = optionalIsoDate(text(formData, "entry_date"), "Das Einstiegsdatum ist ungültig.");
-  if (!entryDate || entryDate > berlinDate()) throw new Error("Ein gültiges Einstiegsdatum bis heute ist erforderlich.");
 
   if (!ticker || ticker.length > 40 || !DIRECTIONS.has(direction) || !INSTRUMENT_TYPES.has(requestedInstrumentType)) {
     throw new Error("Die Positionsangaben sind ungültig.");
@@ -205,6 +204,7 @@ export async function savePosition(formData: FormData) {
     ? await supabase.from("positions").select("*").eq("id", id).eq("portfolio_id", portfolio.id).maybeSingle()
     : { data: null, error: null };
   if (existingError || (id && !existing)) throw new Error("Die Position konnte nicht geprüft werden.");
+  validatePositionEntryDate(entryDate, existing, berlinDate());
 
   const instrumentType = resolveWritableInstrumentType(
     requestedInstrumentType,

@@ -5,7 +5,23 @@ import {
   normalizePositionSale,
   remainingQuantity,
   validateCapitalMovement,
+  validatePositionEntryDate,
 } from "../src/lib/portfolio-entry";
+
+describe("entry dates while maintaining historical positions", () => {
+  it("allows a legacy position to keep its unknown date when a stop is changed", () => {
+    expect(validatePositionEntryDate(null, { entry_date: null }, "2026-10-28")).toBeNull();
+  });
+  it("requires a date for new positions and preserves known historical dates", () => {
+    expect(() => validatePositionEntryDate(null, null, "2026-10-28")).toThrow();
+    expect(() => validatePositionEntryDate(null, { entry_date: "2026-10-01" }, "2026-10-28")).toThrow();
+  });
+  it("permits a real historical date but rejects impossible and future dates", () => {
+    expect(validatePositionEntryDate("2026-10-01", { entry_date: null }, "2026-10-28")).toBe("2026-10-01");
+    expect(() => validatePositionEntryDate("2026-02-30", { entry_date: null }, "2026-10-28")).toThrow();
+    expect(() => validatePositionEntryDate("2026-10-29", null, "2026-10-28")).toThrow();
+  });
+});
 
 describe("simplified position lifecycle", () => {
   it("keeps a new open position fully open", () => {
