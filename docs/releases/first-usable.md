@@ -2,11 +2,11 @@
 
 Stand: 28. Oktober 2026. Ausgangscode: `main` / `dc304973286ba663a9e15c65b53b3c80e65472ae`. Arbeitsbranch: `codex/first-usable`. Produktumfang: [first-usable.md](../product/first-usable.md).
 
-## Vorbereitet
+## Implementiert
 
 Der Stand ergänzt das vorhandene Next.js-/Supabase-Projekt um Verkaufsjournal, Trade-Statistik, eingefrorene Einstiegsmargin, Profilbudget, Warnfarben, Positionsgrößenrechnung und Erstübernahme der bisherigen Tabelle. Die Migration ist additiv; bereits angewendete Migrationen werden nicht geändert. Bestehende Verkaufs-Sammelreferenzen werden als `legacy_aggregate` erhalten, Fremdwährungs-FX dabei nicht erfunden. Neue Konten starten leer. Der Eigendatenexport enthält Journal und Korrekturhistorie und lädt längere Historien seitenweise.
 
-Die echte Datenbank und Production wurden für diese Umsetzung nicht reaktiviert, migriert oder neu bereitgestellt. Die zuletzt lesend festgestellte Supabase-Situation war `INACTIVE`. Vor dem Livebetrieb ist deshalb ein gesonderter Freigabeschritt nötig. Die lokale Vorschau ist keine behauptete Live-Abnahme.
+Die Livefreigabe wurde am 28. Oktober ausdrücklich erteilt. Supabase wurde wiederhergestellt und die Journalmigration eingespielt. Der unten dokumentierte Produktionsbuild prüft echte Kurs- und Währungsdaten. Die lokale Entwicklungsvorschau bleibt eine Ansicht mit fiktiven Daten.
 
 ## Lokale Prüfung
 
@@ -28,7 +28,7 @@ Die Browserabnahme der Entwicklungsvorschau umfasst Profilwechsel, Kursübernahm
 
 Eine zusätzliche lokale Prüfung gegen den lesend übernommenen Tabellenstand blieb außerhalb des Repositorys. Der persönliche Prüfbericht liegt unter `.local/import-pruefung.md`; echte Tabellenwerte, Tickerzuordnungen und Ausführungsdaten werden nicht mit dem Code veröffentlicht. Historische Datenlücken werden nicht durch heutige Kurse aufgefüllt.
 
-## Gesonderte Livefreigabe
+## Prüfpunkte der Livefreigabe
 
 1. Erst nach konkretem Auftrag das bestehende Supabase-Projekt reaktivieren. Keinen neuen Tarif buchen, keine neuen Produktionsdaten anlegen und keine Registrierung öffnen.
 2. Datenbankstand und Repository über das Supabase-Migrationstool vergleichen. Vorher Backup/Export sichern; bestehende Migrationen nicht verändern. Bei Abweichungen zuerst den tatsächlich vorhandenen Stand klären.
@@ -37,7 +37,7 @@ Eine zusätzliche lokale Prüfung gegen den lesend übernommenen Tabellenstand b
 5. Twelve-Data-Kurse und FX mit serverseitigem Schlüssel real prüfen, einschließlich Notierung/MIC/Währung und fehlender Quelle. Die neue FX-Versorgung verbraucht das vorhandene gemeinsame Limit (8/min, 800/Tag; automatisch 6/min, 650/Tag). Ein Paar erhält eine Lease; HTTP 429 führt zu einer Stunde Wartezeit. Alte Cachewerte bleiben gekennzeichnet.
 6. Vor einer Production-Promotion sicherstellen: Registrierung `closed`, öffentliche Seite `private`, Region `fra1`, keine `NEXT_PUBLIC_`-Secrets und `/vorschau` HTTP 404. Die vorhandenen rechtlichen Launchblocker bleiben bestehen.
 
-Ohne diese Live-Abnahme ist der Stand lokal implementiert und überprüfbar, aber noch nicht für die Nutzung mit echten gespeicherten Depotdaten freigegeben.
+Die Ergebnisse der freigegebenen Liveprüfungen stehen im folgenden Abschnitt. Ein nicht durchgeführter Browser- oder Kontentest wird ausdrücklich als offen ausgewiesen.
 
 ## Erster persönlicher Durchlauf
 
@@ -54,3 +54,5 @@ Der Positionsrechner lädt nach einer kurzen Eingabepause automatisch Kurs und H
 Lokale Prüfung dieser Korrektur: 153 Vitest-Tests, ESLint und TypeScript erfolgreich. Die echte Anbieterprüfung erfolgt mit `node --import tsx scripts/verify-market-data.ts` in der Vercel-Buildumgebung mit hinterlegtem Schlüssel. Sie prüft echte AMZN-Notierung und Kurs, USD/EUR, CHF/EUR und die Berechnung einer Bruchstückzahl mit diesen Kursen. Die Ausgabe enthält ausschließlich öffentliche Marktdaten. Der gesonderte Release-Build führt diese Prüfung vor dem normalen Build aus.
 
 Es wurde kein zusätzlicher Auth-Benutzer angelegt. Die automatische Freigabe lehnte eine direkte Auth-Testfixture in Production ab. Die normale Registrierung bleibt geschlossen. Ein vollständiger Browserdurchlauf mit bestehendem Konto setzt die eigene Anmeldung des Benutzers voraus; diese Prüfung darf nicht mit synthetischen Vorschauwerten als erledigt bezeichnet werden.
+
+Der reale Kurs-Smoke-Test des Produktionsbuilds `depotarchitect-nitiyts49-dk-stars.vercel.app` war erfolgreich: AMZN/USD, MIC-Zuordnung, Kurszeitpunkt, aktuelles USD/EUR und die CHF/EUR-Tagesreferenz wurden geprüft. Mit synthetischer Nettoliquidität von 100.000 EUR, 10.000 EUR bestehendem Stopprisiko, 1,2 % Risiko je Trade und 10 % Stoppabstand ergibt der Test maximal 1.080 EUR Risiko; die berechnete Stückzahl auf 0,001 gerundet bleibt darunter. Keine privaten Depotwerte wurden für diesen Test übertragen.

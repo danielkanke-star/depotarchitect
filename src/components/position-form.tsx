@@ -83,7 +83,7 @@ export function PositionForm({
       <MarketDataLookupResult state={lookupState} />
       <label>Einstiegsdatum<input type="date" name="entry_date" readOnly={entryLocked} required value={entryDate} onChange={e => setEntryDate(e.target.value)} /></label>
       <label>Trading-Stopp beim Broker<input name="stop_price" inputMode="decimal" defaultValue={position?.stop_price_native ?? position?.stop_price ?? ""} /><span className="mt-1 block text-xs text-muted">Den tatsächlich beim Broker gesetzten Stopp dokumentieren.</span></label>
-      <label>Aktueller Wechselkurs · 1 Instrumentwährung in {baseCurrency}<input key={`fx-${lookupState.status === "success" ? lookupState.observedAt : "stored"}`} name="current_fx_to_base" inputMode="decimal" defaultValue={lookupState.status === "success" ? lookupState.fxToBase ?? "" : position?.current_fx_to_base ?? ""} /><span className="mt-1 block text-xs text-muted">Bei gleicher Währung automatisch 1. Sonst wird der Kurs bei der Suche übernommen.</span></label>
+      <label>Aktueller Wechselkurs · 1 Instrumentwährung in {baseCurrency}<input key={`fx-${lookupState.status === "success" ? lookupState.observedAt : "stored"}`} name="current_fx_to_base" inputMode="decimal" defaultValue={lookupState.status === "success" ? lookupState.fxToBase ?? "" : position?.current_fx_to_base ?? ""} /><span className="mt-1 block text-xs text-muted">Wird bei der Kurssuche und beim Speichern automatisch geladen. Nur für einen eigenen Referenzkurs ausfüllen.</span></label>
 
       {marginApplicable ? <>
         <label>Marginangabe<select name="margin_input_type" defaultValue={directMargin ? "amount" : "rate"}><option value="rate">Marginquote in Prozent</option><option value="amount">Marginbetrag</option></select></label>

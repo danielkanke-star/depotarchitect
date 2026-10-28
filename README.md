@@ -54,7 +54,7 @@ Alle weiteren Variablen sind in `.env.example` dokumentiert. Production bleibt b
 - Trade-Gruppen nach Wertpapier, Richtung, Einstiegstag und Kategorie; Abschlusszählung erst nach vollständiger Schließung
 - eingefrorene Einstiegsmargin und Marginrendite vor Gebühren, Finanzierungskosten und Steuern
 - Profilbudget aus 33 % NetLiq, getrennte Konzentrationshinweise und Stoppalter
-- Positionsplanung nach Abzug des bestehenden Stopprisikos, mit handelswährungsbezogenem FX und konfigurierbarer Bruchstückelung
+- Positionsplanung nach Abzug des bestehenden Stopprisikos, mit automatischer Währungsumrechnung und konfigurierbarer Bruchstückelung
 - additive Erstübernahme des Google-Sheets-Journals mit Vorschau und sichtbaren historischen Datenlücken
 
 DepotArchitect zeigt Depotstruktur, Hebel, Margin, Positionsgrößen, Risiko bis Stop, Konzentrationen und selbst gesetzte Warnschwellen. Es erteilt keine individuellen Kauf-/Verkaufsempfehlungen, trifft keine Orderentscheidungen, führt keine Orders aus und ersetzt keine Anlageberatung.
