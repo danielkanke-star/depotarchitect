@@ -187,7 +187,7 @@ function normalizeLabel(value: string) {
     .toLowerCase();
 }
 
-function parseDelimited(text: string, delimiter: string) {
+export function parseDelimited(text: string, delimiter: string) {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";

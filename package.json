@@ -20,6 +20,7 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.12",
     "@next/env": "16.2.11",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

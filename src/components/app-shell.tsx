@@ -8,8 +8,8 @@ import { useState } from "react";
 const items = [
   { href: "/cockpit", label: "Cockpit", icon: Gauge },
   { href: "/depot", label: "Depot", icon: Table2 },
-  { href: "/risiko", label: "Risiko", icon: ShieldCheck },
-  { href: "/performance", label: "Performance", icon: BarChart3 },
+  { href: "/risiko", label: "Positionsgröße", icon: ShieldCheck },
+  { href: "/performance", label: "Statistik", icon: BarChart3 },
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },
   { href: "/konto/datenschutz", label: "Konto & Datenschutz", icon: ShieldCheck },
 ];

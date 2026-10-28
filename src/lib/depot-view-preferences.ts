@@ -2,8 +2,8 @@ export type DepotOptionalColumn = "baseMarketValue" | "risk" | "margin" | "price
 export type DepotViewPreferences = Record<DepotOptionalColumn, boolean>;
 
 export const DEFAULT_DEPOT_VIEW_PREFERENCES: DepotViewPreferences = {
-  baseMarketValue: false,
-  risk: false,
+  baseMarketValue: true,
+  risk: true,
   margin: false,
   priceDetails: false,
 };

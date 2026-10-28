@@ -2,6 +2,7 @@
 
 import { startTransition, useEffect, useRef, useState } from "react";
 import { refreshActiveMarketData } from "@/app/(dashboard)/depot/actions";
+import { refreshPortfolioFx } from "@/app/(dashboard)/depot/journal-actions";
 
 const ACTIVE_REFRESH_TICK_MS = 12_000;
 type RefreshStatus = Awaited<ReturnType<typeof refreshActiveMarketData>>["status"];
@@ -9,12 +10,17 @@ type RefreshStatus = Awaited<ReturnType<typeof refreshActiveMarketData>>["status
 export function MarketDataHeartbeat() {
   const pendingRef = useRef(false);
   const stoppedRef = useRef(false);
+  const nextFxRef = useRef(0);
   const [status, setStatus] = useState<RefreshStatus | null>(null);
 
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState !== "visible" || pendingRef.current || stoppedRef.current) return;
       pendingRef.current = true;
+      if (Date.now() >= nextFxRef.current) {
+        nextFxRef.current = Date.now() + 300_000;
+        void refreshPortfolioFx().catch(() => { /* Stored FX remains visible. */ });
+      }
       startTransition(() => {
         void refreshActiveMarketData().then((result) => {
           setStatus(result.status);

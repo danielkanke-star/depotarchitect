@@ -16,7 +16,7 @@ function calculateCashBalance(input: CashBalanceCalculationInput): CashBalanceCa
 
   if (balance === null) valueBase = incomplete("quantity_missing");
   else if (fx === null) valueBase = incomplete("cash_fx_missing");
-  else if (!fx.isPositive() || (sameCurrency && !fx.equals(1))) valueBase = invalid("cash_fx_invalid");
+  else if (!fx.gt(0) || (sameCurrency && !fx.equals(1))) valueBase = invalid("cash_fx_invalid");
   else if (!sameCurrency && input.currentFxStatus === "demo") valueBase = incomplete("cash_fx_demo");
   else if (!sameCurrency && input.currentFxStatus === "missing") valueBase = incomplete("cash_fx_missing");
   else if (!sameCurrency && input.currentFxStatus === "stale") valueBase = sourceFallback(balance.mul(fx), "cash_fx_stale");

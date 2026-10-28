@@ -37,6 +37,12 @@ type Table<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
 export type Database = {
   public: {
     Tables: {
+      position_sales: Table<{
+        id: string; user_id: string; portfolio_id: string; position_id: string;
+        quantity: number; price: number; sale_date: string; fx_to_base: number | null;
+        fx_source: string | null; source: string; request_id: string; created_at: string;
+      }>;
+      position_sale_revisions: Table<{ id: string; sale_id: string; user_id: string; previous_values: Json; reason: string; created_at: string }>;
       portfolios: Table<{
         id: string; user_id: string; name: string; currency: string; net_liquidity: number | null;
         cash_balance: number | null; data_as_of: string | null;
@@ -162,6 +168,8 @@ export type Database = {
         created_at: string; updated_at: string;
       }>;
       positions: Table<{
+        entry_margin_base?: number | null; entry_margin_source?: string | null;
+        quantity_step?: number; tradingview_url?: string | null; journal_source_key?: string | null;
         id: string; portfolio_id: string; user_id: string; category_id: string | null;
         ticker: string; instrument_name: string | null; instrument_type: string; direction: string;
         quantity: number; multiplier: number; entry_price: number; current_price: number | null; current_price_native: number | null;
@@ -184,6 +192,8 @@ export type Database = {
         created_at: string; updated_at: string;
       }, {
         id?: string; portfolio_id: string; user_id: string; category_id?: string | null;
+        entry_margin_base?: number | null; entry_margin_source?: string | null;
+        quantity_step?: number; tradingview_url?: string | null; journal_source_key?: string | null;
         ticker: string; instrument_name?: string | null; instrument_type?: string; direction?: string;
         quantity?: number; multiplier?: number; entry_price?: number; current_price?: number | null; current_price_native?: number | null;
         instrument_currency?: string | null; fx_to_base?: number | null; data_as_of?: string | null;
@@ -281,6 +291,11 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      claim_portfolio_fx_refresh: { Args: { target_portfolio: string; from_currency: string; to_currency: string }; Returns: string | null };
+      finish_portfolio_fx_refresh: { Args: { lease: string; wait_seconds: number }; Returns: undefined };
+      correct_position_sale: { Args: { target_sale: string; sale_quantity: number; sale_price_native: number; executed_on: string; sale_fx: number | null; correction_reason: string }; Returns: string };
+      record_position_sale: { Args: { target_position: string; sale_quantity: number; sale_price_native: number; executed_on: string; sale_fx: number | null; fx_provenance: string; idempotency_key: string }; Returns: string };
+      import_position_journal: { Args: { target_portfolio: string; entries: Json }; Returns: Json };
       initialize_default_portfolio: { Args: Record<PropertyKey, never>; Returns: string };
       get_my_role: { Args: Record<PropertyKey, never>; Returns: AppRole };
       get_my_account_status: { Args: Record<PropertyKey, never>; Returns: AccountStatus };
@@ -393,6 +408,7 @@ export type Database = {
 export type Portfolio = Database["public"]["Tables"]["portfolios"]["Row"];
 export type PortfolioSettings = Database["public"]["Tables"]["portfolio_settings"]["Row"];
 export type Position = Database["public"]["Tables"]["positions"]["Row"];
+export type PositionSale = Database["public"]["Tables"]["position_sales"]["Row"];
 export type PortfolioCategory = Database["public"]["Tables"]["portfolio_categories"]["Row"];
 export type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"];
 export type LegalAcceptance = Database["public"]["Tables"]["legal_acceptances"]["Row"];
