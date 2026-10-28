@@ -1,18 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { Card } from "@/components/ui";
 import { RiskIndicator, formatMoney, formatRatio } from "@/components/risk-indicator";
 import { calculateSizing, budgetTone, depotRiskBudget } from "@/lib/risk-rules";
 import { lookupPositionMarketData, type MarketDataLookupState } from "@/app/(dashboard)/depot/actions";
 
 type Props = { initialNetLiquidity: number | null; initialRiskPct: number; initialMargin?: number | null; maxMargin?: number;
-  existingRisk?: number | null; riskComplete?: boolean; profile?: string; baseCurrency?: string; demo?: boolean };
+  existingRisk?: number | null; riskComplete?: boolean; riskIssues?: { id: string; ticker: string; message: string }[]; profile?: string; baseCurrency?: string; demo?: boolean };
 type Override = { key: string; value: number } | null;
 const listingKey = (value: { symbol: string; micCode: string; currency: string }) => `${value.symbol}@${value.micCode}:${value.currency}`;
 
 export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRisk = null, riskComplete = false,
-  profile = "Aggressiv 1,0", baseCurrency = "EUR", demo = false }: Props) {
+  riskIssues = [], profile = "Aggressiv 1,0", baseCurrency = "EUR", demo = false }: Props) {
   const [ticker, setTicker] = useState(demo ? "AMZN" : "");
   const [loaded, setLoaded] = useState<{ term: string; state: MarketDataLookupState } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -74,6 +75,13 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
       <Fact label="Bestehendes Stopprisiko" value={riskComplete ? formatMoney(existingRisk, baseCurrency) : "Unvollständig"} />
       <Fact label="Berechnungsbasis nach Stopprisiko" value={initialNetLiquidity !== null && existingRisk !== null && riskComplete ? formatMoney(initialNetLiquidity - existingRisk, baseCurrency) : "Nicht berechenbar"} />
     </div>
+    {!riskComplete && riskIssues.length > 0 && <div role="status" className="rounded-xl border border-amber-500/40 p-4 text-sm">
+      <p className="font-medium text-amber-200">Diese Angaben fehlen für die Stückzahlberechnung</p>
+      <p className="mt-2 text-muted">Die Berechnungsbasis zieht das gesamte bestehende Stopprisiko ab. Bitte vervollständige dafür diese Positionen:</p>
+      <ul className="mt-3 space-y-2">{riskIssues.map(position => <li key={position.id} className="flex flex-wrap items-center justify-between gap-2">
+        <span>{position.ticker} · {position.message}</span><Link className="text-accent underline underline-offset-4" href={`/depot?edit=${encodeURIComponent(position.id)}`}>{position.ticker} bearbeiten</Link>
+      </li>)}</ul>
+    </div>}
     <div className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
       <Card><h2 className="mb-4 font-medium">Einstieg planen</h2>
         <form onSubmit={event => { event.preventDefault(); if (!demo && term) load(term); }} className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
@@ -107,7 +115,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
         </div><p className="mt-2 text-xs text-muted">Die erlaubte Stückelung hängt von deinem Handelszugang ab. Für Bruchstücke zum Beispiel 0,001 angeben.</p></details>
       </Card>
       <Card><h2 className="mb-4 font-medium">Geplante Position</h2>
-        {issue && <p role="status" className="mb-4 rounded-xl border border-amber-500/40 p-3 text-sm text-amber-200">{issue}{result.error === "Das bestehende Stopprisiko ist unvollständig." && " Bitte fehlende Kurse, Wechselkurse oder Stopps im Depot ergänzen."}</p>}
+        {issue && <p role="status" className="mb-4 rounded-xl border border-amber-500/40 p-3 text-sm text-amber-200">{issue}{riskIssues.length === 0 && result.error === "Das bestehende Stopprisiko ist unvollständig." && " Bitte fehlende Kurse, Wechselkurse oder Stopps im Depot ergänzen."}</p>}
         <div className="grid gap-3 sm:grid-cols-2">
           <Fact label="Vorgesehener Risikobetrag" value={formatMoney(computed?.plannedRisk, baseCurrency)} />
           <Fact label="Stückzahl" value={computed ? computed.quantity.toLocaleString("de-DE", { maximumFractionDigits: 6 }) : "—"} />

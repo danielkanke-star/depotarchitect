@@ -45,7 +45,7 @@ export function PositionForm({
   const initiallyClosed = position?.status === "closed";
   const entryLocked = Boolean(position && (position.sold_quantity > 0 || position.entry_margin_base != null));
   const [saveState, saveAction, savePending] = useActionState(savePositionWithFeedback, { message: "" });
-  const [entryDate, setEntryDate] = useState(position?.entry_date ?? berlinDate());
+  const [entryDate, setEntryDate] = useState(position ? position.entry_date ?? "" : berlinDate());
   const [lookupState, lookupAction, lookupPending] = useActionState(
     lookupPositionMarketData,
     INITIAL_LOOKUP_STATE,
@@ -81,7 +81,7 @@ export function PositionForm({
         </button>
       </div>
       <MarketDataLookupResult state={lookupState} />
-      <label>Einstiegsdatum<input type="date" name="entry_date" readOnly={entryLocked} required value={entryDate} onChange={e => setEntryDate(e.target.value)} /></label>
+      <label>Einstiegsdatum<input type="date" name="entry_date" readOnly={entryLocked} required={!position || position.entry_date !== null} value={entryDate} onChange={e => setEntryDate(e.target.value)} />{position?.entry_date === null && <span className="mt-1 block text-xs text-muted">Bei diesem Altbestand ist das Datum unbekannt. Für eine Stoppänderung darf es leer bleiben.</span>}</label>
       <label>Trading-Stopp beim Broker<input name="stop_price" inputMode="decimal" defaultValue={position?.stop_price_native ?? position?.stop_price ?? ""} /><span className="mt-1 block text-xs text-muted">Den tatsächlich beim Broker gesetzten Stopp dokumentieren.</span></label>
       <label>Aktueller Wechselkurs · 1 Instrumentwährung in {baseCurrency}<input key={`fx-${lookupState.status === "success" ? lookupState.observedAt : "stored"}`} name="current_fx_to_base" inputMode="decimal" defaultValue={lookupState.status === "success" ? lookupState.fxToBase ?? "" : position?.current_fx_to_base ?? ""} /><span className="mt-1 block text-xs text-muted">Wird bei der Kurssuche und beim Speichern automatisch geladen. Nur für einen eigenen Referenzkurs ausfüllen.</span></label>
 
