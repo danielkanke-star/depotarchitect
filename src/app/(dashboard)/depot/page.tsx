@@ -103,7 +103,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
               <td><Badge tone={closed ? "neutral" : partial ? "warn" : "good"}>{closed ? "Geschlossen" : partial ? "Teilverkauft" : "Offen"}</Badge></td>
               <td><div>{(closed ? Number(position.quantity) : remainingQuantity(Number(position.quantity), position.sold_quantity)).toLocaleString("de-DE", { maximumFractionDigits: 6 })}</div>{partial && <div className="text-xs text-muted">von {Number(position.quantity).toLocaleString("de-DE")} beim Einstieg</div>}</td>
               <td>{Number(position.entry_price).toLocaleString("de-DE", { maximumFractionDigits: 6 })} {position.instrument_currency}<div className="text-xs text-muted">{position.entry_date ?? "Datum unbekannt"}</div></td>
-              <td>{closed || legacyCash || !resolvedPrice ? "–" : <div>{resolvedPrice.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {resolvedPrice.currency}</div>}</td>
+              <td>{closed || legacyCash || !resolvedPrice ? "–" : <div>{resolvedPrice.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {resolvedPrice.currency}{["google_sheets", "custom_csv"].includes(resolvedPrice.sourceType) && <div className="mt-1 text-xs text-amber-200">Tabellenreferenz · kein automatischer Börsenkurs</div>}</div>}</td>
               <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueInstrument} format={(value) => formatInstrumentMoney(value, position.instrument_currency)} missing="Aktueller Kurs fehlt" />}</td>
               <td className="depot-column-base-market-value">{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueBase} format={(value) => money.format(value)} missing={result?.positionValueInstrument.value == null ? "Aktueller Kurs fehlt" : "Wechselkurs fehlt"} />}</td>
               <td className="depot-column-risk">{closed || legacyCash ? "–" : <div className="space-y-1"><RiskIndicator tone={positionRiskTone(result?.riskToNetLiquidity.value ?? null, portfolio.risk_profile)}><SimpleMetric metric={result?.stopRisk} format={(value) => money.format(value)} missing="Risiko unvollständig" /></RiskIndicator><div className="text-xs text-muted">Stopp: {position.stop_price_native ?? position.stop_price ?? "fehlt"}</div><RiskIndicator tone={stopAge(position.stop_updated_at).tone}>{stopAge(position.stop_updated_at).label}</RiskIndicator></div>}</td>
@@ -167,7 +167,7 @@ function PriceDetails({
 }
 
 function instrumentLabel(value: string, ticker: string) {
-  if (value === "stock" && looksLikeOptionContract(ticker)) return "Derivat · Kontrakt prüfen";
+  if (value === "stock" && looksLikeOptionContract(ticker)) return "Option · historische Preiseinheiten";
   return ({ stock: "Aktie", etf: "ETF", option: "Option", warrant: "Optionsschein", knock_out: "Knock-out", cash: "Cash", other: "Sonstiges" } as Record<string, string>)[value] ?? value;
 }
 
@@ -191,6 +191,10 @@ function priceSourceDescription(price: ReturnType<typeof resolvePositionPrice>) 
 
 function priceNotice(status: string | undefined) {
   const messages: Record<string, { tone: string; text: string }> = {
+    "manual-contract-price": {
+      tone: "border-amber-500/30 bg-amber-500/10 text-amber-100",
+      text: "Für diesen Optionskontrakt besteht noch keine automatische Kursversorgung. Den aktuellen Optionspreis kannst du über Bearbeiten pflegen. Ein Aktienkurs wird dafür nicht eingesetzt.",
+    },
     updated: {
       tone: "border-emerald-500/30 bg-emerald-500/10 text-emerald-100",
       text: "Der Twelve-Data-Kurs der gewählten Hauptnotierung wurde gespeichert. Ein späterer gültiger IBKR-Kurs bleibt vorrangig.",

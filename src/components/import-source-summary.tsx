@@ -35,5 +35,6 @@ export function ImportSourceSummary({ imported }: { imported: PortfolioImport | 
       <p className="mt-3 text-xs leading-5">Die Originalwerte bleiben im Importprotokoll erhalten. Diese Zeilen zählen bis zur Klärung nicht zu den ausgewerteten Trades. Die Übernahme der vollständigen Einträge wird dadurch nicht blockiert.</p>
     </div>}
     <p className="mt-3 text-xs leading-5 text-muted">Historische Einstiegsmargin und Verkaufsumrechnung werden nur aus belegten Referenzen berechnet. Die Quelldatei und ihre ursprünglichen Werte bleiben erhalten.</p>
+    {typeof metadata.historical_units_note === "string" && <p className="mt-2 text-xs leading-5 text-muted">{metadata.historical_units_note.slice(0, 1000)}</p>}
   </Card>;
 }

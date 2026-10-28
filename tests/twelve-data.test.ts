@@ -18,6 +18,22 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("Twelve Data adapter", () => {
+  it("respects exchange-prefixed sheet tickers and rejects a quote from another currency or MIC", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      expect(url.searchParams.get("symbol")).toBe("SAMPLE");
+      if (url.pathname === "/symbol_search") return jsonResponse({ data: [
+        {symbol:"SAMPLE",mic_code:"XPAR",currency:"EUR"},
+        {symbol:"SAMPLE",mic_code:"XNYS",currency:"USD"},
+      ] });
+      expect(url.searchParams.get("mic_code")).toBe("XPAR");
+      return jsonResponse({symbol:"SAMPLE",mic_code:"XPAR",currency:"EUR",close:"80",timestamp:1785492000});
+    });
+    expect(await searchTwelveDataInstruments("EPA:SAMPLE",{apiKey:"test",fetchImpl})).toMatchObject({status:"success",data:[{symbol:"SAMPLE",micCode:"XPAR",currency:"EUR"}]});
+    expect(await fetchTwelveDataQuote({symbol:"EPA:SAMPLE",currency:"EUR",micCode:null},{apiKey:"test",fetchImpl})).toMatchObject({status:"success",data:{symbol:"SAMPLE",currency:"EUR"}});
+    expect(await fetchTwelveDataQuote({symbol:"EPA:SAMPLE",currency:"USD",micCode:null},{apiKey:"test",fetchImpl})).toMatchObject({status:"invalid_response"});
+    expect(await fetchTwelveDataQuote({symbol:"ETR:SAMPLE",currency:"EUR",micCode:"XPAR"},{apiKey:"test",fetchImpl})).toMatchObject({status:"invalid_response"});
+  });
   it("preserves provider relevance order and complete listing tuples", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ data: [
       { symbol: "AAPL", instrument_name: "Apple Inc", exchange: "NASDAQ", mic_code: "XNAS", currency: "USD", country: "United States", exchange_timezone: "America/New_York", access: { global: "Basic" } },

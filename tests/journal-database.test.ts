@@ -110,6 +110,9 @@ describe("journal SQL guarantees", () => {
   it("imports provenance and sales once, skips identical repeats, and rejects changed repeats", async () => {
     const run = () => db.query<{result:{inserted:number;skipped:number}}>("select public.import_position_journal($1,$2::jsonb) as result",[portfolio,JSON.stringify([entry])]);
     expect((await run()).rows[0].result).toEqual({inserted:1,skipped:0}); expect((await run()).rows[0].result).toEqual({inserted:0,skipped:1});
+    const ref = (await db.query<{journal_instrument_ref:string}>("select journal_instrument_ref from positions where portfolio_id=$1",[portfolio])).rows[0].journal_instrument_ref;
+    expect(JSON.parse(ref)[0]).toBe("TEST");
+    await rejected("update positions set journal_instrument_ref='changed' where portfolio_id=$1",[portfolio]);
     expect((await db.query("select * from position_sales")).rows).toHaveLength(1);
     await db.exec("reset role; select set_config('request.jwt.claim.sub','',true)");
     await rejected("update positions set source_type='demo',source_import_id=null,imported_at=null where portfolio_id=$1", [portfolio]);
