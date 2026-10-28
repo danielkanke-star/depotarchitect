@@ -36,6 +36,21 @@ afterEach(async () => { await db.exec("rollback"); });
 afterAll(async () => { await db?.close(); });
 
 describe("journal SQL guarantees", () => {
+  it("permits reversible example classification only in direct maintenance, without executions", async () => {
+    await seed();
+    await rejected("update positions set source_type='demo' where id=$1", [position]);
+    await db.exec("reset role; select set_config('request.jwt.claim.sub','',true)");
+    const before = (await db.query("select quantity,entry_price,entry_margin_base from positions where id=$1", [position])).rows[0];
+    await db.query("update positions set source_type='demo' where id=$1", [position]);
+    expect((await db.query<{source_type:string}>("select source_type from positions where id=$1", [position])).rows[0].source_type).toBe("demo");
+    await db.query("update positions set source_type='manual' where id=$1", [position]);
+    expect((await db.query("select quantity,entry_price,entry_margin_base from positions where id=$1", [position])).rows[0]).toEqual(before);
+    await rejected("update positions set source_type='broker' where id=$1", [position]);
+    await db.exec(`set local role authenticated; select set_config('request.jwt.claim.sub','${user}',true)`);
+    await record();
+    await db.exec("reset role; select set_config('request.jwt.claim.sub','',true)");
+    await rejected("update positions set source_type='demo' where id=$1", [position]);
+  });
   it("leases FX refreshes once per pair and respects backoff and ownership", async () => {
     const run = () => db.query<{token:string|null}>("select public.claim_portfolio_fx_refresh($1,'USD','EUR') as token",[portfolio]);
     const token = (await run()).rows[0].token; expect(token).toBeTruthy(); expect((await run()).rows[0].token).toBeNull();
@@ -96,6 +111,9 @@ describe("journal SQL guarantees", () => {
     const run = () => db.query<{result:{inserted:number;skipped:number}}>("select public.import_position_journal($1,$2::jsonb) as result",[portfolio,JSON.stringify([entry])]);
     expect((await run()).rows[0].result).toEqual({inserted:1,skipped:0}); expect((await run()).rows[0].result).toEqual({inserted:0,skipped:1});
     expect((await db.query("select * from position_sales")).rows).toHaveLength(1);
+    await db.exec("reset role; select set_config('request.jwt.claim.sub','',true)");
+    await rejected("update positions set source_type='demo',source_import_id=null,imported_at=null where portfolio_id=$1", [portfolio]);
+    await db.exec(`set local role authenticated; select set_config('request.jwt.claim.sub','${user}',true)`);
     await rejected("select public.import_position_journal($1,$2::jsonb)",[portfolio,JSON.stringify([{...entry,source_key:"changed-source-002"}])]);
   });
   it("rolls back all imported lots, categories and import metadata on any invalid sale", async () => {
