@@ -56,11 +56,13 @@ async function run() {
   let state = { authenticated: false, connected: false, competing: false };
   let errorCode: string | null = null;
   let pendingQuotes: IbkrQuote[] = [];
+  let portfolioRefresh: Promise<void> | null = null;
+  let portfolioLoaded = false;
   process.once("SIGINT", () => { running = false; });
   process.once("SIGTERM", () => { running = false; });
   console.log("IBKR-Kursdienst gestartet: ausschließlich lesend; keine Bestellungen von Marktdaten.");
   while (running) {
-    let quotes: IbkrQuote[] = pendingQuotes;
+    const quotes: IbkrQuote[] = pendingQuotes;
     pendingQuotes = [];
     try {
       if (Date.now() >= nextAuth) {
@@ -71,10 +73,13 @@ async function run() {
         } catch { state = { authenticated: false, connected: false, competing: false }; errorCode = "gateway_offline"; }
         nextAuth = Date.now() + 20_000;
       }
-      if (state.authenticated && !state.competing && Date.now() >= nextPortfolio && active) {
-        try { quotes = [...quotes, ...await gateway.portfolioQuotes()]; errorCode = null; }
-        catch (e) { errorCode = e instanceof Error && e.message === "account_selection_required" ? e.message : "broker_error"; }
+      if (state.authenticated && !state.competing && !portfolioRefresh && Date.now() >= nextPortfolio && (active || !portfolioLoaded)) {
+        // Contract loading can take longer on a cold gateway. Keep the device
+        // heartbeat and interactive ticker queue responsive while it runs.
         nextPortfolio = Date.now() + 60_000;
+        portfolioRefresh = gateway.portfolioQuotes().then(values => { pendingQuotes.push(...values); portfolioLoaded = true; })
+          .catch(e => { errorCode = e instanceof Error && e.message === "account_selection_required" ? e.message : "broker_error"; })
+          .finally(() => { portfolioRefresh = null; });
       }
       const { data, error } = await supabase.rpc("ibkr_bridge_poll", { device_token: config.deviceToken,
         gateway_ok: state.authenticated, brokerage_ok: state.connected && !state.competing, error_code: errorCode, quotes: quotes as unknown as Json });
