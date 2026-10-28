@@ -25,11 +25,10 @@ describe("configurable depot columns", () => {
     expect(preferenceComponent).toContain("localStorage");
   });
 
-  it("uses instrument market value as primary and names the optional column by portfolio currency", () => {
+  it("retains native and base-currency calculations with independently controlled risk and value fields", () => {
     expect(depotPage).toContain("result?.positionValueInstrument");
-    expect(depotPage).toContain("Marktwert {portfolio.currency}");
-    expect(depotPage).toContain("Wechselkurs fehlt");
-    expect(depotPage).toContain("Risiko unvollständig");
-    expect(depotPage).not.toContain("Basiswert");
+    expect(depotPage).toContain("result?.positionValueBase");
+    expect(depotPage).toContain("depot-column-base-market-value");
+    expect(depotPage).toContain("depot-column-risk");
   });
 });

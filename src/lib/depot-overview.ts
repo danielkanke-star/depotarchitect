@@ -6,9 +6,10 @@ import { instrumentKey, calculateJournal } from "./journal";
 import { categoryTarget, concentrationTone, depotRiskBudget, riskConcentrationTone } from "./risk-rules";
 import { resolvePositionPrice } from "./price-resolution";
 import { latestUsableFxRate } from "./market-data";
+import type { JournalSourceReference } from "./journal-source-reference";
 
 export type OverviewData = { portfolio: Portfolio; settings: PortfolioSettings; categories: PortfolioCategory[]; positions: Position[];
-  fxRates: PortfolioFxRate[]; priceObservations: PositionPriceObservation[]; sales: PositionSale[] };
+  fxRates: PortfolioFxRate[]; priceObservations: PositionPriceObservation[]; sales: PositionSale[]; journalReferences?: JournalSourceReference[] };
 export function buildOverview(data: OverviewData, now = new Date()) {
   const { portfolio, positions, categories, fxRates, priceObservations, sales } = data;
   const active = positions.filter(p => p.status !== "closed" && p.instrument_type !== "cash");
@@ -46,5 +47,5 @@ export function buildOverview(data: OverviewData, now = new Date()) {
     return { ...c, count: new Set(own.map(instrumentKey)).size, rows: own.length, value: sum(own.map(p => byId.get(p.id)?.positionValueBase.value)),
       risk: sum(own.map(p => byId.get(p.id)?.stopRisk.value)), target: categoryTarget(c.name) };
   });
-  return { budget, active, calculation, byId, instruments, categoryOverview, stalePrices, staleFx, marginLimit: data.settings.max_margin_pct / 100, journal: calculateJournal(positions, sales, now) };
+  return { budget, active, calculation, byId, instruments, categoryOverview, stalePrices, staleFx, marginLimit: data.settings.max_margin_pct / 100, journal: calculateJournal(positions, sales, now, data.journalReferences) };
 }

@@ -1,5 +1,7 @@
+import { InfoTip } from "./info-tip";
+
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-border bg-panel/90 p-4 shadow-[0_20px_50px_rgba(0,0,0,.12)] sm:p-5 ${className}`}>{children}</section>;
+  return <section className={`surface ${className}`}>{children}</section>;
 }
 
 export function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "danger" }) {
@@ -8,5 +10,9 @@ export function Badge({ children, tone = "neutral" }: { children: React.ReactNod
 }
 
 export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: React.ReactNode }) {
-  return <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div>{eyebrow && <div className="mb-1 text-xs font-semibold uppercase tracking-[.18em] text-accent">{eyebrow}</div>}<h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>{description && <p className="mt-2 max-w-3xl text-sm text-muted">{description}</p>}</div>{action}</div>;
+  return <div className="page-heading"><div>{eyebrow&&<div className="page-eyebrow">{eyebrow}</div>}<div className="flex items-center gap-2.5"><h1>{title}</h1>{description&&<InfoTip label={title}>{description}</InfoTip>}</div></div>{action&&<div className="page-actions">{action}</div>}</div>;
+}
+
+export function MetricCard({label,value,help,note,tone=""}:{label:string;value:React.ReactNode;help?:React.ReactNode;note?:React.ReactNode;tone?:string}) {
+  return <div className="metric-card"><div className="metric-label"><span>{label}</span>{help&&<InfoTip label={label}>{help}</InfoTip>}</div><div className={`metric-value ${tone}`}>{value}</div>{note&&<div className="metric-secondary">{note}</div>}</div>;
 }

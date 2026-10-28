@@ -37,6 +37,20 @@ afterEach(async () => { await db.exec("rollback"); });
 afterAll(async () => { await db?.close(); });
 
 describe("journal SQL guarantees", () => {
+  it("keeps source references immutable, owner-scoped, and atomic with an import",async()=>{
+    await seed();
+    const values={version:1,capturedAt:"2026-10-28T12:00:00Z",ticker:"TEST",currency:"USD",units:10,entryPrice:100,fxToBase:0.9,sale:null,marginRate:0.15};
+    await db.query("insert into journal_source_references(user_id,portfolio_id,position_id,source_key,source_values) values($1,$2,$3,'source',$4::jsonb)",[user,portfolio,position,JSON.stringify(values)]);
+    await rejected("update journal_source_references set source_values='{}'");
+    await rejected("insert into journal_source_references(user_id,portfolio_id,source_key,source_values) values($1,$2,'other',$3::jsonb)",[user,secondPortfolio,JSON.stringify(values)]);
+    await db.exec(`select set_config('request.jwt.claim.sub','${other}',true)`);
+    expect((await db.query("select * from journal_source_references")).rows).toHaveLength(0);
+    await rejected("insert into journal_source_references(user_id,portfolio_id,position_id,source_key,source_values) values($1,$2,$3,'other',$4::jsonb)",[other,secondPortfolio,position,JSON.stringify(values)]);
+    const bad=[{source_key:"reference-test-source",ticker:"BADREF",category:"Test",direction:"long",instrument_type:"stock",quantity:1,entry_price:100,entry_date:"2026-01-01",instrument_currency:"EUR",sales:[],source_reference:[]}];
+    await rejected("select import_position_journal($1,$2::jsonb)",[secondPortfolio,JSON.stringify(bad)]);
+    expect((await db.query("select * from positions where portfolio_id=$1",[secondPortfolio])).rows).toHaveLength(0);
+    await rejected("select app_private.import_position_journal($1,$2::jsonb)",[secondPortfolio,JSON.stringify(bad)]);
+  });
   it("permits reversible example classification only in direct maintenance, without executions", async () => {
     await seed();
     await rejected("update positions set source_type='demo' where id=$1", [position]);

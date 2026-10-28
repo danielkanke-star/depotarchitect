@@ -6,30 +6,34 @@ import { SaleCorrectionForm } from "./sale-correction-form";
 import Decimal from "decimal.js";
 import { formatMoney, formatRatio, RiskIndicator } from "./risk-indicator";
 import { berlinDate, calendarDays, positionRiskTone, stopAge } from "@/lib/risk-rules";
+import { sourceForPosition, sourceMargin, type JournalSourceReference } from "@/lib/journal-source-reference";
+import { InfoTip } from "./info-tip";
 
-export function PositionJournalDetails({ position: p, result, sales, baseCurrency, profile, available }: {
-  position: Position; result?: PositionCalculation; sales: PositionSale[]; baseCurrency: string; profile: string; available: boolean;
+export function PositionJournalDetails({ position: p, result, sales, baseCurrency, profile, available, references=[], bare=false }: {
+  position: Position; result?: PositionCalculation; sales: PositionSale[]; baseCurrency: string; profile: string; available: boolean; references?: JournalSourceReference[]; bare?: boolean;
 }) {
-  const own = positionSales(p, sales), realized = realizedForPosition(p, sales), age = stopAge(p.stop_updated_at);
+  const reference=sourceForPosition(p,references);
+  const own = positionSales(p, sales), realized = realizedForPosition(p, sales,reference), age = stopAge(p.stop_updated_at);
+  const marginReference=p.entry_margin_base ?? (reference?sourceMargin(reference):null);
   const currency = p.instrument_currency ?? baseCurrency;
   const remaining = Math.max(0, Number(p.quantity) - Number(p.sold_quantity));
   const nativePnl = result?.positionValueInstrument.value != null ? new Decimal(result.positionValueInstrument.value).minus(new Decimal(p.entry_price).mul(remaining).mul(p.multiplier)).mul(p.direction.startsWith("short") ? -1 : 1).toNumber() : null;
   const days = calendarDays(p.entry_date, p.status === "closed" ? p.sale_date ?? berlinDate() : berlinDate());
-  return <details className="py-2"><summary className="cursor-pointer text-xs text-muted hover:text-foreground">{p.ticker} · Details und Verkaufsjournal</summary>
-    <div className="my-3 rounded-xl border border-border bg-background/40 p-4">
+  const content=<div className="my-3 rounded-xl border border-border bg-background/40 p-5">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 text-sm">
         <Fact label="Einstieg" value={`${p.entry_date ?? "Unbekannt"} · ${p.direction}`} />
-        <Fact label="NetLiq-Anteil" value={formatRatio(result?.netLiquidityShare.value)} />
-        <Fact label="Unrealisierter Kurs-G&V" value={p.status === "closed" ? "Abgeschlossen" : formatMoney(result?.unrealizedPnl.value, baseCurrency)} />
-        <Fact label={`Unrealisierter Kurs-G&V ${currency}`} value={p.status === "closed" ? "Abgeschlossen" : formatMoney(nativePnl, currency)} />
+        {p.status!=="closed"&&<><Fact label="NetLiq-Anteil" value={formatRatio(result?.netLiquidityShare.value)} />
+        <Fact label="Unrealisierter Kurs-G&V" value={formatMoney(result?.unrealizedPnl.value, baseCurrency)} />
+        <Fact label={`Unrealisierter Kurs-G&V ${currency}`} value={formatMoney(nativePnl, currency)} /></>}
         <Fact label={`Realisierter Kurs-G&V ${currency}`} value={realized.hasSales ? formatMoney(realized.native, currency) : "Noch kein Verkauf"} />
         <Fact label="Realisierter Kurs-G&V" value={realized.hasSales ? formatMoney(realized.base, baseCurrency) : "Noch kein Verkauf"} />
-        <Fact label={`Stopprisiko ${currency}`} value={formatMoney(result?.stopRiskInstrument.value, currency)} />
+        {p.status!=="closed"&&<><Fact label={`Stopprisiko ${currency}`} value={formatMoney(result?.stopRiskInstrument.value, currency)} />
         <div><div className="text-xs text-muted">Risiko / NetLiq</div><div className="mt-1"><RiskIndicator tone={positionRiskTone(result?.riskToNetLiquidity.value ?? null, profile)}>{formatRatio(result?.riskToNetLiquidity.value)}</RiskIndicator></div></div>
         <Fact label="Anteil am berechenbaren Gesamtrisiko" value={formatRatio(result?.riskShareOfCalculableTotal.value)} />
         <div><div className="text-xs text-muted">Letzte Stoppänderung</div><div className="mt-1"><RiskIndicator tone={age.tone}>{age.label}</RiskIndicator></div></div>
-        <Fact label="Einstiegsmargin · historische Referenz" value={formatMoney(p.entry_margin_base, baseCurrency)} />
-        <Fact label="Marginquelle aktuell" value={p.margin_source === "estimated" ? "Geschätzt aus Marginquote" : p.margin_source} />
+        </>}
+        {marginReference!==null&&<div><div className="flex items-center gap-1 text-xs text-muted">Marginbasis <InfoTip label="Marginbasis">{p.entry_margin_base!==null?"Beim Einstieg festgehaltene Marginreferenz.":"Aus dem übernommenen Tabellenstand errechnete, eingefrorene Marginreferenz. Dies ist kein nachträglich behaupteter historischer Brokerbetrag."}</InfoTip></div><div className="mt-1 tabular-nums">{formatMoney(marginReference,baseCurrency)}</div></div>}
+        {p.status!=="closed"&&<Fact label="Marginquelle aktuell" value={p.margin_source === "estimated" ? "Quotenschätzung" : p.margin_source} />}
         <Fact label="Haltedauer" value={days === null ? "Unbekannt" : `${days} Kalendertage`} />
         <Fact label="Stückelung / Multiplikator" value={`${p.quantity_step ?? 1} / ${p.multiplier}`} />
       </div>
@@ -39,7 +43,7 @@ export function PositionJournalDetails({ position: p, result, sales, baseCurrenc
       {remaining > 0 && available && <div className="mt-5 border-t border-border pt-4"><h3 className="mb-3 font-medium">{p.status === "closed" ? "Fehlende Verkaufsangaben der alten Position ergänzen" : "Teil- oder Schlussverkauf erfassen"}</h3><SaleForm id={p.id} remaining={remaining} currency={currency} baseCurrency={baseCurrency} entryDate={p.entry_date} requestId={crypto.randomUUID()} /></div>}
       {available && own.filter(s => !s.id.startsWith("legacy:")).map(s => <SaleCorrectionForm key={`${s.id}:${s.quantity}:${s.price}:${s.sale_date}:${s.fx_to_base}`} sale={s} entryDate={p.entry_date} currency={currency} baseCurrency={baseCurrency} />)}
       {!available && <p className="mt-4 text-xs text-amber-300">Verkaufsjournal benötigt die neue Datenbankmigration.</p>}
-    </div>
-  </details>;
+    </div>;
+  return bare?content:<details className="py-2"><summary className="cursor-pointer text-xs text-muted hover:text-foreground">{p.ticker} · Details und Verkaufsjournal</summary>{content}</details>;
 }
 function Fact({ label, value }: { label: string; value: string }) { return <div><div className="text-xs text-muted">{label}</div><div className="mt-1 tabular-nums">{value}</div></div>; }

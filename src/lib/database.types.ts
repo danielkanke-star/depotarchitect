@@ -37,6 +37,10 @@ type Table<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
 export type Database = {
   public: {
     Tables: {
+      journal_source_references: Table<{
+        id: string; user_id: string; portfolio_id: string; position_id: string | null;
+        source_key: string; source_values: Json; created_at: string;
+      }>;
       ibkr_connections: Table<{
         id: string; user_id: string; portfolio_id: string; state: "pending" | "paired" | "revoked";
         gateway_authenticated: boolean; brokerage_authenticated: boolean; last_seen_at: string | null;
