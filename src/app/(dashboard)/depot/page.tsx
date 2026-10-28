@@ -153,16 +153,16 @@ function PriceDetails({
   micCode: string | null;
 }) {
   const date = price.observedAt
-    ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(price.observedAt))
+    ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(price.observedAt))
     : "Zeitpunkt fehlt";
   const source = price.sourceName && price.sourceName !== price.sourceType
     ? price.sourceName
     : positionPriceSourceLabel(price.sourceType);
-  const status = price.status === "stale" ? "veraltet" : price.status === "end_of_day" ? "Schlusskurs" : price.status === "delayed" ? "verzögert" : "aktuell";
+  const status = price.status === "stale" ? "veraltet" : price.status === "end_of_day" ? "Schlusskurs" : price.status === "delayed" ? "verzögert" : price.status === "live" ? "Echtzeitversorgung" : "Referenzkurs";
   return <div className="max-w-52 text-xs text-muted">
     <div>{source}</div>
     <div>{exchange ?? "Börse nicht benannt"}{micCode ? ` (${micCode})` : ""}</div>
-    <div>{status} · {date}</div>
+    <div>{status} · {price.sourceType === "ibkr" ? "Abgerufen " : ""}{date} (Berlin)</div>
   </div>;
 }
 
@@ -178,7 +178,7 @@ function formatDate(value: string) {
 function priceSourceDescription(price: ReturnType<typeof resolvePositionPrice>) {
   if (!price) return null;
   const date = price.observedAt
-    ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(price.observedAt))
+    ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(price.observedAt))
     : null;
   const genericLabel = positionPriceSourceLabel(price.sourceType);
   const sourceLabel = price.sourceName && price.sourceName !== price.sourceType
@@ -193,11 +193,11 @@ function priceNotice(status: string | undefined) {
   const messages: Record<string, { tone: string; text: string }> = {
     "manual-contract-price": {
       tone: "border-amber-500/30 bg-amber-500/10 text-amber-100",
-      text: "Für diesen Optionskontrakt besteht noch keine automatische Kursversorgung. Den aktuellen Optionspreis kannst du über Bearbeiten pflegen. Ein Aktienkurs wird dafür nicht eingesetzt.",
+      text: "Für diesen Optionskontrakt ist gerade kein aktueller automatischer Kurs verfügbar. Bitte die IBKR-Verbindung prüfen oder den Optionspreis über Bearbeiten pflegen. Ein Aktienkurs wird dafür nicht eingesetzt.",
     },
     updated: {
       tone: "border-emerald-500/30 bg-emerald-500/10 text-emerald-100",
-      text: "Der Twelve-Data-Kurs der gewählten Hauptnotierung wurde gespeichert. Ein späterer gültiger IBKR-Kurs bleibt vorrangig.",
+      text: "Der verfügbare Kurs wurde gespeichert. Quelle und Kursqualität findest du unter „Kursdetails“.",
     },
     "provider-disabled": {
       tone: "border-border bg-panel text-muted",
