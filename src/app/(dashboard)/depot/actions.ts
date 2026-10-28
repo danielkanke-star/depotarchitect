@@ -437,6 +437,7 @@ export async function refreshActiveMarketData() {
     .select("id,listing_id")
     .eq("user_id", userId)
     .eq("status", "open")
+    .neq("source_type", "demo")
     .neq("instrument_type", "cash");
   if (positionError && isMissingMarketDataTable(positionError)) return { status: "schema-pending" as const };
   if (positionError) return { status: "error" as const };

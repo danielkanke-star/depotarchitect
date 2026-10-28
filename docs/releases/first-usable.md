@@ -2,6 +2,18 @@
 
 Stand: 28. Oktober 2026. Ausgangscode: `main` / `dc304973286ba663a9e15c65b53b3c80e65472ae`. Arbeitsbranch: `codex/first-usable`. Produktumfang: [first-usable.md](../product/first-usable.md).
 
+## Übernahme der tatsächlich gepflegten Quelle
+
+Die vor Beginn der Produktklärung gespeicherten Web-App-Positionen waren vom Benutzer ausdrücklich als Beispiele identifiziert. Für die Erstübernahme ist ausschließlich die aktiv gepflegte Google-Tabelle maßgeblich. Der bisherige Stand wird privat gesichert und Beispiele bleiben als `demo` wiederherstellbar, außerhalb der Kennzahlen und automatischen Kursaktualisierung.
+
+Eine direkte Datenbank-Wartungssitzung darf nicht importierte Beispiele ohne Verkaufsausführungen zwischen `manual` und `demo` umklassifizieren. Die additive Migration `20261028101626_correct_manual_demo_classification.sql` erweitert dafür ausschließlich den bestehenden Trigger. Authentifizierte API-Aufrufe dürfen Herkunft und Importreferenzen weiterhin nicht ändern. SQL-Tests prüfen diese Grenze und die Wiederherstellung.
+
+Die Tabellenübernahme wird zuerst mit allen Migrationen lokal als vollständige Transaktion geprüft. Sie erhält Rohdaten mit voller Präzision im privaten Transferbackup. Importmetadaten bewahren Quellenverweis, Normalisierungen und unvollständige Originalzeilen auf; die Google-Tabelle bleibt unverändert. Fehlende historische Verkaufsdaten werden nicht erfunden. Eine fehlende historische Ausführungsumrechnung oder Einstiegsmargin wird nicht durch aktuelle Wechselkurse oder Marginquoten ersetzt.
+
+Der angezeigte NetLiq-Ausgangswert wird aus der Quelle übernommen, auch wenn er dort eine Tabellenformel ist; dies ist kein verifizierter Broker-Saldo. Das Risikoprofil und der Risikosatz des aktiv genutzten Positionsgrößenrechners werden ebenfalls aus der Quelle übernommen. Eine spätere Broker-Abstimmung bleibt separat.
+
+Bei importierten, auf mehrere Zeilen verteilten Teilverkäufen bleibt die Instrumentgruppierung innerhalb des Quellimports erhalten, wenn der offene Rest später eine Kursnotierung erhält. Kategorien, Richtung und Einstiegsdatum trennen weiterhin Trades. Verifizierte unterschiedliche Listings außerhalb dieses nicht zugeordneten Quellbestands werden nicht zusammengeführt.
+
 ## Implementiert
 
 Der Stand ergänzt das vorhandene Next.js-/Supabase-Projekt um Verkaufsjournal, Trade-Statistik, eingefrorene Einstiegsmargin, Profilbudget, Warnfarben, Positionsgrößenrechnung und Erstübernahme der bisherigen Tabelle. Die Migration ist additiv; bereits angewendete Migrationen werden nicht geändert. Bestehende Verkaufs-Sammelreferenzen werden als `legacy_aggregate` erhalten, Fremdwährungs-FX dabei nicht erfunden. Neue Konten starten leer. Der Eigendatenexport enthält Journal und Korrekturhistorie und lädt längere Historien seitenweise.

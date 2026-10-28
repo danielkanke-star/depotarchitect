@@ -26,6 +26,17 @@ describe("trade accounting before costs", () => {
     const changed = calculateJournal([{ ...p, margin_rate: 0.8, margin_requirement: 900, current_fx_to_base: 0.5 }], [sale("p")]);
     expect(first.marginReturn).toBe(1.2); expect(changed.marginReturn).toBe(1.2);
   });
+  it("preserves imported partial trade groups after resolving an open remainder's quote listing", () => {
+    const closed = position({ id: "closed", sold_quantity: 10, source_import_id: "source-a", journal_source_key: "row-a", source_type: "custom_csv" });
+    const open = position({ id: "open", source_import_id: "source-a", journal_source_key: "row-b", source_type: "custom_csv", listing_id: "verified-listing" });
+    const stats = calculateJournal([closed, open], [sale("closed")]);
+    expect(stats.trades).toHaveLength(1);
+    expect(stats.closedCount).toBe(0);
+    expect(calculateJournal([closed, { ...open, category_id: "other" }], [sale("closed")]).trades).toHaveLength(2);
+    expect(calculateJournal([closed, { ...open, source_import_id: "unrelated-import" }], [sale("closed")]).trades).toHaveLength(2);
+    const verified = position({ id: "verified", listing_id: "listing-one" });
+    expect(calculateJournal([verified, { ...verified, id: "different", listing_id: "listing-two" }], []).trades).toHaveLength(2);
+  });
   it("does not substitute current FX or current margin for unknown historical data", () => {
     const p = position({ id: "p", sold_quantity: 10, entry_margin_base: null });
     const stats = calculateJournal([p], [sale("p", { fx_to_base: null })]);

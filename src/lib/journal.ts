@@ -7,7 +7,13 @@ export function instrumentKey(p: Position) {
   return p.listing_id ?? [p.ticker.trim().toUpperCase(), p.instrument_currency, p.instrument_type, p.option_type, p.strike_price, p.expiration_date].join("|");
 }
 export function tradeKey(p: Position) {
-  return [p.portfolio_id, instrumentKey(p), p.direction, p.entry_date ?? `unknown:${p.id}`, p.category_id ?? "none"].join("::");
+  // A journal CSV has no verified listing identity. Preserve its original
+  // instrument grouping within that import when an open remainder later gets
+  // a quote listing; that lookup must not turn closed partials into new trades.
+  const instrument = p.source_import_id && p.journal_source_key
+    ? ["journal", p.source_import_id, p.ticker.trim().toUpperCase(), p.instrument_currency, p.instrument_type, p.option_type, p.strike_price, p.expiration_date].join("|")
+    : instrumentKey(p);
+  return [p.portfolio_id, instrument, p.direction, p.entry_date ?? `unknown:${p.id}`, p.category_id ?? "none"].join("::");
 }
 export function positionSales(p: Position, sales: PositionSale[]) {
   const own = sales.filter(s => s.position_id === p.id);

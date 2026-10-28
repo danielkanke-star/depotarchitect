@@ -14,6 +14,12 @@ describe("Google Sheets journal migration", () => {
     const p = await analyzeJournalCsv(JOURNAL_TEMPLATE,"EUR",now);
     expect(p.errors).toBe(0); expect(p.entries[0]).toMatchObject({ entry_margin_base:135, entry_fx_to_base:0.9, quantity_step:0.01 });
   });
+  it("does not silently import a free-text option contract as a stock", async () => {
+    const p = await analyzeJournalCsv(JOURNAL_TEMPLATE.replace("BEISPIEL", "SAMPLE Jun17'27 132 CALL"), "EUR", now);
+    expect(p.entries).toHaveLength(0);
+    expect(p.rows[0].errors).toContainEqual(expect.stringContaining("Optionskontrakt"));
+    expect((await analyzeJournalCsv(JOURNAL_TEMPLATE.replace("BEISPIEL", "CALL"), "EUR", now)).errors).toBe(0);
+  });
   it("produces stable keys and retains identical separate lots", async () => {
     const text = JOURNAL_TEMPLATE+JOURNAL_TEMPLATE.split("\n")[1]+"\n";
     const a = await analyzeJournalCsv(text,"EUR",now), b = await analyzeJournalCsv(text,"EUR",now);

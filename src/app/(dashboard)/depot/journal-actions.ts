@@ -38,7 +38,7 @@ export async function refreshPortfolioFx() {
   const userId = await getUserId();
   const portfolio = await getOrCreatePortfolio();
   const supabase = await createClient();
-  const { data: positions } = await supabase.from("positions").select("instrument_currency").eq("portfolio_id", portfolio.id).neq("status", "closed");
+  const { data: positions } = await supabase.from("positions").select("instrument_currency").eq("portfolio_id", portfolio.id).neq("source_type", "demo").neq("status", "closed");
   for (const currency of new Set((positions ?? []).map(p => p.instrument_currency).filter((v): v is string => Boolean(v) && v !== portfolio.currency))) {
     await resolveCurrentFx(portfolio.id, userId, currency, portfolio.currency, "automatic");
   }
