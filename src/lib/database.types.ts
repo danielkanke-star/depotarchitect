@@ -169,7 +169,7 @@ export type Database = {
       }>;
       positions: Table<{
         entry_margin_base?: number | null; entry_margin_source?: string | null;
-        quantity_step?: number; tradingview_url?: string | null; journal_source_key?: string | null;
+        quantity_step?: number; tradingview_url?: string | null; journal_source_key?: string | null; journal_instrument_ref?: string | null;
         id: string; portfolio_id: string; user_id: string; category_id: string | null;
         ticker: string; instrument_name: string | null; instrument_type: string; direction: string;
         quantity: number; multiplier: number; entry_price: number; current_price: number | null; current_price_native: number | null;
@@ -193,7 +193,7 @@ export type Database = {
       }, {
         id?: string; portfolio_id: string; user_id: string; category_id?: string | null;
         entry_margin_base?: number | null; entry_margin_source?: string | null;
-        quantity_step?: number; tradingview_url?: string | null; journal_source_key?: string | null;
+        quantity_step?: number; tradingview_url?: string | null; journal_source_key?: string | null; journal_instrument_ref?: string | null;
         ticker: string; instrument_name?: string | null; instrument_type?: string; direction?: string;
         quantity?: number; multiplier?: number; entry_price?: number; current_price?: number | null; current_price_native?: number | null;
         instrument_currency?: string | null; fx_to_base?: number | null; data_as_of?: string | null;

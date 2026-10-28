@@ -11,7 +11,7 @@ export function tradeKey(p: Position) {
   // instrument grouping within that import when an open remainder later gets
   // a quote listing; that lookup must not turn closed partials into new trades.
   const instrument = p.source_import_id && p.journal_source_key
-    ? ["journal", p.source_import_id, p.ticker.trim().toUpperCase(), p.instrument_currency, p.instrument_type, p.option_type, p.strike_price, p.expiration_date].join("|")
+    ? ["journal", p.source_import_id, p.journal_instrument_ref ?? [p.ticker.trim().toUpperCase(), p.instrument_currency, p.instrument_type, p.option_type, p.strike_price, p.expiration_date].join("|")].join("|")
     : instrumentKey(p);
   return [p.portfolio_id, instrument, p.direction, p.entry_date ?? `unknown:${p.id}`, p.category_id ?? "none"].join("::");
 }

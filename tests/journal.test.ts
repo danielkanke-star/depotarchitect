@@ -36,6 +36,10 @@ describe("trade accounting before costs", () => {
     expect(calculateJournal([closed, { ...open, source_import_id: "unrelated-import" }], [sale("closed")]).trades).toHaveLength(2);
     const verified = position({ id: "verified", listing_id: "listing-one" });
     expect(calculateJournal([verified, { ...verified, id: "different", listing_id: "listing-two" }], []).trades).toHaveLength(2);
+    const original = { ...closed, journal_instrument_ref: "original-sheet-instrument" };
+    const normalized = { ...open, journal_instrument_ref: "original-sheet-instrument", ticker: "NORMALIZED", listing_id: "verified" };
+    expect(calculateJournal([original, normalized], [sale("closed")]).trades).toHaveLength(1);
+    expect(calculateJournal([original, { ...normalized, journal_instrument_ref: "different-source-listing" }], [sale("closed")]).trades).toHaveLength(2);
   });
   it("does not substitute current FX or current margin for unknown historical data", () => {
     const p = position({ id: "p", sold_quantity: 10, entry_margin_base: null });

@@ -68,6 +68,13 @@ type RequestOptions = {
   now?: Date;
 };
 
+function listingQuery(value: string) {
+  const match = /^(ETR|EPA):(.+)$/i.exec(value.trim());
+  return match
+    ? { symbol: match[2].trim().toUpperCase(), mic: match[1].toUpperCase() === "ETR" ? "XETR" : "XPAR" }
+    : { symbol: value.trim(), mic: null };
+}
+
 export async function findTwelveDataInstrument(
   {
     symbol,
@@ -80,7 +87,7 @@ export async function findTwelveDataInstrument(
 ): Promise<TwelveDataResult<TwelveDataInstrument>> {
   const response = await searchTwelveDataInstruments(symbol, options);
   if (response.status !== "success") return response;
-  const normalizedSymbol = symbol.trim().toUpperCase();
+  const normalizedSymbol = listingQuery(symbol).symbol.toUpperCase();
   const normalizedCurrency = currency.trim().toUpperCase();
   const candidates = response.data
     .filter((candidate) =>
@@ -96,7 +103,8 @@ export async function searchTwelveDataInstruments(
   searchTerm: string,
   options: RequestOptions,
 ): Promise<TwelveDataResult<TwelveDataInstrument[]>> {
-  const term = searchTerm.trim();
+  const query = listingQuery(searchTerm);
+  const term = query.symbol;
   if (!term || term.length > 80) return { status: "not_found" };
   const response = await requestJson<SymbolSearchResponse>(
     "/symbol_search",
@@ -106,7 +114,7 @@ export async function searchTwelveDataInstruments(
   if (response.status !== "success") return response;
   const candidates = (response.data.data ?? [])
     .map(toInstrument)
-    .filter((candidate): candidate is TwelveDataInstrument => candidate !== null);
+    .filter((candidate): candidate is TwelveDataInstrument => candidate !== null && (!query.mic || candidate.micCode === query.mic));
   return candidates.length > 0
     ? { status: "success", data: candidates }
     : { status: "not_found" };
@@ -124,11 +132,13 @@ export async function fetchTwelveDataQuote(
   },
   options: RequestOptions,
 ): Promise<TwelveDataResult<TwelveDataQuote>> {
-  const normalizedMic = micCode?.trim().toUpperCase() || null;
+  const query = listingQuery(symbol);
+  const normalizedMic = micCode?.trim().toUpperCase() || query.mic;
+  if (query.mic && normalizedMic !== query.mic) return { status: "invalid_response" };
   const response = await requestJson<QuoteResponse>(
     "/quote",
     {
-      symbol,
+      symbol: query.symbol,
       timezone: "UTC",
       ...(normalizedMic ? { mic_code: normalizedMic } : {}),
     },
@@ -150,7 +160,7 @@ export async function fetchTwelveDataQuote(
 
   if (
     !instrument
-    || instrument.symbol !== symbol.trim().toUpperCase()
+    || instrument.symbol !== query.symbol.toUpperCase()
     || instrument.currency !== normalizedCurrency
     || (normalizedMic !== null && instrument.micCode !== normalizedMic)
     || !Number.isFinite(price)

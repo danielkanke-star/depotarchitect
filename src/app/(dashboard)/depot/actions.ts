@@ -16,7 +16,7 @@ import Decimal from "decimal.js";
 import { resolveCurrentFx } from "@/lib/market-data-providers/fx";
 import { berlinDate } from "@/lib/risk-rules";
 
-const DIRECTIONS = new Set<Direction>(["long", "short"]);
+const DIRECTIONS = new Set<Direction>(["long", "short", "long_call", "long_put", "short_call", "short_put"]);
 const INSTRUMENT_TYPES = new Set<InstrumentType>(["stock", "etf", "option", "warrant", "knock_out", "other"]);
 const MARKET_DATA_SOURCE = "market_data_provider:twelve_data";
 const MIC_PATTERN = /^[A-Z0-9]{4}$/;
@@ -335,7 +335,7 @@ export async function savePosition(formData: FormData) {
       .single();
   }
   if (result.error || !result.data) throw new Error("Die Position konnte nicht gespeichert werden.");
-  const priceOutcome = sale.status === "closed"
+  const priceOutcome = sale.status === "closed" || instrumentType === "option"
     ? null
     : await refreshPositionFromTwelveData({
       supabase,
@@ -376,6 +376,10 @@ export async function refreshPositionPrice(formData: FormData) {
     .maybeSingle();
   if (positionError || !position || position.instrument_type === "cash" || position.status === "closed") {
     throw new Error("Die Position kann nicht aktualisiert werden.");
+  }
+  if (position.instrument_type === "option") {
+    revalidatePortfolioPages();
+    redirect("/depot?price=manual-contract-price");
   }
 
   const { data: mapping, error: mappingError } = await supabase
@@ -674,7 +678,7 @@ async function refreshPositionFromTwelveData({
       user_id: userId,
       portfolio_id: portfolioId,
       position_id: positionId,
-      ticker: ticker.trim().toUpperCase(),
+      ticker: quote.symbol.trim().toUpperCase(),
       currency: quote.currency,
       price_native: quote.price,
       source_type: "market_data_provider",

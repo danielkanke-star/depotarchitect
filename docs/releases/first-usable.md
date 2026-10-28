@@ -76,3 +76,9 @@ Der automatische Kursabruf wurde im bestehenden Konto im Browser bestätigt: Tic
 Bei unvollständigem bestehendem Stopprisiko bleibt die Stückzahl wie vorgesehen gesperrt. Der Rechner nennt jetzt die betroffenen Teilpositionen samt fehlenden Angaben und verlinkt direkt auf deren Bearbeitung. Die Freigabe einer Stückzahl darf erst erfolgen, wenn die tatsächlichen Stoppangaben vollständig sind; eine berechenbare Teilsumme darf den vollständigen Risikoabzug nicht ersetzen.
 
 Bei Altbeständen ohne Einstiegsdatum bleibt das Datumsfeld leer. Die Pflege eines Stopps verlangt dort kein erfundenes Einstiegsdatum. Für neue Käufe ist ein gültiges Datum erforderlich; bekannte historische Daten dürfen nicht entfernt werden. Die serverseitige Validierung wird nach der Eigentumsprüfung aufgerufen. Zusätzliche Tests prüfen diese drei Fälle und ungültige beziehungsweise zukünftige Daten. Bei dieser Browserprüfung wurden keine Bestandspositionen verändert.
+
+## Bestätigte Quellenkorrekturen und Börsenkürzel
+
+Bestätigte Währungs- und Kontraktkorrekturen werden mit vorherigem privaten Backup, unverändertem Quellblatt und kleinem Vorher-/Nachher-Protokoll im Importdatensatz angewendet. Historische Ausführungen bleiben unangetastet; historische Optionszeilen in ursprünglichen Preiseinheiten sind als solche gekennzeichnet. Aktuelle Optionspositionen verwenden geprüfte Kontraktzahl, Multiplikator, Typ, Strike und Laufzeit. Tabellenkurse werden ausdrücklich als Referenz ohne automatische Börsenversorgung angezeigt.
+
+Die Kurssuche versteht die Börsenpräfixe `ETR:` und `EPA:`. Sie prüft sowohl MIC als auch die von der Quelle gelieferte Handelswährung und weicht bei widersprüchlichen Angaben nicht auf eine andere Notierung aus. Eine additive Migration hält dafür die ursprüngliche Instrumentreferenz des Journalimports unveränderlich fest; ein später normalisierter Ticker trennt keine Teilverkäufe ab.
