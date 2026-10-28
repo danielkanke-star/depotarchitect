@@ -9,6 +9,7 @@ import { InfoTip } from "@/components/info-tip";
 import { PositionForm } from "@/components/position-form";
 import { DepotViewPreferences } from "@/components/depot-view-preferences";
 import { Card, PageHeader } from "@/components/ui";
+import { formatPrice } from "@/components/risk-indicator";
 import { calculatePortfolio } from "@/lib/calculations/portfolio-calculations";
 import { positionToCalculationInput } from "@/lib/calculations/position-adapter";
 import type { CalculationMetric } from "@/lib/calculations/calculation-types";
@@ -152,7 +153,7 @@ function formatInstrumentMoney(value: number, currency: string | null) {
 }
 
 function formatInstrumentPrice(value:number,currency:string|null) {
-  return currency?new Intl.NumberFormat("de-DE",{style:"currency",currency,currencyDisplay:"code",minimumFractionDigits:2,maximumFractionDigits:6}).format(value):"—";
+  return formatPrice(value,currency);
 }
 
 function PriceDetails({
