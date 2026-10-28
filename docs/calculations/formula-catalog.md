@@ -24,7 +24,7 @@ Eine Ausgangsquote `1 EUR = 0,929275 CHF` wird im Quellenadapter für ein EUR-De
 | Stopprisiko Basiswährung | `stopRisk` | `stopRiskInstrument × current_fx_to_base` | Aktueller FX ist maßgeblich. |
 | Anteil NetLiq | `netLiquidityShare` | `positionValueBase ÷ net_liquidity` | NetLiq ≤ 0 ist ungültig. |
 | Margin Requirement | `marginRequirement` | direkter bestätigter Wert, sonst `positionValueBase × margin_rate` | Herkunft: `broker`, `imported_direct`, `manual_direct`, `estimated`, `missing`, `legacy_untrusted`. |
-| Anteil am konfigurierten Risikobudget | `riskToBudget` | `stopRisk ÷ (NetLiq × risk_per_trade_pct)` | Fehlt das konfigurierte Budget, ist der Anteil nicht berechenbar. |
+| Anteil am konfigurierten Risikobudget | `riskToBudget` | `stopRisk ÷ (NetLiq × 0,33 × Profilfaktor)` | `risk_per_trade_pct` ist ausschließlich die Vorgabe für einen neuen Trade. |
 
 Ein manueller direkter Wert wird nie als Brokerwert bezeichnet. Ein bestätigter direkter Wert von `0` ist zulässig. Ein alter, unbestätigter Null-Platzhalter wird als `legacy_untrusted` und damit fehlend behandelt.
 

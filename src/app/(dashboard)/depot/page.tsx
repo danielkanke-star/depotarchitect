@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { Fragment } from "react";
+import { PositionJournalDetails } from "@/components/position-journal-details";
+import { RiskIndicator } from "@/components/risk-indicator";
+import { depotRiskBudget, positionRiskTone, stopAge } from "@/lib/risk-rules";
 import { PositionForm } from "@/components/position-form";
 import { DepotViewPreferences } from "@/components/depot-view-preferences";
 import { Badge, Card, PageHeader } from "@/components/ui";
@@ -15,13 +19,11 @@ type Params = { q?: string; category?: string; view?: string; edit?: string; add
 
 export default async function DepotPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
-  const { portfolio, settings, categories, positions, fxRates, priceObservations, latestImport, capitalMovements } = await getPortfolioData();
+  const { portfolio, categories, positions, fxRates, priceObservations, latestImport, capitalMovements, sales, journalAvailable } = await getPortfolioData();
   const marketDataMappings = await getPositionMarketDataMappings(portfolio.id);
   const mappingByPositionId = new Map(marketDataMappings.map((mapping) => [mapping.position_id, mapping]));
   const activePositions = positions.filter((position) => position.status !== "closed");
-  const riskBudget = portfolio.net_liquidity === null || Number(settings.risk_per_trade_pct) <= 0
-    ? null
-    : Number(portfolio.net_liquidity) * Number(settings.risk_per_trade_pct) / 100;
+  const riskBudget = depotRiskBudget(portfolio.net_liquidity, portfolio.risk_profile);
   const calculation = calculatePortfolio({
     netLiquidity: portfolio.net_liquidity,
     riskBudget,
@@ -72,6 +74,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
     </Card>}
 
     {priceNotice(params.price)}
+    {!journalAvailable && <p className="mb-4 rounded-xl border border-amber-500 p-4 text-sm text-amber-200">Die Journalmigration fehlt. Die vorhandenen Positionen bleiben lesbar; neue Funktionen müssen zuerst freigeschaltet werden.</p>}
 
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -93,20 +96,20 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
             const partial = !closed && Number(position.sold_quantity ?? 0) > 0;
             const legacyCash = position.instrument_type === "cash";
             const resolvedPrice = pricesByPositionId.get(position.id) ?? null;
-            return <tr key={position.id} className="border-t border-border/60 align-top">
+            return <Fragment key={position.id}><tr className="border-t border-border/60 align-top">
               <td className="py-3"><div className="font-medium">{position.ticker}</div>{position.instrument_name && <div className="text-xs text-foreground/80">{position.instrument_name}</div>}<div className="text-xs text-muted">{instrumentLabel(position.instrument_type)} · {position.instrument_currency}</div>{legacyCash && <div className="mt-1 text-[10px] text-amber-300">Legacy-Cash · nur lesbar</div>}</td>
               <td>{categories.find((category) => category.id === position.category_id)?.name ?? "Keine"}</td>
               <td><Badge tone={closed ? "neutral" : partial ? "warn" : "good"}>{closed ? "Geschlossen" : partial ? "Teilverkauft" : "Offen"}</Badge></td>
-              <td><div>{Number(position.quantity).toLocaleString("de-DE")}</div>{partial && <div className="text-xs text-muted">{remainingQuantity(Number(position.quantity), position.sold_quantity).toLocaleString("de-DE")} offen</div>}</td>
-              <td>{Number(position.entry_price).toLocaleString("de-DE", { maximumFractionDigits: 6 })} {position.instrument_currency}</td>
+              <td><div>{(closed ? Number(position.quantity) : remainingQuantity(Number(position.quantity), position.sold_quantity)).toLocaleString("de-DE", { maximumFractionDigits: 6 })}</div>{partial && <div className="text-xs text-muted">von {Number(position.quantity).toLocaleString("de-DE")} beim Einstieg</div>}</td>
+              <td>{Number(position.entry_price).toLocaleString("de-DE", { maximumFractionDigits: 6 })} {position.instrument_currency}<div className="text-xs text-muted">{position.entry_date ?? "Datum unbekannt"}</div></td>
               <td>{closed || legacyCash || !resolvedPrice ? "–" : <div>{resolvedPrice.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {resolvedPrice.currency}</div>}</td>
               <td>{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueInstrument} format={(value) => formatInstrumentMoney(value, position.instrument_currency)} missing="Aktueller Kurs fehlt" />}</td>
-              <td className="depot-column-base-market-value">{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueBase} format={(value) => money.format(value)} missing={result?.positionValueInstrument.value == null ? "Aktueller Kurs fehlt" : "FX fehlt"} />}</td>
-              <td className="depot-column-risk">{closed || legacyCash ? "–" : (position.stop_price_native ?? position.stop_price) == null ? <span className="text-xs text-muted">Kein Stop</span> : <SimpleMetric metric={result?.stopRisk} format={(value) => money.format(value)} missing="Risiko nicht berechenbar" />}</td>
+              <td className="depot-column-base-market-value">{closed || legacyCash ? "–" : <SimpleMetric metric={result?.positionValueBase} format={(value) => money.format(value)} missing={result?.positionValueInstrument.value == null ? "Aktueller Kurs fehlt" : "Wechselkurs fehlt"} />}</td>
+              <td className="depot-column-risk">{closed || legacyCash ? "–" : <div className="space-y-1"><RiskIndicator tone={positionRiskTone(result?.riskToNetLiquidity.value ?? null, portfolio.risk_profile)}><SimpleMetric metric={result?.stopRisk} format={(value) => money.format(value)} missing="Risiko unvollständig" /></RiskIndicator><div className="text-xs text-muted">Stopp: {position.stop_price_native ?? position.stop_price ?? "fehlt"}</div><RiskIndicator tone={stopAge(position.stop_updated_at).tone}>{stopAge(position.stop_updated_at).label}</RiskIndicator></div>}</td>
               <td className="depot-column-margin">{!isMarginAccount(portfolio.account_type) ? "Nicht zutreffend" : closed || legacyCash ? "–" : <SimpleMetric metric={result?.marginRequirement} format={(value) => money.format(value)} missing="Noch nicht hinterlegt" />}</td>
               <td className="depot-column-price-details">{closed || legacyCash || !resolvedPrice ? "–" : <PriceDetails price={resolvedPrice} exchange={mappingByPositionId.get(position.id)?.exchange ?? null} micCode={mappingByPositionId.get(position.id)?.mic_code ?? null} />}</td>
-              <td><div className="flex flex-wrap items-center gap-3">{!legacyCash && !closed && <form action={refreshPositionPrice}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-accent">Kurs aktualisieren</button></form>}{!legacyCash && <Link href={`/depot?edit=${position.id}`} className="text-xs text-accent">Bearbeiten</Link>}<form action={deletePosition}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-red-300">Löschen</button></form></div></td>
-            </tr>;
+              <td><div className="flex flex-wrap items-center gap-3">{!legacyCash && !closed && <form action={refreshPositionPrice}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-accent">Kurs aktualisieren</button></form>}{!legacyCash && <Link href={`/depot?edit=${position.id}`} className="text-xs text-accent">Bearbeiten</Link>}{Number(position.sold_quantity ?? 0) === 0 && <form action={deletePosition}><input type="hidden" name="id" value={position.id} /><button className="text-xs text-red-300">Löschen</button></form>}</div></td>
+            </tr>{!legacyCash && <tr><td colSpan={12}><PositionJournalDetails position={position} result={result} sales={sales} baseCurrency={portfolio.currency} profile={portfolio.risk_profile} available={journalAvailable} /></td></tr>}</Fragment>;
           })}</tbody>
         </table>
       </div></DepotViewPreferences>}

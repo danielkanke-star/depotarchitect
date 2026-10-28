@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
 
 export async function updateSession(request: NextRequest) {
+  if (request.nextUrl.pathname === "/vorschau") return process.env.NODE_ENV === "development"
+    ? NextResponse.next({ request }) : new NextResponse(null, { status: 404 });
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(

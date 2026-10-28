@@ -10,12 +10,12 @@ const depotPage = readFileSync(new URL("../src/app/(dashboard)/depot/page.tsx", 
 const preferenceComponent = readFileSync(new URL("../src/components/depot-view-preferences.tsx", import.meta.url), "utf8");
 
 describe("configurable depot columns", () => {
-  it("keeps the default view slim and toggles every optional area independently", () => {
-    expect(DEFAULT_DEPOT_VIEW_PREFERENCES).toEqual({ baseMarketValue: false, risk: false, margin: false, priceDetails: false });
+  it("shows stop risk and base-currency value by default and toggles every optional area independently", () => {
+    expect(DEFAULT_DEPOT_VIEW_PREFERENCES).toEqual({ baseMarketValue: true, risk: true, margin: false, priceDetails: false });
     for (const key of Object.keys(DEFAULT_DEPOT_VIEW_PREFERENCES) as Array<keyof typeof DEFAULT_DEPOT_VIEW_PREFERENCES>) {
       const toggled = toggleDepotViewPreference(DEFAULT_DEPOT_VIEW_PREFERENCES, key);
-      expect(toggled[key]).toBe(true);
-      expect(Object.entries(toggled).filter(([candidate]) => candidate !== key).every(([, value]) => value === false)).toBe(true);
+      expect(toggled[key]).toBe(!DEFAULT_DEPOT_VIEW_PREFERENCES[key]);
+      expect(Object.entries(toggled).filter(([candidate]) => candidate !== key).every(([candidate, value]) => value === DEFAULT_DEPOT_VIEW_PREFERENCES[candidate as keyof typeof DEFAULT_DEPOT_VIEW_PREFERENCES])).toBe(true);
     }
   });
 
@@ -28,8 +28,8 @@ describe("configurable depot columns", () => {
   it("uses instrument market value as primary and names the optional column by portfolio currency", () => {
     expect(depotPage).toContain("result?.positionValueInstrument");
     expect(depotPage).toContain("Marktwert {portfolio.currency}");
-    expect(depotPage).toContain("FX fehlt");
-    expect(depotPage).toContain("Kein Stop");
+    expect(depotPage).toContain("Wechselkurs fehlt");
+    expect(depotPage).toContain("Risiko unvollständig");
     expect(depotPage).not.toContain("Basiswert");
   });
 });

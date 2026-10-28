@@ -3,19 +3,30 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
 import { assertBaseCurrencyChangeAllowed } from "@/lib/portfolio-write-policy";
+import { profileFactor, parseBerlinDateTime } from "@/lib/risk-rules";
+import { unstable_rethrow } from "next/navigation";
 
 const num = (formData: FormData, key: string) => Number(String(formData.get(key) ?? "0").replace(",", ".")) || 0;
 const nullableNum = (formData: FormData, key: string) => {
   const raw = String(formData.get(key) ?? "").trim();
   if (!raw) return null;
   const value = Number(raw.replace(",", "."));
-  return Number.isFinite(value) ? value : null;
+  if (!Number.isFinite(value)) throw new Error("Bitte eine gültige Zahl ohne Tausendertrennzeichen eingeben.");
+  return value;
 };
 export async function saveSettings(formData: FormData) {
   const supabase = await createClient();
   const portfolio = await getOrCreatePortfolio();
   const requestedCurrency = normalizedCurrency(formData);
   const accountType = normalizedAccountType(formData);
+  const profile = String(formData.get("risk_profile") ?? "");
+  const netLiq = nullableNum(formData, "net_liquidity");
+  if (profileFactor(profile) === null) throw new Error("Bitte ein gültiges Risikoprofil wählen.");
+  if (netLiq !== null && netLiq < 0) throw new Error("Die Nettoliquidität darf nicht negativ sein.");
+  for (const key of ["risk_per_trade_pct", "max_margin_pct", "max_position_pct"]) {
+    const value = nullableNum(formData, key);
+    if (value === null || value <= 0 || value > 100) throw new Error("Die Prozentwerte müssen größer als null und höchstens 100 sein.");
+  }
   const [{ data: positions, error: positionError }, { data: cashBalances, error: cashError }] = await Promise.all([
     supabase.from("positions").select("id").eq("portfolio_id", portfolio.id).limit(1),
     supabase.from("portfolio_cash_balances").select("id").eq("portfolio_id", portfolio.id).limit(1),
@@ -28,12 +39,17 @@ export async function saveSettings(formData: FormData) {
     cashBalanceCount: cashBalances?.length ?? 0,
   });
   const [{ error: portfolioError }, { error: settingsError }] = await Promise.all([
-    supabase.from("portfolios").update({ net_liquidity: nullableNum(formData, "net_liquidity"), currency: requestedCurrency, account_type: accountType, data_as_of: normalizedDateTime(formData, "data_as_of"), margin_used_pct: null, risk_budget_used_pct: null, risk_profile: String(formData.get("risk_profile") ?? "Aggressiv 1,0"), updated_at: new Date().toISOString() }).eq("id", portfolio.id),
-    supabase.from("portfolio_settings").update({ risk_per_trade_pct: num(formData, "risk_per_trade_pct"), max_margin_pct: num(formData, "max_margin_pct"), max_position_pct: num(formData, "max_position_pct"), max_sector_pct: num(formData, "max_sector_pct"), max_drawdown_pct: num(formData, "max_drawdown_pct"), updated_at: new Date().toISOString() }).eq("portfolio_id", portfolio.id),
+    supabase.from("portfolios").update({ net_liquidity: netLiq, currency: requestedCurrency, account_type: accountType, data_as_of: normalizedDateTime(formData, "data_as_of"), margin_used_pct: null, risk_budget_used_pct: null, risk_profile: profile, updated_at: new Date().toISOString() }).eq("id", portfolio.id),
+    supabase.from("portfolio_settings").update({ risk_per_trade_pct: num(formData, "risk_per_trade_pct"), max_margin_pct: num(formData, "max_margin_pct"), max_position_pct: num(formData, "max_position_pct"), updated_at: new Date().toISOString() }).eq("portfolio_id", portfolio.id),
   ]);
   if (portfolioError) throw new Error("Die Portfolioeinstellungen konnten nicht gespeichert werden.");
   if (settingsError) throw new Error("Die Risikoeinstellungen konnten nicht gespeichert werden.");
-  revalidatePath("/cockpit"); revalidatePath("/risiko"); revalidatePath("/einstellungen");
+  revalidatePath("/cockpit"); revalidatePath("/depot"); revalidatePath("/risiko"); revalidatePath("/einstellungen");
+}
+
+export async function saveSettingsWithFeedback(_previous: { message: string; ok: boolean }, formData: FormData) {
+  try { await saveSettings(formData); return { ok: true, message: "Einstellungen gespeichert." }; }
+  catch (error) { unstable_rethrow(error); return { ok: false, message: error instanceof Error ? error.message : "Speichern fehlgeschlagen." }; }
 }
 
 export async function saveCashBalance(formData: FormData) {
@@ -98,9 +114,9 @@ export async function deleteCashBalance(formData: FormData) {
 function normalizedDateTime(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
   if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw new Error("Der Datenzeitpunkt ist ungültig.");
-  return date.toISOString();
+  const date = parseBerlinDateTime(value);
+  if (!date) throw new Error("Der Datenzeitpunkt in Europe/Berlin ist ungültig.");
+  return date;
 }
 
 function normalizedCurrency(formData: FormData, key = "currency") {

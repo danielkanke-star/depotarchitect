@@ -22,6 +22,12 @@ const base: PositionCalculationInput = {
 };
 
 describe("central position calculation engine", () => {
+  it("rejects zero FX, zero multipliers and zero NetLiq denominators", () => {
+    expect(calculatePosition({ ...base, currentFxToBase: 0 }).positionValueBase.status).toBe("invalid");
+    expect(calculatePosition({ ...base, multiplier: 0 }).positionValueInstrument.status).toBe("invalid");
+    expect(calculatePosition({ ...base, netLiquidity: 0 }).netLiquidityShare.status).toBe("invalid");
+    expect(calculatePortfolio({ positions: [base], netLiquidity: 0 }).netLiquidityLeverage.status).toBe("invalid");
+  });
   it("calculates a long EUR stock and a decimal margin rate", () => {
     const result = calculatePosition(base);
     expect(result.positionValueBase.value).toBe(1_200);

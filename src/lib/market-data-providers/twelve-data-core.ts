@@ -154,7 +154,7 @@ export async function fetchTwelveDataQuote(
     || instrument.currency !== normalizedCurrency
     || (normalizedMic !== null && instrument.micCode !== normalizedMic)
     || !Number.isFinite(price)
-    || price < 0
+    || price <= 0
     || !Number.isFinite(timestamp)
   ) return { status: "invalid_response" };
 

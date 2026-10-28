@@ -45,7 +45,7 @@ function positionValueInstrument(input: PositionCalculationInput): CalculationMe
   if (quantity === null) return incomplete("quantity_missing");
   if (quantity.isNegative()) return invalid("quantity_invalid");
   if (multiplier === null) return incomplete("multiplier_missing");
-  if (!multiplier.isPositive()) return invalid("multiplier_invalid");
+  if (!multiplier.gt(0)) return invalid("multiplier_invalid");
   if (currentPrice.parsed === null) return currentPrice.metric;
   return withSourceStatus(quantity.abs().mul(multiplier).mul(currentPrice.parsed), [currentPrice.metric]);
 }
@@ -59,10 +59,10 @@ function positionValueBase(input: PositionCalculationInput, instrumentValue: Cal
     "fx_to_base_demo",
     "fx_to_base_stale",
   );
-  if (instrumentValue.value !== null && fx.parsed !== null && fx.parsed.isPositive()) {
+  if (instrumentValue.value !== null && fx.parsed !== null && fx.parsed.gt(0)) {
     return withSourceStatus(new Decimal(instrumentValue.value).mul(fx.parsed), [instrumentValue, fx.metric]);
   }
-  if (fx.parsed !== null && !fx.parsed.isPositive()) return invalid("fx_to_base_invalid");
+  if (fx.parsed !== null && !fx.parsed.gt(0)) return invalid("fx_to_base_invalid");
   if (instrumentValue.status === "invalid") return invalid(...instrumentValue.reasons);
   if (instrumentValue.value === null) return incomplete(...instrumentValue.reasons);
   return fx.metric;
@@ -91,12 +91,12 @@ function unrealizedPnl(input: PositionCalculationInput, factor: 1 | -1): Calcula
   if (quantity === null) return incomplete("quantity_missing");
   if (quantity.isNegative()) return invalid("quantity_invalid");
   if (multiplier === null) return incomplete("multiplier_missing");
-  if (!multiplier.isPositive()) return invalid("multiplier_invalid");
+  if (!multiplier.gt(0)) return invalid("multiplier_invalid");
   if (currentPrice.parsed === null) return currentPrice.metric;
   if (entryPrice === null) return incomplete("entry_price_missing");
   if (entryPrice.isNegative()) return invalid("entry_price_invalid");
   if (fx.parsed === null) return fx.metric;
-  if (!fx.parsed.isPositive()) return invalid("fx_to_base_invalid");
+  if (!fx.parsed.gt(0)) return invalid("fx_to_base_invalid");
   return withSourceStatus(
     currentPrice.parsed.minus(entryPrice).mul(quantity.abs()).mul(multiplier).mul(fx.parsed).mul(factor),
     [currentPrice.metric, fx.metric],
@@ -112,7 +112,7 @@ function ratio(
   if (numerator.value === null) return { ...numerator };
   const denominator = decimal(denominatorInput);
   if (denominator === null) return incomplete(missingReason);
-  if (!denominator.isPositive()) return invalid(invalidReason);
+  if (!denominator.gt(0)) return invalid(invalidReason);
   return metricWithValue(new Decimal(numerator.value).div(denominator), numerator.status, numerator.reasons);
 }
 
@@ -133,7 +133,7 @@ function stopRiskInstrument(input: PositionCalculationInput, factor: 1 | -1): Ca
   if (quantity === null) return incomplete("quantity_missing");
   if (quantity.isNegative()) return invalid("quantity_invalid");
   if (multiplier === null) return incomplete("multiplier_missing");
-  if (!multiplier.isPositive()) return invalid("multiplier_invalid");
+  if (!multiplier.gt(0)) return invalid("multiplier_invalid");
   if (stop.isNegative()) return invalid("stop_invalid");
   if ((factor === 1 && stop.greaterThan(currentPrice.parsed)) || (factor === -1 && stop.lessThan(currentPrice.parsed))) {
     return invalid("stop_invalid");
@@ -153,7 +153,7 @@ function stopRiskBase(input: PositionCalculationInput, instrumentRisk: Calculati
     "fx_to_base_stale",
   );
   if (fx.parsed === null) return fx.metric;
-  if (!fx.parsed.isPositive()) return invalid("fx_to_base_invalid");
+  if (!fx.parsed.gt(0)) return invalid("fx_to_base_invalid");
   return withSourceStatus(new Decimal(instrumentRisk.value).mul(fx.parsed), [instrumentRisk, fx.metric]);
 }
 

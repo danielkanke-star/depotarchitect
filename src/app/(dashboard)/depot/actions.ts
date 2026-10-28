@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Direction, InstrumentType } from "@/lib/calculations/calculation-types";
 import type { Database, Position } from "@/lib/database.types";
@@ -12,6 +12,9 @@ import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
 import { normalizeMarginInput, normalizePositionSale, validateCapitalMovement } from "@/lib/portfolio-entry";
 import { resolveWritableInstrumentType } from "@/lib/portfolio-write-policy";
 import { createClient } from "@/lib/supabase/server";
+import Decimal from "decimal.js";
+import { resolveCurrentFx } from "@/lib/market-data-providers/fx";
+import { berlinDate } from "@/lib/risk-rules";
 
 const DIRECTIONS = new Set<Direction>(["long", "short"]);
 const INSTRUMENT_TYPES = new Set<InstrumentType>(["stock", "etf", "option", "warrant", "knock_out", "other"]);
@@ -32,7 +35,8 @@ const nullableNumber = (formData: FormData, key: string) => {
   const raw = text(formData, key);
   if (!raw) return null;
   const value = Number(raw.replace(",", "."));
-  return Number.isFinite(value) ? value : null;
+  if (!Number.isFinite(value)) throw new Error("Bitte eine gültige Zahl ohne Tausendertrennzeichen eingeben.");
+  return value;
 };
 
 export type MarketDataLookupState = {
@@ -50,6 +54,12 @@ export type MarketDataLookupState = {
   dataStatus: "delayed" | "end_of_day" | "stale";
   isMarketOpen: boolean;
   candidates: TwelveDataInstrument[];
+  fxToBase?: number | null;
+  fxStale?: boolean;
+  fxAsOf?: string | null;
+  fxSource?: string | null;
+  quantityStep?: number | null;
+  contractMultiplier?: number | null;
 };
 
 export async function lookupPositionMarketData(
@@ -93,6 +103,13 @@ export async function lookupPositionMarketData(
   if (result.status !== "success") {
     return { status: "error", message: "Die Kursquelle ist momentan nicht verfügbar. Bitte später erneut versuchen." };
   }
+  const portfolio = await getOrCreatePortfolio();
+  const fx = await resolveCurrentFx(portfolio.id, await getUserId(), result.data.currency, portfolio.currency);
+  const { data: knownListing } = await supabase.from("market_listings").select("id").eq("symbol",result.data.symbol).eq("mic_code",result.data.micCode).eq("currency",result.data.currency).maybeSingle();
+  const { data: configurations } = knownListing
+    ? await supabase.from("positions").select("quantity_step,multiplier").eq("listing_id",knownListing.id).limit(100)
+    : { data: null };
+  const uniquePositive = (values: (number | undefined)[]) => { const unique=[...new Set(values.filter((v):v is number=>v!==undefined && Number.isFinite(v) && v>0))]; return unique.length===1 ? unique[0] : null; };
   return {
     status: "success",
     symbol: result.data.symbol,
@@ -105,6 +122,12 @@ export async function lookupPositionMarketData(
     dataStatus: result.data.status,
     isMarketOpen: result.data.isMarketOpen,
     candidates,
+    fxToBase: fx?.rate ?? null,
+    fxStale: fx?.stale ?? true,
+    fxAsOf: fx?.asOf ?? null,
+    fxSource: fx?.source ?? null,
+    quantityStep: uniquePositive((configurations??[]).map(c=>c.quantity_step)),
+    contractMultiplier: uniquePositive((configurations??[]).map(c=>c.multiplier)),
   };
 }
 
@@ -153,6 +176,7 @@ export async function savePosition(formData: FormData) {
   const notes = text(formData, "notes") || null;
   const marketDataMic = text(formData, "market_data_mic").toUpperCase() || null;
   const entryDate = optionalIsoDate(text(formData, "entry_date"), "Das Einstiegsdatum ist ungültig.");
+  if (!entryDate || entryDate > berlinDate()) throw new Error("Ein gültiges Einstiegsdatum bis heute ist erforderlich.");
 
   if (!ticker || ticker.length > 40 || !DIRECTIONS.has(direction) || !INSTRUMENT_TYPES.has(requestedInstrumentType)) {
     throw new Error("Die Positionsangaben sind ungültig.");
@@ -201,6 +225,21 @@ export async function savePosition(formData: FormData) {
     value: nullableNumber(formData, "margin_value"),
   });
   const now = new Date().toISOString();
+  const multiplier = nullableNumber(formData, "multiplier") ?? existing?.multiplier ?? 1;
+  const quantityStep = nullableNumber(formData, "quantity_step") ?? existing?.quantity_step ?? 1;
+  if (multiplier <= 0 || quantityStep < 0.000001 || new Decimal(quantityStep).decimalPlaces() > 6 || new Decimal(quantity).decimalPlaces() > 6) throw new Error("Multiplikator muss positiv sein. Menge und Stückelung erlauben höchstens sechs Nachkommastellen.");
+  const suppliedFx = nullableNumber(formData, "current_fx_to_base");
+  const automaticFx = instrumentCurrency !== portfolio.currency && suppliedFx === null
+    ? await resolveCurrentFx(portfolio.id, userId, instrumentCurrency, portfolio.currency) : null;
+  const currentFx = instrumentCurrency === portfolio.currency ? 1 : suppliedFx ?? automaticFx?.rate ?? null;
+  const entryFx = instrumentCurrency === portfolio.currency ? 1 : nullableNumber(formData, "entry_fx_to_base") ?? (!existing && entryDate === berlinDate() ? currentFx : existing?.instrument_currency === instrumentCurrency ? existing.entry_fx_to_base : null);
+  if ((currentFx !== null && currentFx <= 0) || (entryFx !== null && entryFx <= 0)) throw new Error("Wechselkurse müssen positiv sein.");
+  const referenceMargin = nullableNumber(formData, "entry_margin_base");
+  if (referenceMargin !== null && referenceMargin < 0) throw new Error("Die Einstiegsmargin darf nicht negativ sein.");
+  const entryMargin = existing?.entry_margin_base ?? referenceMargin ?? (!existing && entryDate === berlinDate()
+    ? margin.marginRequirement ?? (entryFx !== null && margin.marginRate !== null ? new Decimal(quantity).mul(entryPrice).mul(multiplier).mul(entryFx).mul(margin.marginRate).toNumber() : null) : null);
+  const tradingViewUrl = text(formData, "tradingview_url") || null;
+  if (tradingViewUrl && !/^https:\/\/([a-z0-9-]+\.)?tradingview\.com\//.test(tradingViewUrl)) throw new Error("Bitte einen HTTPS-Link zu TradingView eingeben.");
   const shouldWriteManualPrice = !existing
     || existing.ticker !== ticker
     || existing.instrument_currency !== instrumentCurrency
@@ -216,7 +255,14 @@ export async function savePosition(formData: FormData) {
     instrument_currency: instrumentCurrency,
     stop_price: stopPrice,
     stop_price_native: stopPrice,
-    stop_updated_at: stopPrice === null ? null : now,
+    stop_updated_at: stopPrice === null ? null : existing && stopPrice === (existing.stop_price_native ?? existing.stop_price) ? existing.stop_updated_at : now,
+    multiplier,
+    quantity_step: quantityStep,
+    tradingview_url: tradingViewUrl,
+    entry_margin_base: entryMargin,
+    entry_margin_source: existing?.entry_margin_base != null ? existing.entry_margin_source : entryMargin === null ? null : referenceMargin !== null ? "manual_reference" : margin.marginRequirement !== null ? "entry_direct_reference" : "entry_rate_reference",
+    entry_fx_to_base: entryFx,
+    ...(!existing || currentFx !== existing.current_fx_to_base || instrumentCurrency !== existing.instrument_currency ? { current_fx_to_base: currentFx, fx_to_base: currentFx, current_fx_source: automaticFx?.source ?? (currentFx === null ? null : "manual"), current_fx_status: currentFx === null ? "missing" as const : automaticFx ? automaticFx.stale ? "stale" as const : "delayed" as const : "manually_updated" as const, current_fx_as_of: automaticFx?.asOf ?? (currentFx === null ? null : now) } : {}),
     sold_quantity: sale.soldQuantity,
     sale_price: sale.salePrice,
     sale_date: sale.saleDate,
@@ -262,7 +308,7 @@ export async function savePosition(formData: FormData) {
     };
     result = await supabase
       .from("positions")
-      .update({ ...payload, ...technicalInvalidation })
+      .update({ ...technicalInvalidation, ...payload })
       .eq("id", existing.id)
       .eq("portfolio_id", portfolio.id)
       .select("id")
@@ -275,14 +321,13 @@ export async function savePosition(formData: FormData) {
         ...payload,
         portfolio_id: portfolio.id,
         user_id: userId,
-        multiplier: 1,
         source_type: "manual",
-        entry_fx_to_base: baseCurrencyPosition ? 1 : null,
-        current_fx_to_base: baseCurrencyPosition ? 1 : null,
-        current_fx_source: baseCurrencyPosition ? "identity" : null,
-        current_fx_as_of: baseCurrencyPosition ? now : null,
-        current_fx_status: baseCurrencyPosition ? "manually_updated" : "missing",
-        fx_to_base: baseCurrencyPosition ? 1 : null,
+        entry_fx_to_base: entryFx,
+        current_fx_to_base: currentFx,
+        current_fx_source: baseCurrencyPosition ? "identity" : automaticFx?.source ?? (currentFx !== null ? "manual" : null),
+        current_fx_as_of: automaticFx?.asOf ?? (currentFx !== null ? now : null),
+        current_fx_status: currentFx === null ? "missing" : automaticFx ? automaticFx.stale ? "stale" : "delayed" : "manually_updated",
+        fx_to_base: currentFx,
         market_value: null,
         risk_amount: null,
       })
@@ -305,6 +350,14 @@ export async function savePosition(formData: FormData) {
     });
   revalidatePortfolioPages();
   redirect(priceOutcome ? `/depot?price=${priceOutcome}` : "/depot");
+}
+
+export async function savePositionWithFeedback(_previous: { message: string }, formData: FormData) {
+  try { await savePosition(formData); return { message: "Position gespeichert." }; }
+  catch (error) {
+    unstable_rethrow(error);
+    return { message: error instanceof Error ? error.message : "Die Position konnte nicht gespeichert werden." };
+  }
 }
 
 export async function refreshPositionPrice(formData: FormData) {
@@ -448,6 +501,8 @@ export async function deletePosition(formData: FormData) {
   const supabase = await createClient();
   const portfolio = await getOrCreatePortfolio();
   const id = text(formData, "id");
+  const { data: position } = await supabase.from("positions").select("sold_quantity").eq("id", id).eq("portfolio_id", portfolio.id).single();
+  if (position && position.sold_quantity > 0) throw new Error("Positionen mit Verkaufshistorie bleiben im Journal erhalten.");
   const { error } = await supabase.from("positions").delete().eq("id", id).eq("portfolio_id", portfolio.id);
   if (error) throw new Error("Die Position konnte nicht gelöscht werden.");
   revalidatePortfolioPages();
@@ -496,6 +551,7 @@ function revalidatePortfolioPages() {
   revalidatePath("/depot");
   revalidatePath("/cockpit");
   revalidatePath("/risiko");
+  revalidatePath("/performance");
 }
 
 async function refreshPositionFromTwelveData({

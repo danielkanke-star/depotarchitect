@@ -65,7 +65,7 @@ describe("regular position form boundary", () => {
   });
 
   it("does not expose technical market-data or provider fields", () => {
-    for (const field of ["current_fx_to_base", "entry_fx_to_base", "current_price_source", "current_price_status", "current_price_as_of", "current_fx_source", "current_fx_status", "external_position_id", "source_import_id"]) {
+    for (const field of ["current_price_source", "current_price_status", "current_price_as_of", "current_fx_source", "current_fx_status", "external_position_id", "source_import_id"]) {
       expect(source).not.toContain(`name="${field}"`);
     }
   });

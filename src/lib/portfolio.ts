@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import type { Portfolio, PortfolioCapitalMovement, PortfolioCashBalance, PortfolioCategory, PortfolioFxRate, PortfolioImport, PortfolioSettings, Position, PositionPriceObservation } from "@/lib/database.types";
+import { allRows } from "./paged-query";
+import type { Portfolio, PortfolioCapitalMovement, PortfolioCashBalance, PortfolioCategory, PortfolioFxRate, PortfolioImport, PortfolioSettings, Position, PositionSale, PositionPriceObservation } from "@/lib/database.types";
 
 export async function getUserId() {
   const { userId } = await requireUser();
@@ -35,6 +36,8 @@ export async function getPortfolioData(): Promise<{
   priceObservations: PositionPriceObservation[];
   latestImport: PortfolioImport | null;
   capitalMovements: PortfolioCapitalMovement[];
+  sales: PositionSale[];
+  journalAvailable: boolean;
 }> {
   const supabase = await createClient();
   const portfolio = await getOrCreatePortfolio();
@@ -42,10 +45,10 @@ export async function getPortfolioData(): Promise<{
   const [{ data: settings, error: settingsError }, { data: categories, error: categoriesError }, { data: positions, error: positionsError }, { data: cashBalances, error: cashError }, { data: fxRates, error: fxError }, { data: priceObservations, error: priceObservationsError }, { data: latestImport, error: importError }, { data: capitalMovements, error: capitalMovementError }] = await Promise.all([
     supabase.from("portfolio_settings").select("*").eq("portfolio_id", portfolio.id).single(),
     supabase.from("portfolio_categories").select("*").eq("portfolio_id", portfolio.id).order("sort_order"),
-    supabase.from("positions").select("*").eq("portfolio_id", portfolio.id).order("created_at", { ascending: true }),
+    allRows((from,to)=>supabase.from("positions").select("*").eq("portfolio_id", portfolio.id).order("created_at", { ascending: true }).order("id").range(from,to)),
     supabase.from("portfolio_cash_balances").select("*").eq("portfolio_id", portfolio.id).order("currency"),
     supabase.from("portfolio_fx_rates").select("*").eq("portfolio_id", portfolio.id).order("rate_as_of", { ascending: false }),
-    supabase.from("position_price_observations").select("*").eq("portfolio_id", portfolio.id).order("observed_at", { ascending: false }),
+    allRows((from,to)=>supabase.from("position_price_observations").select("*").eq("portfolio_id", portfolio.id).order("observed_at", { ascending: false }).order("id").range(from,to)),
     supabase.from("portfolio_imports").select("*").eq("portfolio_id", portfolio.id).eq("import_status", "completed").order("imported_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("portfolio_capital_movements").select("*").eq("portfolio_id", portfolio.id).order("movement_date", { ascending: false }),
   ]);
@@ -65,10 +68,10 @@ export async function getPortfolioData(): Promise<{
   if (importError) throw new Error("Die Importquelle konnte nicht geladen werden.");
   if (capitalMovementError) throw new Error("Die Ein- und Auszahlungen konnten nicht geladen werden.");
 
-  const listingIds = [...new Set((positions ?? []).flatMap((position) => position.listing_id ? [position.listing_id] : []))];
-  const { data: listingQuotes, error: listingQuotesError } = listingIds.length > 0
-    ? await supabase.from("market_listing_quotes").select("*").in("listing_id", listingIds)
-    : { data: [], error: null };
+  const listingIds = [...new Set((positions ?? []).flatMap((position) => position.status !== "closed" && position.listing_id ? [position.listing_id] : []))];
+  const quoteBatches = await Promise.all(Array.from({length:Math.ceil(listingIds.length/100)},(_,i)=>
+    allRows((from,to)=>supabase.from("market_listing_quotes").select("*").in("listing_id",listingIds.slice(i*100,(i+1)*100)).order("id").range(from,to))));
+  const listingQuotes=quoteBatches.flatMap(r=>r.data??[]), listingQuotesError=quoteBatches.find(r=>r.error)?.error;
   if (listingQuotesError && listingQuotesError.code !== "42P01" && listingQuotesError.code !== "PGRST205") {
     throw new Error("Der zentrale Kurscache konnte nicht geladen werden.");
   }
@@ -89,6 +92,8 @@ export async function getPortfolioData(): Promise<{
       created_at: quote.created_at,
     })));
 
-  return { portfolio, settings, categories, positions, cashBalances, fxRates, priceObservations: [...centralObservations, ...(priceObservations ?? [])], latestImport, capitalMovements };
+  const { data: sales, error: salesError } = await allRows((from,to)=>supabase.from("position_sales").select("*").eq("portfolio_id", portfolio.id).order("sale_date").order("id").range(from,to));
+  if (salesError && !["42P01", "PGRST205"].includes(salesError.code)) throw new Error("Die Verkaufshistorie konnte nicht geladen werden.");
+  return { portfolio, settings, categories, positions: positions.filter(p => p.source_type !== "demo"), cashBalances, fxRates, sales: sales ?? [], journalAvailable: !salesError, priceObservations: [...centralObservations, ...(priceObservations ?? [])], latestImport, capitalMovements };
 }
 import "server-only";

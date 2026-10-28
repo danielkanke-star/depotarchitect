@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+/.pnpm-store/
+/supabase/.temp/
+/.local/
 /.pnp
 .pnp.*
 .yarn/*

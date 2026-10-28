@@ -8,6 +8,7 @@ function sum(values: number[]) {
 }
 
 function partialAggregate(metrics: CalculationMetric[]): CalculationMetric {
+  if (metrics.length === 0) return calculated(0);
   const available = metrics.flatMap((metric) => metric.value === null ? [] : [metric.value]);
   const invalidReasons = metrics.filter((metric) => metric.status === "invalid").flatMap((metric) => metric.reasons);
   const incompleteReasons = metrics.filter((metric) => metric.status === "incomplete").flatMap((metric) => metric.reasons);
@@ -36,7 +37,7 @@ function portfolioRatio(
   if (numerator.value === null) return { ...numerator };
   const denominator = decimal(denominatorInput);
   if (denominator === null) return incomplete(missingReason);
-  if (!denominator.isPositive()) return invalid(invalidReason);
+  if (!denominator.gt(0)) return invalid(invalidReason);
   return metricWithValue(new Decimal(numerator.value).div(denominator), numerator.status, numerator.reasons);
 }
 

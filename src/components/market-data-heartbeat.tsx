@@ -2,23 +2,33 @@
 
 import { startTransition, useEffect, useRef, useState } from "react";
 import { refreshActiveMarketData } from "@/app/(dashboard)/depot/actions";
+import { refreshPortfolioFx } from "@/app/(dashboard)/depot/journal-actions";
 
 const ACTIVE_REFRESH_TICK_MS = 12_000;
 type RefreshStatus = Awaited<ReturnType<typeof refreshActiveMarketData>>["status"];
 
 export function MarketDataHeartbeat() {
   const pendingRef = useRef(false);
-  const stoppedRef = useRef(false);
+  const nextQuoteRef = useRef(0);
+  const nextFxRef = useRef(0);
   const [status, setStatus] = useState<RefreshStatus | null>(null);
 
   useEffect(() => {
     const refresh = () => {
-      if (document.visibilityState !== "visible" || pendingRef.current || stoppedRef.current) return;
+      if (document.visibilityState !== "visible" || pendingRef.current) return;
+      if (Date.now() >= nextFxRef.current) {
+        nextFxRef.current = Date.now() + 300_000;
+        void refreshPortfolioFx().catch(() => { /* Stored currency rates remain visible. */ });
+      }
+      // Currency references continue independently while stock refresh waits.
+      if (Date.now() < nextQuoteRef.current) return;
       pendingRef.current = true;
       startTransition(() => {
         void refreshActiveMarketData().then((result) => {
           setStatus(result.status);
-          if (["schema-pending", "provider-disabled", "budget", "rate-limited"].includes(result.status)) stoppedRef.current = true;
+          const delay = result.status === "rate-limited" ? 3_600_000 : result.status === "budget" ? 60_000
+            : ["schema-pending", "provider-disabled"].includes(result.status) ? 300_000 : 0;
+          nextQuoteRef.current = Date.now() + delay;
         }).catch(() => {
           setStatus("error");
         }).finally(() => { pendingRef.current = false; });
