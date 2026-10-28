@@ -61,7 +61,7 @@ export function PositionForm({
       <input type="hidden" name="sold_quantity" value={position?.sold_quantity ?? ""} />
       <input type="hidden" name="sale_price" value={position?.sale_price ?? ""} />
       <input type="hidden" name="sale_date" value={position?.sale_date ?? ""} />
-      <label>Ticker oder Unternehmen<input key={lookupState.status === "success" ? `ticker-${lookupState.symbol}` : "ticker-initial"} name="ticker" readOnly={entryLocked} required maxLength={80} defaultValue={lookupState.status === "success" ? lookupState.symbol : position?.ticker ?? ""} /><span className="mt-1 block text-[11px] text-muted">Für neue Positionen genügt ein Suchbegriff. Name, Börsenplatz, MIC, Währung und Kurs werden gemeinsam aufgelöst.</span></label>
+      <label>Ticker oder Unternehmen<input key={lookupState.status === "success" ? `ticker-${lookupState.symbol}` : "ticker-initial"} name="ticker" readOnly={entryLocked} required maxLength={80} defaultValue={entryLocked ? position?.ticker ?? "" : lookupState.status === "success" ? lookupState.symbol : position?.ticker ?? ""} /><span className="mt-1 block text-[11px] text-muted">Für neue Positionen genügt ein Suchbegriff. Name, Börsenplatz, MIC, Währung und Kurs werden gemeinsam aufgelöst.</span></label>
       <label>Kategorie<select name="category_id" disabled={Boolean(position && position.sold_quantity > 0)} defaultValue={position?.category_id ?? ""}><option value="">Keine</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
       <label>Positionstyp<select name="instrument_type" disabled={entryLocked} defaultValue={position?.instrument_type ?? "stock"}><option value="stock">Aktie</option><option value="etf">ETF</option><option value="option">Option</option><option value="warrant">Optionsschein</option><option value="knock_out">Knock-out</option><option value="other">Sonstiges</option></select></label>
       <label>Richtung<select name="direction" disabled={entryLocked} defaultValue={position?.direction ?? "long"}><option value="long">Long</option><option value="short">Short</option>{position?.instrument_type === "option" && <><option value="long_call">Long Call</option><option value="long_put">Long Put</option><option value="short_call">Short Call</option><option value="short_put">Short Put</option></>}</select></label>
@@ -69,7 +69,7 @@ export function PositionForm({
       <label>Menge beim Einstieg<input name="quantity" readOnly={entryLocked} required inputMode="decimal" defaultValue={position?.quantity ?? 1} /></label>
       <label>Instrumentwährung<input key={lookupState.status === "success" ? `currency-${lookupState.currency}` : "currency-initial"} name="instrument_currency" required maxLength={3} readOnly={entryLocked || lookupState.status === "success"} defaultValue={lookupState.status === "success" ? lookupState.currency : position?.instrument_currency ?? baseCurrency} /><span className="mt-1 block text-[11px] text-muted">Wird bei erfolgreicher Notierungswahl automatisch gesetzt; ohne Anbieter bleibt die manuelle Rückfalleingabe möglich.</span></label>
       <label>Einstandskurs<input name="entry_price" readOnly={entryLocked} required inputMode="decimal" defaultValue={position?.entry_price ?? ""} /></label>
-      <label>Aktueller Kurs<input key={lookupState.status === "success" ? `${lookupState.symbol}-${lookupState.micCode}-${lookupState.observedAt}` : "initial"} name="current_price" required inputMode="decimal" defaultValue={lookupState.status === "success" ? lookupState.price : currentPrice ?? ""} /><span className="mt-1 block text-[11px] text-muted">{currentPriceSource ? `Aktive Quelle: ${currentPriceSource}.` : "Notwendiger Rückfallkurs."} Twelve Data wird automatisch versucht. Ein späterer gültiger IBKR-Kurs hat automatisch Vorrang.</span></label>
+      <label>Aktueller Kurs<input key={lookupState.status === "success" ? `${lookupState.symbol}-${lookupState.micCode}-${lookupState.observedAt}` : "initial"} name="current_price" required inputMode="decimal" defaultValue={lookupState.status === "success" ? lookupState.price : currentPrice ?? ""} /><span className="mt-1 block text-[11px] text-muted">{currentPriceSource ? `Aktive Quelle: ${currentPriceSource}.` : "Notwendiger Rückfallkurs."} Verfügbare Brokerkurse und ergänzende Kursquellen werden automatisch geprüft.</span></label>
       <input type="hidden" name="original_current_price" value={currentPrice ?? ""} />
       <input type="hidden" name="market_data_mic" value={lookupState.status === "success" ? lookupState.micCode : marketDataMapping?.mic_code ?? ""} />
       {lookupState.status === "success" && lookupState.candidates.length > 1 ? <label>Alternative Notierung<select name="market_listing_selection" defaultValue={`${lookupState.symbol}@${lookupState.micCode}:${lookupState.currency}`}>
@@ -118,7 +118,7 @@ function MarketDataLookupResult({ state }: { state: MarketDataLookupState }) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(state.observedAt));
-  const statusLabel = state.dataStatus === "delayed"
+  const statusLabel = state.dataStatus === "live" ? "Echtzeitversorgung" : state.dataStatus === "manually_updated" ? "Depotbewertung · Kurszeit unbestätigt" : state.dataStatus === "delayed"
     ? "verzögert"
     : state.dataStatus === "end_of_day"
       ? "Schlusskurs"
@@ -127,8 +127,8 @@ function MarketDataLookupResult({ state }: { state: MarketDataLookupState }) {
   return <div role="status" aria-live="polite" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 sm:col-span-2 xl:col-span-4">
     <div className="font-medium text-emerald-100">{state.name ?? state.symbol}</div>
     <div className="mt-1 text-xs text-emerald-50/80">
-      {state.symbol} · {state.exchange ?? "Börse nicht benannt"} ({state.micCode}) · {state.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {state.currency} · {statusLabel} · {state.isMarketOpen ? "Markt laut Anbieter offen" : "Markt laut Anbieter geschlossen"} · {observedAt}
+      {state.symbol} · {state.exchange ?? "Börse nicht benannt"} ({state.micCode}) · {state.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {state.currency} · {statusLabel} · {state.sourceName?.startsWith("IBKR") ? "Abgerufen" : state.isMarketOpen ? "Markt laut Anbieter offen" : "Markt laut Anbieter geschlossen"} · {observedAt}
     </div>
-    <div className="mt-1 text-[11px] text-emerald-50/60">Quelle: Twelve Data. Ein gültiger IBKR-Kurs überschreibt diese Rückfallquelle später automatisch.</div>
+    <div className="mt-1 text-[11px] text-emerald-50/60">Quelle: {state.sourceName ?? "Twelve Data"}.</div>
   </div>;
 }

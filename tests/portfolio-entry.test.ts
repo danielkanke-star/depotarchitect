@@ -88,7 +88,6 @@ describe("regular position form boundary", () => {
 
   it("requires a current price as the reliable manual fallback", () => {
     expect(source).toContain('name="current_price" required');
-    expect(source).toContain("Ein späterer gültiger IBKR-Kurs hat automatisch Vorrang.");
   });
 
   it("offers a search-based company and complete-listing quote lookup", () => {

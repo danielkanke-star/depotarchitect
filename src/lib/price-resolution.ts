@@ -53,7 +53,9 @@ export function resolvePositionPrice(
     .map((observation) => ({
       price: Number(observation.price_native),
       currency,
-      status: canonicalMarketDataStatus(observation.status, observation.source_type),
+      status: observation.source_type === "ibkr" && observation.source_reference?.startsWith("ibkr:")
+        && Date.now() - Date.parse(observation.observed_at) > (observation.status === "end_of_day" ? 7 * 86_400_000 : 15 * 60_000)
+        ? "stale" as const : canonicalMarketDataStatus(observation.status, observation.source_type),
       sourceType: observation.source_type,
       sourceName: observation.source_name,
       observedAt: observation.observed_at,
@@ -100,7 +102,10 @@ export function positionPriceSourceLabel(sourceType: PositionPriceSourceType) {
 }
 
 function compareCandidates(a: ResolvedPositionPrice, b: ResolvedPositionPrice) {
-  const priorityDifference = SOURCE_PRIORITY[b.sourceType] - SOURCE_PRIORITY[a.sourceType];
+  // An account valuation with an unknown exchange timestamp is a useful
+  // fallback, but must not outrank a current, explicitly identified quote feed.
+  const priority = (q: ResolvedPositionPrice) => q.sourceType === "ibkr" && q.sourceName.startsWith("IBKR-Depotbewertung") ? 450 : SOURCE_PRIORITY[q.sourceType];
+  const priorityDifference = priority(b) - priority(a);
   if (priorityDifference !== 0) return priorityDifference;
   return timestamp(b.observedAt) - timestamp(a.observedAt);
 }

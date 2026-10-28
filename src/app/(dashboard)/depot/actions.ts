@@ -15,6 +15,8 @@ import { createClient } from "@/lib/supabase/server";
 import Decimal from "decimal.js";
 import { resolveCurrentFx } from "@/lib/market-data-providers/fx";
 import { berlinDate } from "@/lib/risk-rules";
+import { applyIbkrPortfolioQuotes, lookupIbkrQuote } from "@/lib/ibkr/server";
+import { ibkrQuoteStatus, ibkrSourceLabel } from "@/lib/ibkr/core";
 
 const DIRECTIONS = new Set<Direction>(["long", "short", "long_call", "long_put", "short_call", "short_put"]);
 const INSTRUMENT_TYPES = new Set<InstrumentType>(["stock", "etf", "option", "warrant", "knock_out", "other"]);
@@ -51,7 +53,8 @@ export type MarketDataLookupState = {
   currency: string;
   price: number;
   observedAt: string;
-  dataStatus: "delayed" | "end_of_day" | "stale";
+  dataStatus: "live" | "delayed" | "end_of_day" | "manually_updated" | "stale";
+  sourceName?: string;
   isMarketOpen: boolean;
   candidates: TwelveDataInstrument[];
   fxToBase?: number | null;
@@ -66,13 +69,29 @@ export async function lookupPositionMarketData(
   previousState: MarketDataLookupState,
   formData: FormData,
 ): Promise<MarketDataLookupState> {
-  if (!process.env.TWELVE_DATA_API_KEY?.trim()) {
-    return { status: "disabled", message: "Die automatische Kurssuche ist in dieser Umgebung noch nicht aktiviert." };
-  }
   const supabase = await createClient();
-  await getUserId();
+  const userId = await getUserId();
   const searchTerm = text(formData, "ticker");
   if (!searchTerm || searchTerm.length > 80) return { status: "error", message: "Bitte Ticker oder Unternehmensname eingeben." };
+  const portfolio = await getOrCreatePortfolio();
+  const brokerQuote = await lookupIbkrQuote(portfolio.id, searchTerm).catch(() => null);
+  if (brokerQuote?.mic) {
+    const fx = await resolveCurrentFx(portfolio.id, userId, brokerQuote.currency, portfolio.currency);
+    const { data: knownLots } = await supabase.from("positions").select("quantity_step")
+      .eq("portfolio_id", portfolio.id).eq("instrument_currency", brokerQuote.currency)
+      .in("ticker", [brokerQuote.symbol, searchTerm.toUpperCase()]).limit(100);
+    const steps = [...new Set((knownLots ?? []).map(p => p.quantity_step).filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0))];
+    const candidate: TwelveDataInstrument = { symbol: brokerQuote.symbol, name: brokerQuote.name, currency: brokerQuote.currency,
+      micCode: brokerQuote.mic, exchange: brokerQuote.mic, instrumentType: "stock", country: null, exchangeTimezone: null, access: null };
+    return { status: "success", ...candidate, price: brokerQuote.price, observedAt: brokerQuote.observedAt,
+      dataStatus: ibkrQuoteStatus(brokerQuote), sourceName: ibkrSourceLabel(brokerQuote),
+      isMarketOpen: brokerQuote.quality === "live" || brokerQuote.quality === "delayed", candidates: [candidate],
+      fxToBase: fx?.rate ?? null, fxStale: fx?.stale ?? true, fxAsOf: fx?.asOf ?? null, fxSource: fx?.source ?? null,
+      contractMultiplier: brokerQuote.multiplier, quantityStep: steps.length === 1 ? steps[0] : null };
+  }
+  if (!process.env.TWELVE_DATA_API_KEY?.trim()) {
+    return { status: "disabled", message: "Gerade ist keine automatische Kursquelle erreichbar. Bitte die IBKR-Verbindung in den Einstellungen prüfen." };
+  }
 
   const selectedKey = text(formData, "market_listing_selection");
   let candidates = previousState.status === "success" ? previousState.candidates : [];
@@ -103,7 +122,6 @@ export async function lookupPositionMarketData(
   if (result.status !== "success") {
     return { status: "error", message: "Die Kursquelle ist momentan nicht verfügbar. Bitte später erneut versuchen." };
   }
-  const portfolio = await getOrCreatePortfolio();
   const fx = await resolveCurrentFx(portfolio.id, await getUserId(), result.data.currency, portfolio.currency);
   const { data: knownListing } = await supabase.from("market_listings").select("id").eq("symbol",result.data.symbol).eq("mic_code",result.data.micCode).eq("currency",result.data.currency).maybeSingle();
   const { data: configurations } = knownListing
@@ -121,6 +139,7 @@ export async function lookupPositionMarketData(
     observedAt: result.data.observedAt,
     dataStatus: result.data.status,
     isMarketOpen: result.data.isMarketOpen,
+    sourceName: "Twelve Data",
     candidates,
     fxToBase: fx?.rate ?? null,
     fxStale: fx?.stale ?? true,
@@ -335,7 +354,8 @@ export async function savePosition(formData: FormData) {
       .single();
   }
   if (result.error || !result.data) throw new Error("Die Position konnte nicht gespeichert werden.");
-  const priceOutcome = sale.status === "closed" || instrumentType === "option"
+  const broker = sale.status === "closed" ? null : await applyIbkrPortfolioQuotes(portfolio.id, userId, result.data.id).catch(() => null);
+  const priceOutcome = broker?.matched ? "updated" : sale.status === "closed" || instrumentType === "option"
     ? null
     : await refreshPositionFromTwelveData({
       supabase,
@@ -376,6 +396,11 @@ export async function refreshPositionPrice(formData: FormData) {
     .maybeSingle();
   if (positionError || !position || position.instrument_type === "cash" || position.status === "closed") {
     throw new Error("Die Position kann nicht aktualisiert werden.");
+  }
+  const broker = await applyIbkrPortfolioQuotes(portfolio.id, userId, position.id).catch(() => null);
+  if (broker?.matched) {
+    revalidatePortfolioPages();
+    redirect("/depot?price=updated");
   }
   if (position.instrument_type === "option") {
     revalidatePortfolioPages();
@@ -445,8 +470,12 @@ export async function refreshActiveMarketData() {
     .neq("instrument_type", "cash");
   if (positionError && isMissingMarketDataTable(positionError)) return { status: "schema-pending" as const };
   if (positionError) return { status: "error" as const };
-  const unassignedPositionCount = (positions ?? []).filter((position) => !position.listing_id).length;
-  const listingIds = [...new Set((positions ?? []).flatMap((position) => position.listing_id ? [position.listing_id] : []))];
+  const { data: brokerObservations } = await supabase.from("position_price_observations").select("position_id,observed_at,status")
+    .eq("user_id", userId).eq("source_type", "ibkr").gte("observed_at", new Date(Date.now() - 5 * 60_000).toISOString()).limit(1000);
+  const suppliedByBroker = new Set((brokerObservations ?? []).filter(q => ["live", "delayed", "end_of_day"].includes(q.status)).map(q => q.position_id));
+  const needingProvider = (positions ?? []).filter(p => !suppliedByBroker.has(p.id));
+  const unassignedPositionCount = needingProvider.filter((position) => !position.listing_id).length;
+  const listingIds = [...new Set(needingProvider.flatMap((position) => position.listing_id ? [position.listing_id] : []))];
   if (listingIds.length === 0) {
     return { status: unassignedPositionCount > 0 ? "mapping-required" as const : "idle" as const };
   }

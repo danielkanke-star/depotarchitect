@@ -2,6 +2,7 @@ import { Card, PageHeader } from "@/components/ui";
 import { getPortfolioData } from "@/lib/portfolio";
 import { isBaseCurrencyLocked } from "@/lib/portfolio-write-policy";
 import { SettingsForm } from "@/components/settings-form";
+import { IbkrConnection } from "@/components/ibkr-connection";
 
 export default async function EinstellungenPage() {
   const { portfolio, settings, categories, positions, cashBalances } = await getPortfolioData();
@@ -19,5 +20,6 @@ export default async function EinstellungenPage() {
         <p className="mt-4 text-xs leading-5 text-muted">Kategorien werden den einzelnen Positionen zugeordnet.</p>
       </Card>
     </div>
+    <div className="mt-4"><IbkrConnection /></div>
   </>;
 }

@@ -8,7 +8,12 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "grant-admin": "tsx scripts/grant-admin.ts"
+    "grant-admin": "tsx scripts/grant-admin.ts",
+    "ibkr:pair": "tsx scripts/ibkr-bridge.ts pair",
+    "ibkr:bridge": "tsx scripts/ibkr-bridge.ts start",
+    "ibkr:check": "tsx scripts/ibkr-bridge.ts check",
+    "ibkr:gateway": "tsx scripts/ibkr-gateway.ts",
+    "ibkr:start": "tsx scripts/ibkr-service.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
