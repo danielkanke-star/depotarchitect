@@ -1,5 +1,6 @@
 "use client";
-import { useActionState, useState } from "react";
+
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Card } from "@/components/ui";
 import { RiskIndicator, formatMoney, formatRatio } from "@/components/risk-indicator";
 import { calculateSizing, budgetTone, depotRiskBudget } from "@/lib/risk-rules";
@@ -7,27 +8,66 @@ import { lookupPositionMarketData, type MarketDataLookupState } from "@/app/(das
 
 type Props = { initialNetLiquidity: number | null; initialRiskPct: number; initialMargin?: number | null; maxMargin?: number;
   existingRisk?: number | null; riskComplete?: boolean; profile?: string; baseCurrency?: string; demo?: boolean };
+type Override = { key: string; value: number } | null;
+const listingKey = (value: { symbol: string; micCode: string; currency: string }) => `${value.symbol}@${value.micCode}:${value.currency}`;
+
 export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRisk = null, riskComplete = false,
   profile = "Aggressiv 1,0", baseCurrency = "EUR", demo = false }: Props) {
-  const [lookup, lookupAction, pending] = useActionState(lookupPositionMarketData, { status: "idle" } as MarketDataLookupState);
+  const [ticker, setTicker] = useState(demo ? "AMZN" : "");
+  const [loaded, setLoaded] = useState<{ term: string; state: MarketDataLookupState } | null>(null);
+  const [pending, startTransition] = useTransition();
+  const request = useRef(0);
+  const term = ticker.trim().toUpperCase();
+  const lookup = loaded?.term === term ? loaded.state : null;
+  const market = lookup?.status === "success" ? lookup : null;
   const [riskPct, setRiskPct] = useState(initialRiskPct);
-  const [entry, setEntry] = useState(100), [stop, setStop] = useState(90);
   const [direction, setDirection] = useState<"long" | "short">("long");
-  const [stepOverride, setStepOverride] = useState<{key:string;value:number}|null>(null), [multiplierOverride,setMultiplierOverride] = useState<{key:string;value:number}|null>(null);
-  const [manualCurrency, setCurrency] = useState("USD");
-  const [fxOverride, setFxOverride] = useState<{ key: string; value: number } | null>(null);
-  const currency = lookup.status === "success" ? lookup.currency : manualCurrency;
-  const instrumentKey = lookup.status === "success" ? `${lookup.symbol}@${lookup.micCode}:${currency}` : `manual:${currency}`;
-  const step = stepOverride?.key === instrumentKey ? stepOverride.value : lookup.status === "success" ? lookup.quantityStep ?? 1 : 1;
-  const multiplier = multiplierOverride?.key === instrumentKey ? multiplierOverride.value : lookup.status === "success" ? lookup.contractMultiplier ?? 1 : 1;
-  const setStep = (value:number)=>setStepOverride({key:instrumentKey,value}), setMultiplier=(value:number)=>setMultiplierOverride({key:instrumentKey,value});
-  const fxKey = `${currency}:${lookup.status === "success" ? lookup.observedAt : "manual"}`;
-  const setFx = (value: number) => setFxOverride({ key: fxKey, value });
-  const fx = currency === baseCurrency ? 1 : fxOverride?.key === fxKey ? fxOverride.value : lookup.status === "success" ? lookup.fxToBase ?? null : demo && currency === "USD" ? 0.9 : null;
-  const quote = lookup.status === "success" ? lookup.price : demo ? 102.5 : null;
+  const [entryOverride, setEntryOverride] = useState<Override>(null);
+  const [stopOverride, setStopOverride] = useState<Override>(null);
+  const [stepOverride, setStepOverride] = useState<Override>(null);
+  const [multiplierOverride, setMultiplierOverride] = useState<Override>(null);
+  const [fxOverride, setFxOverride] = useState<Override>(null);
+  const currency = market?.currency ?? (demo ? "USD" : baseCurrency);
+  const instrumentKey = market ? listingKey(market) : `${demo ? "demo" : "unresolved"}:${term}`;
+  const quote = market?.price ?? (demo ? 102.5 : null);
+  const entry = entryOverride?.key === instrumentKey ? entryOverride.value : quote;
+  const stopKey = `${instrumentKey}:${direction}`;
+  const stop = stopOverride?.key === stopKey ? stopOverride.value : entry === null ? null : Number((entry * (direction === "long" ? 0.9 : 1.1)).toFixed(8));
+  const step = stepOverride?.key === instrumentKey ? stepOverride.value : market?.quantityStep ?? 1;
+  const multiplier = multiplierOverride?.key === instrumentKey ? multiplierOverride.value : market?.contractMultiplier ?? 1;
+  const fxKey = `${instrumentKey}:${market?.fxAsOf ?? "manual"}`;
+  const fx = currency === baseCurrency ? 1 : fxOverride?.key === fxKey ? fxOverride.value : market?.fxToBase ?? (demo ? 0.9 : null);
+
+  const load = useCallback((query: string, selection = "", previous: MarketDataLookupState = { status: "idle" }) => {
+    const id = ++request.current;
+    startTransition(async () => {
+      const form = new FormData();
+      form.set("ticker", query);
+      if (selection) form.set("market_listing_selection", selection);
+      let state: MarketDataLookupState;
+      try { state = await lookupPositionMarketData(previous, form); }
+      catch { state = { status: "error", message: "Kursabruf fehlgeschlagen. Bitte Verbindung prüfen und erneut laden." }; }
+      if (id === request.current) setLoaded({ term: query, state });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (demo || !term) return;
+    // Wait until typing pauses; never request every individual keystroke.
+    const timer = window.setTimeout(() => load(term), 900);
+    return () => window.clearTimeout(timer);
+  }, [term, demo, load]);
+
   const budget = depotRiskBudget(initialNetLiquidity, profile);
-  const result = calculateSizing({ netLiquidity: initialNetLiquidity, existingRisk, riskComplete, riskPct, entry, stop, fxToBase: fx, step, multiplier, direction, budget });
-  const computed = result.error === null ? result : null;
+  const result = calculateSizing({ netLiquidity: initialNetLiquidity, existingRisk, riskComplete, riskPct,
+    entry: entry ?? NaN, stop: stop ?? NaN, fxToBase: fx, step, multiplier, direction, budget });
+  const computed = (market || demo) && result.error === null ? result : null;
+  const issue = !term ? "Gib einen Ticker ein. Kurs und Währungsumrechnung werden automatisch geladen."
+    : !market && !demo ? pending || !lookup ? "Kurs und Wechselkurs werden geladen …" : lookup.status !== "success" ? lookup.message : null
+    : fx === null ? "Für diese Währung ist gerade kein Wechselkurs erreichbar. Erneut laden oder unter Details einen Referenzkurs angeben."
+    : initialNetLiquidity === null ? "Bitte zuerst deine Nettoliquidität in den Einstellungen hinterlegen."
+    : result.error;
+
   return <div className="space-y-4">
     <div className="grid gap-3 sm:grid-cols-3">
       <Fact label="Nettoliquidität" value={formatMoney(initialNetLiquidity, baseCurrency)} />
@@ -36,36 +76,42 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
     </div>
     <div className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
       <Card><h2 className="mb-4 font-medium">Einstieg planen</h2>
-        <form action={demo ? undefined : lookupAction} onSubmit={demo ? event => event.preventDefault() : undefined} className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto]">
-          <label>Ticker oder Unternehmen<input name="ticker" defaultValue={demo ? "AMZN" : ""} required placeholder="Zum Beispiel AMZN" /></label>
-          <button disabled={pending || demo} className="self-end rounded-xl border border-accent/50 px-4 py-2.5 text-accent disabled:opacity-50">{pending ? "Suche …" : "Notierung & Kurs laden"}</button>
-          {lookup.status === "success" && lookup.candidates.length > 1 && <label className="sm:col-span-2">Notierung<select name="market_listing_selection" defaultValue={`${lookup.symbol}@${lookup.micCode}:${lookup.currency}`}>
-            {lookup.candidates.map(c => <option key={`${c.symbol}@${c.micCode}:${c.currency}`} value={`${c.symbol}@${c.micCode}:${c.currency}`}>{c.symbol} · {c.exchange ?? c.micCode} · {c.currency}</option>)}
-          </select><span className="text-xs text-muted">Alternative auswählen und erneut laden.</span></label>}
+        <form onSubmit={event => { event.preventDefault(); if (!demo && term) load(term); }} className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+          <label>Ticker oder Unternehmen<input name="ticker" value={ticker} onChange={event => { request.current++; setTicker(event.target.value); }} autoComplete="off" spellCheck={false} maxLength={80} required placeholder="Zum Beispiel AMZN" /></label>
+          <button disabled={pending || demo || !term} className="self-end rounded-xl border border-accent/50 px-4 py-2.5 text-accent disabled:opacity-50">{pending ? "Lädt …" : "Aktualisieren"}</button>
         </form>
-        {lookup.status !== "idle" && lookup.status !== "success" && <p role="status" className="mb-4 text-sm text-amber-300">{lookup.message}</p>}
-        {lookup.status === "success" && <p className="mb-4 text-sm text-muted">{lookup.name ?? lookup.symbol} · {lookup.exchange} ({lookup.micCode}) · {currency} · Twelve Data · {lookup.dataStatus === "stale" ? "veraltet" : "verzögert / Schlusskurs"}</p>}
+        {lookup && lookup.status !== "success" && <p role="status" className="mb-4 text-sm text-amber-300">{lookup.message}</p>}
+        {(market || demo) && <div role="status" aria-live="polite" className="mb-4 rounded-xl border border-accent/30 bg-accent/5 p-3">
+          <div className="text-sm text-muted">{market?.name ?? ticker} · {market?.exchange ?? "Beispiel"} · {currency}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{formatMoney(quote, currency)}</div>
+          <p className="mt-1 text-xs text-muted">{market ? `${market.dataStatus === "stale" ? "Älterer Kurs" : market.isMarketOpen ? "Letzter verfügbarer Kurs" : "Letzter Börsenkurs · Markt geschlossen"} · ${new Date(market.observedAt).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })} · Twelve Data` : "Fiktiver Beispielkurs"}</p>
+          {currency !== baseCurrency && <p className="mt-2 text-xs text-muted">{fx !== null ? `Automatische Umrechnung: 1 ${currency} = ${fx.toLocaleString("de-DE", { maximumFractionDigits: 6 })} ${baseCurrency}` : "Wechselkurs wird nicht geliefert."}{market?.fxSource ? ` · ${market.fxSource}` : ""}{market?.fxAsOf ? ` · Stand ${new Date(market.fxAsOf).toLocaleString("de-DE", { timeZone: "Europe/Berlin" })}` : ""}</p>}
+          {market?.fxStale && <p className="mt-2 text-xs text-amber-300">Der Wechselkurs ist älter. Die Berechnung verwendet den angezeigten Referenzstand.</p>}
+        </div>}
+        {market && market.candidates.length > 1 && <label className="mb-4 block">Handelsplatz<select value={listingKey(market)} disabled={pending} onChange={event => load(term, event.target.value, market)}>
+          {market.candidates.map(c => <option key={listingKey(c)} value={listingKey(c)}>{c.symbol} · {c.exchange ?? c.micCode} · {c.currency}</option>)}
+        </select><span className="text-xs text-muted">Handelsplatz und Handelswährung gehören zusammen.</span></label>}
         <div className="grid gap-3 sm:grid-cols-2">
-          <label>Handelswährung<input value={currency} readOnly={lookup.status === "success"} maxLength={3} onChange={e => { setCurrency(e.target.value.toUpperCase()); setFxOverride(null); }} /></label>
-          <label>Richtung<select value={direction} onChange={e => setDirection(e.target.value as "long" | "short")}><option value="long">Long</option><option value="short">Short</option></select></label>
           <Numeric label="Risiko je Trade (%)" value={riskPct} set={setRiskPct} />
-          <Numeric label={`FX · 1 ${currency} in ${baseCurrency}`} value={fx} set={setFx} />
-          <Numeric label={`Geplanter Kauf-/Einstiegskurs · ${currency}`} value={entry} set={setEntry} />
-          <Numeric label={`Trading-Stopp · ${currency}`} value={stop} set={setStop} />
-          <button type="button" disabled={quote === null} onClick={() => { if (quote !== null) setEntry(quote); }} className="rounded-xl border border-border p-2 text-sm disabled:opacity-40">Aktuellen Kurs übernehmen {quote === null ? "" : `(${quote} ${currency})`}</button>
-          <button type="button" onClick={() => setStop(Number((entry * (direction === "long" ? 0.9 : 1.1)).toFixed(8)))} className="rounded-xl border border-border p-2 text-sm">Stopp 10 % {direction === "long" ? "unter" : "über"} Einstieg</button>
-          <Numeric label="Zulässige Stückelung" value={step} set={setStep} />
-          <Numeric label="Multiplikator" value={multiplier} set={setMultiplier} />
+          <label>Richtung<select value={direction} onChange={e => setDirection(e.target.value as "long" | "short")}><option value="long">Long</option><option value="short">Short</option></select></label>
+          <Numeric label={`Geplanter Einstiegskurs · ${currency}`} value={entry} set={value => setEntryOverride({ key: instrumentKey, value })} />
+          <Numeric label={`Trading-Stopp · ${currency}`} value={stop} set={value => setStopOverride({ key: stopKey, value })} />
+          <button type="button" disabled={quote === null} onClick={() => setEntryOverride(null)} className="rounded-xl border border-border p-2 text-sm disabled:opacity-40">Aktuellen Kurs übernehmen</button>
+          <button type="button" disabled={entry === null} onClick={() => setStopOverride(null)} className="rounded-xl border border-border p-2 text-sm disabled:opacity-40">Stopp 10 % {direction === "long" ? "unter" : "über"} Einstieg</button>
         </div>
-        <p className="mt-4 text-xs leading-5 text-muted">Stückelung gemäß deinem Handelszugang prüfen. Die Stückzahl wird abgerundet. Die Planung führt keine Order aus. Ein fehlender aktueller FX muss ergänzt werden.</p>
-        {lookup.status === "success" && lookup.fxStale && <p className="mt-2 text-xs text-amber-300">Der automatische FX fehlt oder ist älter als eine Stunde. Den Referenzkurs bitte prüfen.</p>}
+        <p className="mt-3 text-xs leading-5 text-muted">Der aktuelle Kurs wird beim ersten Laden als Einstieg übernommen. Du kannst einen eigenen Orderkurs und Stopp eintragen. Die Planung führt keine Order aus.</p>
+        <details className="mt-4 border-t border-border pt-3"><summary className="cursor-pointer text-sm text-muted">Stückelung und Umrechnung anpassen</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Numeric label="Zulässige Stückelung" value={step} set={value => setStepOverride({ key: instrumentKey, value })} />
+          <Numeric label="Multiplikator" value={multiplier} set={value => setMultiplierOverride({ key: instrumentKey, value })} />
+          {currency !== baseCurrency && <Numeric label={`Referenzkurs · 1 ${currency} in ${baseCurrency}`} value={fx} set={value => setFxOverride({ key: fxKey, value })} />}
+        </div><p className="mt-2 text-xs text-muted">Die erlaubte Stückelung hängt von deinem Handelszugang ab. Für Bruchstücke zum Beispiel 0,001 angeben.</p></details>
       </Card>
       <Card><h2 className="mb-4 font-medium">Geplante Position</h2>
-        {result.error && <p role="status" className="mb-4 rounded-xl border border-amber-500/40 p-3 text-sm text-amber-200">{result.error}</p>}
+        {issue && <p role="status" className="mb-4 rounded-xl border border-amber-500/40 p-3 text-sm text-amber-200">{issue}{result.error === "Das bestehende Stopprisiko ist unvollständig." && " Bitte fehlende Kurse, Wechselkurse oder Stopps im Depot ergänzen."}</p>}
         <div className="grid gap-3 sm:grid-cols-2">
           <Fact label="Vorgesehener Risikobetrag" value={formatMoney(computed?.plannedRisk, baseCurrency)} />
           <Fact label="Stückzahl" value={computed ? computed.quantity.toLocaleString("de-DE", { maximumFractionDigits: 6 }) : "—"} />
-          <Fact label={`Positionswert ${currency}`} value={formatMoney(computed?.nativeValue, /^[A-Z]{3}$/.test(currency) ? currency : "USD")} />
+          <Fact label={`Positionswert ${currency}`} value={formatMoney(computed?.nativeValue, currency)} />
           <Fact label={`Positionswert ${baseCurrency}`} value={formatMoney(computed?.baseValue, baseCurrency)} />
           <Fact label="Anteil an NetLiq" value={formatRatio(computed?.netLiqShare)} />
           <Fact label="Tatsächliches Risiko nach Abrundung" value={formatMoney(computed?.actualRisk, baseCurrency)} />
@@ -73,7 +119,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
         <div className="mt-4"><RiskIndicator tone={budgetTone(computed?.utilizationAfter ?? null)}>Budgetauslastung nach Trade: {formatRatio(computed?.utilizationAfter)}</RiskIndicator></div>
         {computed && computed.quantity === 0 && <p className="mt-3 text-sm text-amber-300">Innerhalb dieses Risikobetrags ist mit der gewählten Stückelung keine positive Menge möglich.</p>}
         {computed?.utilizationAfter != null && computed.utilizationAfter >= 1 && <p className="mt-3 text-sm text-amber-300">Das persönliche Depotrisikobudget wäre ausgeschöpft oder überschritten. Die Stückzahl wurde deshalb nicht automatisch gekappt.</p>}
-        <details className="mt-5 border-t border-border pt-3"><summary className="cursor-pointer text-sm text-muted">Ergänzende Zielkurse</summary><div className="mt-3 space-y-2">{computed?.targets.map((target, i) => <div key={i} className="flex justify-between text-sm"><span>CRV {i + 1}:1</span><span>{target >= 0 ? formatMoney(target, /^[A-Z]{3}$/.test(currency) ? currency : "USD") : "Kein positiver Zielkurs"}</span></div>)}</div></details>
+        <details className="mt-5 border-t border-border pt-3"><summary className="cursor-pointer text-sm text-muted">Ergänzende Zielkurse</summary><div className="mt-3 space-y-2">{computed?.targets.map((target, i) => <div key={i} className="flex justify-between text-sm"><span>CRV {i + 1}:1</span><span>{target >= 0 ? formatMoney(target, currency) : "Kein positiver Zielkurs"}</span></div>)}</div></details>
         <p className="mt-5 text-xs leading-5 text-muted">Berechnungsbasis = NetLiq − bestehendes Stopprisiko. Davon wird dein Risiko je Trade angesetzt. Stopprisiko ist ein Szenario mit Ausführung zum Stoppkurs, keine garantierte Verlustobergrenze.</p>
       </Card>
     </div>

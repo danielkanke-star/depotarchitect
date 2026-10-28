@@ -56,6 +56,8 @@ export type MarketDataLookupState = {
   candidates: TwelveDataInstrument[];
   fxToBase?: number | null;
   fxStale?: boolean;
+  fxAsOf?: string | null;
+  fxSource?: string | null;
   quantityStep?: number | null;
   contractMultiplier?: number | null;
 };
@@ -122,6 +124,8 @@ export async function lookupPositionMarketData(
     candidates,
     fxToBase: fx?.rate ?? null,
     fxStale: fx?.stale ?? true,
+    fxAsOf: fx?.asOf ?? null,
+    fxSource: fx?.source ?? null,
     quantityStep: uniquePositive((configurations??[]).map(c=>c.quantity_step)),
     contractMultiplier: uniquePositive((configurations??[]).map(c=>c.multiplier)),
   };
@@ -224,7 +228,10 @@ export async function savePosition(formData: FormData) {
   const multiplier = nullableNumber(formData, "multiplier") ?? existing?.multiplier ?? 1;
   const quantityStep = nullableNumber(formData, "quantity_step") ?? existing?.quantity_step ?? 1;
   if (multiplier <= 0 || quantityStep < 0.000001 || new Decimal(quantityStep).decimalPlaces() > 6 || new Decimal(quantity).decimalPlaces() > 6) throw new Error("Multiplikator muss positiv sein. Menge und Stückelung erlauben höchstens sechs Nachkommastellen.");
-  const currentFx = instrumentCurrency === portfolio.currency ? 1 : nullableNumber(formData, "current_fx_to_base");
+  const suppliedFx = nullableNumber(formData, "current_fx_to_base");
+  const automaticFx = instrumentCurrency !== portfolio.currency && suppliedFx === null
+    ? await resolveCurrentFx(portfolio.id, userId, instrumentCurrency, portfolio.currency) : null;
+  const currentFx = instrumentCurrency === portfolio.currency ? 1 : suppliedFx ?? automaticFx?.rate ?? null;
   const entryFx = instrumentCurrency === portfolio.currency ? 1 : nullableNumber(formData, "entry_fx_to_base") ?? (!existing && entryDate === berlinDate() ? currentFx : existing?.instrument_currency === instrumentCurrency ? existing.entry_fx_to_base : null);
   if ((currentFx !== null && currentFx <= 0) || (entryFx !== null && entryFx <= 0)) throw new Error("Wechselkurse müssen positiv sein.");
   const referenceMargin = nullableNumber(formData, "entry_margin_base");
@@ -255,7 +262,7 @@ export async function savePosition(formData: FormData) {
     entry_margin_base: entryMargin,
     entry_margin_source: existing?.entry_margin_base != null ? existing.entry_margin_source : entryMargin === null ? null : referenceMargin !== null ? "manual_reference" : margin.marginRequirement !== null ? "entry_direct_reference" : "entry_rate_reference",
     entry_fx_to_base: entryFx,
-    ...(!existing || currentFx !== existing.current_fx_to_base || instrumentCurrency !== existing.instrument_currency ? { current_fx_to_base: currentFx, fx_to_base: currentFx, current_fx_source: currentFx === null ? null : "manual", current_fx_status: currentFx === null ? "missing" as const : "manually_updated" as const, current_fx_as_of: currentFx === null ? null : now } : {}),
+    ...(!existing || currentFx !== existing.current_fx_to_base || instrumentCurrency !== existing.instrument_currency ? { current_fx_to_base: currentFx, fx_to_base: currentFx, current_fx_source: automaticFx?.source ?? (currentFx === null ? null : "manual"), current_fx_status: currentFx === null ? "missing" as const : automaticFx ? automaticFx.stale ? "stale" as const : "delayed" as const : "manually_updated" as const, current_fx_as_of: automaticFx?.asOf ?? (currentFx === null ? null : now) } : {}),
     sold_quantity: sale.soldQuantity,
     sale_price: sale.salePrice,
     sale_date: sale.saleDate,
@@ -317,9 +324,9 @@ export async function savePosition(formData: FormData) {
         source_type: "manual",
         entry_fx_to_base: entryFx,
         current_fx_to_base: currentFx,
-        current_fx_source: baseCurrencyPosition ? "identity" : currentFx !== null ? "manual" : null,
-        current_fx_as_of: currentFx !== null ? now : null,
-        current_fx_status: currentFx !== null ? "manually_updated" : "missing",
+        current_fx_source: baseCurrencyPosition ? "identity" : automaticFx?.source ?? (currentFx !== null ? "manual" : null),
+        current_fx_as_of: automaticFx?.asOf ?? (currentFx !== null ? now : null),
+        current_fx_status: currentFx === null ? "missing" : automaticFx ? automaticFx.stale ? "stale" : "delayed" : "manually_updated",
         fx_to_base: currentFx,
         market_value: null,
         risk_amount: null,

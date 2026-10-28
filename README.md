@@ -21,7 +21,7 @@ npm run dev
 
 Ohne Zugangsdaten lässt sich nach `npm ci` und `npm run dev` die lokale Entwicklungsvorschau unter `http://localhost:3000/vorschau` ansehen. Sie verwendet erfundene Daten und unterstützt Profilwechsel, Stoppänderungen, Beispielverkäufe, Statistik, Positionsplanung und CSV-Vorschau. Sie verändert keine echten Depots. Im Production-Build liefert diese Route HTTP 404.
 
-Für die echte Anwendung ist zusätzlich die additive Migration `20261027210146_first_usable_journal.sql` erforderlich. Der lokale SQL-Test spielt alle Migrationen in einer isolierten PostgreSQL-Testlaufzeit mit synthetischer Auth-Fixture durch. Das ersetzt keine Live-Abnahme von Supabase Auth und PostgREST. Betrieb und Freigabe: [docs/releases/first-usable.md](docs/releases/first-usable.md).
+Für die echte Anwendung ist zusätzlich die additive Migration `20261028083022_first_usable_journal.sql` erforderlich. Der lokale SQL-Test spielt alle Migrationen in einer isolierten PostgreSQL-Testlaufzeit mit synthetischer Auth-Fixture durch. Das ersetzt keine Live-Abnahme von Supabase Auth und PostgREST. Betrieb und Freigabe: [docs/releases/first-usable.md](docs/releases/first-usable.md).
 
 Erforderliche Variablen:
 

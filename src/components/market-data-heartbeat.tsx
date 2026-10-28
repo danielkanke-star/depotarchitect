@@ -19,7 +19,7 @@ export function MarketDataHeartbeat() {
       pendingRef.current = true;
       if (Date.now() >= nextFxRef.current) {
         nextFxRef.current = Date.now() + 300_000;
-        void refreshPortfolioFx().catch(() => { /* Stored FX remains visible. */ });
+        void refreshPortfolioFx().catch(() => { /* Stored Wechselkurs remains visible. */ });
       }
       startTransition(() => {
         void refreshActiveMarketData().then((result) => {

@@ -28,7 +28,7 @@ describe("configurable depot columns", () => {
   it("uses instrument market value as primary and names the optional column by portfolio currency", () => {
     expect(depotPage).toContain("result?.positionValueInstrument");
     expect(depotPage).toContain("Marktwert {portfolio.currency}");
-    expect(depotPage).toContain("FX fehlt");
+    expect(depotPage).toContain("Wechselkurs fehlt");
     expect(depotPage).toContain("Risiko unvollständig");
     expect(depotPage).not.toContain("Basiswert");
   });

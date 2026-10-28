@@ -25,7 +25,8 @@ export function buildOverview(data: OverviewData, now = new Date()) {
     if (!p.instrument_currency || p.instrument_currency===portfolio.currency || inputs[i].currentFxToBase==null) return false;
     const shared=latestUsableFxRate(fxRates,p.instrument_currency,portfolio.currency);
     const times=[p.current_fx_as_of,shared?.asOf].flatMap(d=>d && Number.isFinite(Date.parse(d)) ? [Date.parse(d)] : []);
-    return inputs[i].currentFxStatus === "stale" || !times.length || now.getTime()-Math.max(...times)>3600000;
+    const maxAge = shared?.source === "EZB-Tagesreferenz über Frankfurter" ? 7 * 86400000 : 3600000;
+    return inputs[i].currentFxStatus === "stale" || !times.length || now.getTime()-Math.max(...times)>maxAge;
   }).length;
   const grouped = new Map<string, Position[]>();
   for (const p of active) grouped.set(instrumentKey(p), [...(grouped.get(instrumentKey(p)) ?? []), p]);
