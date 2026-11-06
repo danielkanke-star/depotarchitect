@@ -11,7 +11,7 @@ Dieses Dokument beschreibt die minimale Betriebsroutine für DepotArchitect. Sie
 
 ## Supabase Free-Projekt
 
-Supabase kann Free-Projekte bei zu geringer Datenbankaktivität innerhalb eines Sieben-Tage-Zeitraums pausieren. Nach dem Pausieren besteht ein 90-Tage-Fenster für die Wiederherstellung per Dashboard. Die Frist bezieht sich auf das pausierte Supabase-Projekt, nicht auf GitHub-Commits oder Vercel-Deployments.
+Supabase kann Free-Projekte bei zu geringer Datenbankaktivität innerhalb eines Sieben-Tage-Zeitraums pausieren. Nach der aktuellen [Supabase-Dokumentation](https://supabase.com/docs/guides/platform/free-project-pausing) besteht nach dem Pausieren ein Wiederherstellungsfenster von einem Jahr. Die Frist bezieht sich auf das pausierte Supabase-Projekt, nicht auf GitHub-Commits oder Vercel-Deployments.
 
 Eine sichere Betriebsprüfung besteht aus:
 
@@ -47,3 +47,9 @@ Ein paar echte Benutzerabfragen pro Tag können laut Supabase ein Pausieren verh
 ## Datensicherung
 
 Aktivität ist kein Backup. Vor externer Nutzung ist ein dokumentierter, regelmäßig getesteter Export- und Wiederherstellungsprozess für Datenbank, Auth-Benutzer und Storage festzulegen. Sicherungen müssen verschlüsselt und außerhalb des aktiven Supabase-Projekts aufbewahrt werden. Zugangsdaten, API-Schlüssel und `.env`-Dateien dürfen weder in Git noch in Wartungsprotokolle gelangen.
+
+## Login-Verfügbarkeit nach einem pausierten Projekt
+
+Ein erreichbares Vercel-Deployment und HTTP 200 auf der Loginseite beweisen keine verfügbare Datenbank oder Authentifizierung. Deshalb immer den Supabase-Projektstatus sowie Auth- und Daten-API prüfen. Nach einer Wiederherstellung ist `COMING_UP` ein Zwischenzustand; erst ein gesunder Projektstatus und erfolgreiche Dienstabfragen bestätigen den Wiederanlauf.
+
+Öffentliche GET-/HEAD-Aufrufe von Login, Start- und Rechteseiten benötigen keine Sitzung und kontaktieren im Proxy keinen Auth-Dienst. Dadurch blockieren alte Sitzungscookies diese Seiten bei einem Dienstausfall nicht. Geschützte Routen, POST-Aktionen und Auth-Bestätigungsaufrufe behalten ihre Sitzungsprüfung; zusätzliche Autorisierung erfolgt an den Daten- und Aktionsgrenzen. Regressionstests prüfen sowohl den öffentlichen Seitenaufruf bei ausgefallenem Auth-Dienst als auch die weiter geschützten Depot-, Admin- und Exportwege.

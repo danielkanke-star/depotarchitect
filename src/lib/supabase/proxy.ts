@@ -2,9 +2,26 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
 
+const publicRoutes = new Set([
+  "/",
+  "/impressum",
+  "/datenschutz",
+  "/nutzungsbedingungen",
+  "/risikohinweis",
+]);
+
 export async function updateSession(request: NextRequest) {
   if (request.nextUrl.pathname === "/vorschau") return process.env.NODE_ENV === "development"
     ? NextResponse.next({ request }) : new NextResponse(null, { status: 404 });
+  const isLoginPage = request.nextUrl.pathname === "/login"
+    || request.nextUrl.pathname === "/auth/login";
+  const isPublicRoute = publicRoutes.has(request.nextUrl.pathname);
+  // Public page reads need no session. Expired cookies must not make the login
+  // screen wait for an unavailable Auth service. Actions and private routes still
+  // refresh/verify claims below and authorize again at their data boundary.
+  if ((request.method === "GET" || request.method === "HEAD") && (isLoginPage || isPublicRoute)) {
+    return NextResponse.next({ request });
+  }
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
@@ -32,15 +49,6 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const isAuthRoute = request.nextUrl.pathname === "/login"
     || request.nextUrl.pathname.startsWith("/auth");
-  const publicRoutes = new Set([
-    "/",
-    "/impressum",
-    "/datenschutz",
-    "/nutzungsbedingungen",
-    "/risikohinweis",
-  ]);
-  const isPublicRoute = publicRoutes.has(request.nextUrl.pathname);
-
   if (!data?.claims && !isAuthRoute && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
