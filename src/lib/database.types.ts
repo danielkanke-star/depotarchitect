@@ -306,6 +306,7 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      check_application_storage: { Args: { section: string }; Returns: boolean };
       create_ibkr_pairing: { Args: { target_portfolio: string; code_hash: string }; Returns: string };
       revoke_ibkr_connection: { Args: { target_portfolio: string }; Returns: undefined };
       mark_ibkr_active: { Args: { target_portfolio: string }; Returns: undefined };
