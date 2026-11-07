@@ -22,7 +22,15 @@ Eine sichere Betriebsprüfung besteht aus:
 5. Security- und Performance-Advisor prüfen.
 6. Keine Depot-, Benutzer- oder Authentifizierungsdaten nur zur Erzeugung von Aktivität verändern.
 
-Ein paar echte Benutzerabfragen pro Tag können laut Supabase ein Pausieren verhindern, garantieren dies im Free-Tarif aber nicht. Für dauerhaft garantierte Verfügbarkeit ist ein kostenpflichtiger, nicht automatisch pausierbarer Tarif erforderlich.
+Ein paar Datenbankanfragen pro Tag können laut Supabase ein Pausieren verhindern. Eine garantierte Ausnahme von der Inaktivitätsregel gibt es für Free-Projekte nicht.
+
+## Tägliche Verfügbarkeitsprüfung
+
+Vercel ruft in Production täglich zwischen 05:00 und 05:59 Uhr UTC `/api/availability` auf. Das entspricht in Berlin 06:00 bis 06:59 Uhr im Winter und 07:00 bis 07:59 Uhr im Sommer. Vercel sendet `CRON_SECRET` als Bearer-Token. Der Wert wird ausschließlich als Production-Secret in Vercel gespeichert.
+
+Die Funktion prüft Supabase Auth und sendet drei lesende Anfragen an PostgreSQL für Depot, Journal und Kursdaten. Die Datenbankfunktion prüft nur das Vorhandensein der benötigten Tabellen und gibt einen Wahrheitswert zurück. HTTP 204 bestätigt Erfolg. Bei HTTP 503 steht in den Funktionsprotokollen, welcher Bereich fehlgeschlagen ist. Ein pausiertes Projekt wird wie oben beschrieben wiederhergestellt.
+
+Der Job läuft mit dem Vercel-Hobby-Kontingent und dem Supabase-Free-Projekt. Weitere Informationen stehen in der [Vercel-Dokumentation zu Cron Jobs](https://vercel.com/docs/schedules/cron-jobs/usage-and-pricing) und der [Supabase-Dokumentation zum Pausieren](https://supabase.com/docs/guides/platform/free-project-pausing).
 
 ## Monatliche Wartungsprüfung
 
