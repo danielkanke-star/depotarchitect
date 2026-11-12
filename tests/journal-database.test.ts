@@ -209,3 +209,60 @@ describe("IBKR paired-device SQL boundaries", () => {
     await rejected("select public.ibkr_bridge_pair($1,$2)",[code,token]);
   });
 });
+
+describe("depot intake ledger", () => {
+  const hash = "a".repeat(64);
+  const sample = {
+    instrument: "US0378331005", ticker: "US0378331005", name: "Example",
+    currency: "EUR", direction: "long", type: "stock", price: "100", multiplier: "1",
+  };
+  const opening = { ...sample, reference: "opening", quantity: "7.5", side: "buy", effect: "open", date: "2026-01-02", time: "10:00:00" };
+  const closing = { ...sample, reference: "closing", quantity: "2.5", price: "120", side: "sell", effect: "close", date: "2026-01-05", time: "11:00:00" };
+  function ingest(entries: unknown[], preview = false, target = portfolio) {
+    return db.query<{ result: { opened: number; closed: number; skipped: number } }>(
+      "select public.import_depot_executions($1,'flatex',$2,$3::jsonb,false,$4) result", [target, hash, JSON.stringify(entries), preview]);
+  }
+  it("previews, adds overlapping histories once, and writes partial sales into the journal", async () => {
+    expect((await ingest([closing, opening], true)).rows[0].result).toEqual({ opened: 1, closed: 1, skipped: 0 });
+    expect((await db.query("select * from positions")).rows).toHaveLength(0);
+    expect((await ingest([opening])).rows[0].result).toEqual({ opened: 1, closed: 0, skipped: 0 });
+    expect((await ingest([closing, opening])).rows[0].result).toEqual({ opened: 0, closed: 1, skipped: 1 });
+    expect((await ingest([closing, opening])).rows[0].result).toEqual({ opened: 0, closed: 0, skipped: 2 });
+    const { id } = (await db.query<{ id: string }>("select id from positions where quantity-sold_quantity=5")).rows[0];
+    expect((await db.query("select quantity,price,source,fx_to_base from position_sales where position_id=$1", [id])).rows[0])
+      .toEqual({ quantity: "2.5", price: "120", source: "flatex", fx_to_base: "1" });
+    await rejected("update positions set quantity=999 where id=$1", [id]);
+    await rejected("select public.correct_position_sale(id,1,120,'2026-01-05',1,'correction') from position_sales where position_id=$1", [id]);
+  });
+
+  it("rejects an unmatched closure, conflicting repeats, and a foreign depot", async () => {
+    await rejected("select public.import_depot_executions($1,'flatex',$2,$3::jsonb,false,false)", [portfolio, hash, JSON.stringify([opening, { ...closing, quantity: "10" }])]);
+    expect((await db.query("select * from positions")).rows).toHaveLength(0);
+    await ingest([opening, closing]);
+    await rejected("select public.import_depot_executions($1,'flatex',$2,$3::jsonb,false,false)", [portfolio, hash, JSON.stringify([{ ...closing, price: "121" }])]);
+    await rejected("select public.import_depot_executions($1,'flatex',$2,$3::jsonb,false,false)", [secondPortfolio, hash, JSON.stringify([opening])]);
+  });
+
+  it("creates separate depots and gives only a keyed background worker the encrypted connection", async () => {
+    const worker = "f".repeat(64);
+    const { id } = (await db.query<{ id: string }>("select public.create_named_portfolio('Broker B','EUR','cash_account') id")).rows[0];
+    await db.query(`select public.ibkr_flex_connect($1,$2,'9999',$3,encode(sha256(convert_to($4,'UTF8')),'hex'),current_date+90,
+      $5::jsonb,$6::jsonb,false)`, [id, hash, "x".repeat(80), worker, JSON.stringify([{ ...opening, instrument: "1234", ticker: "EX" }]),
+      JSON.stringify({ netAssetValue: { date: "2026-01-02", total: "50000" }, marks: [{ conid: "1234", date: "2026-01-02", price: "105", currency: "EUR" }] })]);
+    expect((await db.query("select net_liquidity from portfolios where id=$1", [id])).rows[0]).toEqual({ net_liquidity: "50000.00" });
+    expect((await db.query("select status,source_name from position_price_observations where portfolio_id=$1", [id])).rows[0])
+      .toEqual({ status: "end_of_day", source_name: "IBKR Flex · Schlusskurs" });
+    const status = (await db.query<{ status: Record<string, unknown> }>("select public.ibkr_flex_status($1) status", [id])).rows[0].status;
+    expect(status.account).toBe("9999");
+    expect(status).not.toHaveProperty("credentials");
+    await rejected("select credentials from app_private.ibkr_flex_connections");
+    expect((await db.query("select public.ibkr_flex_claim($1) job", ["bad"])).rows[0]).toEqual({ job: null });
+    await db.exec("reset role; select set_config('request.jwt.claim.sub','',true); update app_private.ibkr_flex_connections set next_run=now()-interval '1 hour'; set local role anon");
+    const { job } = (await db.query<{ job: { portfolio: string; lease: string } }>("select public.ibkr_flex_claim($1) job", [worker])).rows[0];
+    expect(job.portfolio).toBe(id);
+    expect((await db.query("select public.ibkr_flex_claim($1) job", [worker])).rows[0]).toEqual({ job: null });
+    const { result } = (await db.query<{result: { closed: number; error: null }}>("select public.ibkr_flex_finish($1,$2,$3,$4::jsonb,'{}',null) result",
+      [worker, job.lease, hash, JSON.stringify([{ ...closing, instrument: "1234", ticker: "EX" }])])).rows[0];
+    expect(result).toMatchObject({ closed: 1, error: null });
+  });
+});

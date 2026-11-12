@@ -1,3 +1,4 @@
+import { IntakeChoices } from "@/components/depot-intake";
 import Link from "next/link";
 import { Card, PageHeader } from "@/components/ui";
 import { OverviewPanel } from "@/components/overview-panel";
@@ -9,6 +10,12 @@ import { latestUsableFxRate, canonicalMarketDataStatus } from "@/lib/market-data
 
 export default async function CockpitPage() {
   const data = await getPortfolioData();
+  if (!data.positions.length && !data.cashBalances.length && !data.capitalMovements.length && data.portfolio.net_liquidity === null) {
+    return <><PageHeader title={data.portfolio.name} action={<Link href="/import" className="text-sm text-accent">Daten hinzufügen</Link>} />
+      <div className="mb-6"><p className="text-xl font-medium">Wie möchtest du starten?</p></div>
+      <IntakeChoices />
+    </>;
+  }
   const overview = buildOverview(data);
   const cash=calculateCashPortfolio(data.cashBalances.map(b=>({id:b.id,currency:b.currency,baseCurrency:data.portfolio.currency,balanceNative:b.balance_native,
     currentFxToBase:latestUsableFxRate(data.fxRates,b.currency,data.portfolio.currency)?.rate??b.current_fx_to_base,

@@ -11,8 +11,8 @@ const publicRoutes = new Set([
 ]);
 
 export async function updateSession(request: NextRequest) {
-  // The availability route authenticates its own scheduled request.
-  if (request.nextUrl.pathname === "/api/availability") return NextResponse.next({ request });
+  // Scheduled handlers authenticate their own requests.
+  if (["/api/availability", "/api/ibkr-flex-sync", "/handelsdatei.csv"].includes(request.nextUrl.pathname)) return NextResponse.next({ request });
   if (request.nextUrl.pathname === "/vorschau") return process.env.NODE_ENV === "development"
     ? NextResponse.next({ request }) : new NextResponse(null, { status: 404 });
   const isLoginPage = request.nextUrl.pathname === "/login"

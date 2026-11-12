@@ -32,3 +32,22 @@ export async function fetchReferenceFxRate(from: string, to: string, fetcher: ty
     return { rate: data.rate!, asOf: asOf.toISOString() };
   } catch { return null; }
 }
+
+/** Reference for the requested trading day or the preceding ECB publication day. */
+export async function fetchHistoricalReferenceRate(from: string, to: string, date: string, fetcher: typeof fetch = fetch) {
+  if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  if (from === to) return { rate: 1, date, source: "identity" };
+  try {
+    const url = new URL(`https://api.frankfurter.dev/v2/rate/${from.toLowerCase()}/${to.toLowerCase()}`);
+    url.searchParams.set("providers", "ecb");
+    url.searchParams.set("date", date);
+    const response = await fetcher(url, { signal: AbortSignal.timeout(3500), next: { revalidate: 86_400 } });
+    if (!response.ok) return null;
+    const value = await response.json() as { base?: string; quote?: string; rate?: number; date?: string };
+    if (value.base !== from || value.quote !== to || !value.date || !/^\d{4}-\d{2}-\d{2}$/.test(value.date) ||
+      typeof value.rate !== "number" || !Number.isFinite(value.rate) || value.rate <= 0) return null;
+    const age = Date.parse(date) - Date.parse(value.date);
+    if (!Number.isFinite(age) || age < 0 || age > 7 * 86_400_000) return null;
+    return { rate: value.rate, date: value.date, source: `EZB-Tagesreferenz ${value.date}` };
+  } catch { return null; }
+}

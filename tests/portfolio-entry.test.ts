@@ -86,16 +86,15 @@ describe("regular position form boundary", () => {
     }
   });
 
-  it("requires a current price as the reliable manual fallback", () => {
-    expect(source).toContain('name="current_price" required');
+  it("keeps the current price optional with an automatic fallback", () => {
+    expect(source).toMatch(/name="current_price" inputMode=/);
+    expect(source).not.toContain('name="current_price" required');
   });
 
   it("offers a search-based company and complete-listing quote lookup", () => {
-    expect(source).toContain("Unternehmen & Kurs suchen");
+    expect(source).toContain("Wertpapier suchen");
     expect(source).toContain("lookupPositionMarketData");
     expect(source).toContain("formNoValidate");
-    expect(source).toContain("Anbieterrelevanz");
-    expect(source).toContain("keine Aussage zur Liquidität");
     expect(source).toContain("market_listing_selection");
   });
 });

@@ -3,13 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
 import { createClient } from "@/lib/supabase/server";
+import { fetchHistoricalReferenceRate } from "@/lib/market-data-providers/fx-core";
 import { resolveCurrentFx } from "@/lib/market-data-providers/fx";
 import { berlinDate, calendarDays } from "@/lib/risk-rules";
 
 export type SaleState = { message: string; ok: boolean };
 export async function recordSale(_previous: SaleState, form: FormData): Promise<SaleState> {
   const supabase = await createClient();
-  const userId = await getUserId();
   const portfolio = await getOrCreatePortfolio();
   const id = String(form.get("position_id") ?? "");
   const { data: position, error } = await supabase.from("positions").select("*").eq("id", id).eq("portfolio_id", portfolio.id).single();
@@ -20,9 +20,9 @@ export async function recordSale(_previous: SaleState, form: FormData): Promise<
   if (calendarDays(date,berlinDate()) === null || (position.entry_date && calendarDays(position.entry_date,date) === null)) return { ok:false, message:"Das tatsächliche Verkaufsdatum muss zwischen Einstieg und heute liegen." };
   let fx = position.instrument_currency === portfolio.currency ? 1 : fxInput;
   let source = fx === 1 && position.instrument_currency === portfolio.currency ? "identity" : "manual_execution_reference";
-  if (fx === null && date === berlinDate()) {
-    const quote = await resolveCurrentFx(portfolio.id, userId, position.instrument_currency ?? "", portfolio.currency);
-    if (quote && !quote.stale && berlinDate(new Date(quote.asOf)) === date) { fx = quote.rate; source = `${quote.source} ${quote.asOf}`; }
+  if (fx === null) {
+    const quote = await fetchHistoricalReferenceRate(position.instrument_currency ?? "", portfolio.currency, date);
+    if (quote) { fx = quote.rate; source = quote.source; }
   }
   if (quantity === null || price === null || !Number.isFinite(quantity) || !Number.isFinite(price) || quantity <= 0 || price < 0 || (fx !== null && (!Number.isFinite(fx) || fx <= 0))) return { ok: false, message: "Bitte gültige Menge, Verkaufskurs und gegebenenfalls historischen Wechselkurs eingeben." };
   const requestId = String(form.get("request_id") ?? "");
@@ -31,7 +31,7 @@ export async function recordSale(_previous: SaleState, form: FormData): Promise<
     executed_on: date, sale_fx: fx, fx_provenance: source, idempotency_key: requestId });
   if (writeError) return { ok: false, message: writeError.message.includes("übersteigt") ? "Die verkaufte Menge übersteigt die offene Restmenge." : writeError.message.includes("Ungültige") ? "Datum und Verkaufsangaben prüfen. Das Datum muss zwischen Einstieg und heute liegen." : "Der Verkauf konnte nicht gespeichert werden. Bitte Verbindung und Datenbankstand prüfen." };
   ["/depot", "/cockpit", "/performance", "/risiko"].forEach(path => revalidatePath(path));
-  return { ok: true, message: ["Verkauf gespeichert.", fx === null ? "Für die historische Euro-Auswertung fehlt noch der Wechselkurs beim Verkauf." : "", ["broker","manual_direct","imported_direct"].includes(position.margin_source) ? "Den direkten Marginbetrag für die Restmenge bitte neu bestätigen." : ""].filter(Boolean).join(" ") };
+  return { ok: true, message: ["Verkauf gespeichert.", fx === null ? "Für die historische Euro-Auswertung war die historische Umrechnung noch nicht verfügbar." : "", ["broker","manual_direct","imported_direct"].includes(position.margin_source) ? "Den direkten Marginbetrag für die Restmenge bitte neu bestätigen." : ""].filter(Boolean).join(" ") };
 }
 
 export async function refreshPortfolioFx() {

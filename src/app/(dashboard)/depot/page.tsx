@@ -23,7 +23,7 @@ type Params = { q?: string; category?: string; view?: string; edit?: string; add
 
 export default async function DepotPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
-  const { portfolio, categories, positions, fxRates, priceObservations, latestImport, capitalMovements, sales, journalAvailable, journalReferences } = await getPortfolioData();
+  const { portfolio, categories, positions, fxRates, priceObservations, capitalMovements, sales, journalAvailable, journalReferences } = await getPortfolioData();
   const marketDataMappings = await getPositionMarketDataMappings(portfolio.id);
   const mappingByPositionId = new Map(marketDataMappings.map((mapping) => [mapping.position_id, mapping]));
   const activePositions = positions.filter((position) => position.status !== "closed");
@@ -70,10 +70,11 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
 
     {showPositionForm && <Card className="mb-4">
       <div className="mb-4 flex items-start justify-between gap-3">
-        <div><h2 className="font-medium">{editPosition ? `${editPosition.ticker} bearbeiten` : "Neue Position"}</h2><p className="mt-1 text-xs text-muted">Nur die notwendigen fachlichen Angaben werden erfasst.</p></div>
+        <div><h2 className="font-medium">{editPosition ? `${editPosition.ticker} bearbeiten` : "Neue Position"}</h2></div>
         <Link href="/depot" className="text-xs text-muted">Schließen</Link>
       </div>
       <PositionForm
+        portfolioId={portfolio.id}
         position={editPosition}
         categories={categories}
         accountType={portfolio.account_type}
@@ -90,7 +91,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
     <Card>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2"><h2 className="font-medium">Positionen</h2><InfoTip label="Positionsjournal">Geschlossene und teilverkaufte Positionen bleiben im Journal erhalten. Öffne eine Zeile für Details und Verkäufe.</InfoTip></div>
-        <Link href="/import" className="text-xs text-accent">{latestImport ? "CSV-Import und Historie" : "Optionaler CSV-Import"}</Link>
+        <Link href="/import?via=datei" className="text-xs text-accent">Dateien importieren</Link>
       </div>
       <form className="table-toolbar">
         <div className="relative min-w-[200px] flex-1"><Search size={15} className="pointer-events-none absolute left-3 top-3 text-muted"/><input name="q" aria-label="Positionen suchen" placeholder="Ticker oder Unternehmen suchen" defaultValue={params.q??""} className="pl-9"/></div>
