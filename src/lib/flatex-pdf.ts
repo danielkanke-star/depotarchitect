@@ -28,7 +28,8 @@ export async function extractFlatexText(file: File) {
       if (line.trim()) lines.push(line.trim());
     }
     // Extract only booking fields. Strip names, addresses, other identifiers and unrelated lines before sending.
-    const fields = lines.flatMap(line => {
+    const fields = lines.flatMap(raw => {
+      const line = raw.normalize("NFKC").replace(/\s+/g, " ").trim();
       if (/\b(?:Storno|Sammelabrechnung|Kapitalmaßnahme)\b/i.test(line)) return ["Sammelabrechnung"];
       const matches = [
         line.match(/Wertpapierabrechnung\s+(?:Kauf|Verkauf)\b/i),
