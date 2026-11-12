@@ -58,6 +58,7 @@ export function TradeFileImport({ portfolio, hasPositions }: { portfolio: string
   const [state, setState] = useState<IntakeState>(initial);
   const [pending, setPending] = useState(false);
   const [allow, setAllow] = useState(false);
+  const [savedToDepot, setSavedToDepot] = useState(false);
   const fileLabel = loaded?.names.length === 1 ? loaded.names[0] : loaded?.names.length ? `${loaded.names.length} Abrechnungen ausgewählt` : "CSV, XML oder PDF";
   async function load(files: File[]) {
     const version = ++loadVersion.current;
@@ -108,7 +109,9 @@ export function TradeFileImport({ portfolio, hasPositions }: { portfolio: string
     if (allow) form.set("allow_existing", "yes");
     setPending(true);
     try {
-      setState(await inspectTradeFile(initial, form));
+      const outcome = await inspectTradeFile(initial, form);
+      setState(outcome);
+      if (outcome.saved) setSavedToDepot(true);
     } catch {
       setState({ error: true, message: "Der Import konnte nicht erreicht werden. Bitte erneut versuchen." });
     } finally { setPending(false); }
@@ -143,7 +146,7 @@ export function TradeFileImport({ portfolio, hasPositions }: { portfolio: string
       </label>)}</div>
     </div>}
     {loaded && <div className="mt-5">
-      {hasPositions && <OverlapConfirmation checked={allow} onChange={checked => { setAllow(checked); setState(initial); }} disabled={pending} />}
+      {(hasPositions || savedToDepot) && <OverlapConfirmation checked={allow} onChange={checked => { setAllow(checked); setState(initial); }} disabled={pending} />}
       {state.summary && <Preview summary={state.summary} />}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {!state.saved && <button type="button" className={state.summary ? secondary : primary} disabled={pending || loading} onClick={() => void submit(false)}>{pending ? "Wird geprüft …" : "Vorschau prüfen"}</button>}
