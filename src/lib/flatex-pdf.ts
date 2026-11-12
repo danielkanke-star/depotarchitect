@@ -1,6 +1,6 @@
 export async function extractFlatexText(file: File) {
-  const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
-  GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
   const pdf = getDocument({ data: await file.arrayBuffer(), stopAtErrors: true, enableXfa: false,
     useWasm: false, useSystemFonts: false, disableFontFace: true, isOffscreenCanvasSupported: false });
   try {
