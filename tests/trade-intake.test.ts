@@ -30,7 +30,7 @@ describe("broker intake formats", () => {
   });
 
   it("reads standalone flatex confirmations and validates the printed conversion against gross values", () => {
-    const { account, trade } = parseFlatexConfirmation(flatex, "EUR");
+    const { account, trade } = parseFlatexConfirmation(flatex.replaceAll(" ", "   "), "EUR");
     expect(account).toBe("1000000000");
     expect(trade).toMatchObject({ reference: "123456789/1", date: "2022-05-12", ticker: "IE00BQ3D6V05", effect: "close", price: "55.08", currency: "USD", conversionSource: "flatex-Abrechnung" });
     expect(Number(trade.conversion)).toBeCloseTo(0.956928, 5);

@@ -3,7 +3,7 @@ import { parseDate } from "@/lib/csv-import";
 import { exactTradeNumber, validateTrade, type Trade } from "@/lib/trade-import";
 
 export function parseFlatexConfirmation(raw: string, baseCurrency: string): { trade: Trade; account: string } {
-  const text = raw.normalize("NFKC").replace(/[\u00a0\t]/g, " ");
+  const text = raw.normalize("NFKC").replace(/[\u00a0\t]/g, " ").replace(/ {2,}/g, " ");
   const heading = [...text.matchAll(/Wertpapierabrechnung\s+(Kauf|Verkauf)\b/gi)];
   if (!/flatex/i.test(text) || heading.length !== 1 || /\b(?:Storno|Sammelabrechnung|Kapitalmaßnahme)\b/i.test(text)) {
     throw new Error("Bitte eine einzelne flatex-Kauf- oder Verkaufsabrechnung mit Text auswählen.");

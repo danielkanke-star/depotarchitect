@@ -29,7 +29,6 @@ export async function extractFlatexText(file: File) {
     }
     // Extract only booking fields. Strip names, addresses, other identifiers and unrelated lines before sending.
     const fields = lines.flatMap(line => {
-      if (/flatex/i.test(line)) return ["flatex"];
       if (/\b(?:Storno|Sammelabrechnung|Kapitalmaßnahme)\b/i.test(line)) return ["Sammelabrechnung"];
       const matches = [
         line.match(/Wertpapierabrechnung\s+(?:Kauf|Verkauf)\b/i),
@@ -42,9 +41,9 @@ export async function extractFlatexText(file: File) {
         line.match(/Devisenkurs\s*:\s*[\d.,]+/i),
         line.match(/Verrechnung[^\n]*Konto Nr\.?\s*:\s*[\d ]+/i),
       ];
-      return matches.flatMap(match => match ? [match[0]] : []);
+      return [...(/flatex/i.test(line) ? ["flatex"] : []), ...matches.flatMap(match => match ? [match[0]] : [])];
     });
-    if (!fields.length) throw new Error("Das PDF enthält keinen lesbaren Abrechnungstext.");
+    if (!fields.some(field => field !== "flatex")) throw new Error("Das PDF enthält keinen lesbaren Abrechnungstext.");
     return fields.join("\n");
   } finally {
     await pdf.destroy();
