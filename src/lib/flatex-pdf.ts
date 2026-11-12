@@ -1,6 +1,6 @@
 export async function extractFlatexText(file: File) {
-  const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
-  GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
   const pdf = getDocument({ data: await file.arrayBuffer(), stopAtErrors: true, enableXfa: false,
     useWasm: false, useSystemFonts: false, disableFontFace: true, isOffscreenCanvasSupported: false });
   try {
@@ -28,8 +28,8 @@ export async function extractFlatexText(file: File) {
       if (line.trim()) lines.push(line.trim());
     }
     // Extract only booking fields. Strip names, addresses, other identifiers and unrelated lines before sending.
-    const fields = lines.flatMap(line => {
-      if (/flatex/i.test(line)) return ["flatex"];
+    const fields = lines.flatMap(raw => {
+      const line = raw.normalize("NFKC").replace(/\s+/g, " ").trim();
       if (/\b(?:Storno|Sammelabrechnung|Kapitalmaßnahme)\b/i.test(line)) return ["Sammelabrechnung"];
       const matches = [
         line.match(/Wertpapierabrechnung\s+(?:Kauf|Verkauf)\b/i),
@@ -42,9 +42,9 @@ export async function extractFlatexText(file: File) {
         line.match(/Devisenkurs\s*:\s*[\d.,]+/i),
         line.match(/Verrechnung[^\n]*Konto Nr\.?\s*:\s*[\d ]+/i),
       ];
-      return matches.flatMap(match => match ? [match[0]] : []);
+      return [...(/flatex/i.test(line) ? ["flatex"] : []), ...matches.flatMap(match => match ? [match[0]] : [])];
     });
-    if (!fields.length) throw new Error("Das PDF enthält keinen lesbaren Abrechnungstext.");
+    if (!fields.some(field => field !== "flatex")) throw new Error("Das PDF enthält keinen lesbaren Abrechnungstext.");
     return fields.join("\n");
   } finally {
     await pdf.destroy();
