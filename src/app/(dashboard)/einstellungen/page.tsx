@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, PageHeader } from "@/components/ui";
 import { getPortfolioData } from "@/lib/portfolio";
 import { isBaseCurrencyLocked } from "@/lib/portfolio-write-policy";
@@ -20,6 +21,7 @@ export default async function EinstellungenPage() {
         <p className="mt-4 text-xs leading-5 text-muted">Kategorien werden den einzelnen Positionen zugeordnet.</p>
       </Card>
     </div>
-    <div className="mt-4"><IbkrConnection /></div>
+    <Card className="mt-4"><div className="flex items-center justify-between gap-4"><h2 className="font-medium">Brokerberichte</h2><Link href="/import?via=broker" className="text-sm text-accent">Verbindung verwalten</Link></div></Card>
+    <details className="mt-4"><summary className="mb-3 cursor-pointer text-sm text-muted">Lokaler IBKR-Kursdienst</summary><IbkrConnection /></details>
   </>;
 }

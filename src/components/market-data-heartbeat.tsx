@@ -40,7 +40,7 @@ export function MarketDataHeartbeat() {
       startTransition(() => {
         void refreshActiveMarketData().then((result) => {
           setStatus(result.status);
-          const delay = result.status === "rate-limited" ? 3_600_000 : result.status === "budget" ? 60_000
+          const delay = result.status === "rate-limited" ? 3_600_000 : result.status === "budget" || result.status === "idle" ? 60_000
             : ["schema-pending", "provider-disabled"].includes(result.status) ? 300_000 : 0;
           nextQuoteRef.current = Date.now() + delay;
         }).catch(() => {
@@ -75,7 +75,7 @@ function marketDataStatusMessage(status: RefreshStatus | null) {
     case "schema-pending":
       return "Die additive Kursdatenbank-Migration fehlt in dieser Umgebung. Es werden keine bestehenden Depotdaten verändert.";
     case "mapping-required":
-      return "Mindestens eine bestehende Position hat noch keine eindeutige Notierung. Bitte im Depot einmal „Kurs aktualisieren“ oder beim Bearbeiten „Unternehmen & Kurs suchen“ verwenden.";
+      return "Mindestens eine bestehende Position hat noch keine eindeutige Notierung. Bitte im Depot einmal „Kurs aktualisieren“ oder beim Bearbeiten „Wertpapier suchen“ verwenden.";
     case "budget":
       return "Das reservierte kostenlose Tagesbudget ist erreicht. Vorhandene Kurse bleiben sichtbar; es entstehen keine automatischen Zusatzkosten.";
     case "rate-limited":

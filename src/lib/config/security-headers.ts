@@ -20,6 +20,7 @@ export function buildSecurityHeaders(env: SecurityEnvironment) {
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     `connect-src 'self' ${supabaseOrigins(env.NEXT_PUBLIC_SUPABASE_URL).join(" ")}`.trim(),
+    "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

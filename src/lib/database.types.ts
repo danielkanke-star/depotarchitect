@@ -306,6 +306,16 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      export_my_trade_sources: { Args: Record<PropertyKey, never>; Returns: Json };
+      create_named_portfolio: { Args: { depot_name: string; base_currency: string; depot_type: string }; Returns: string };
+      import_depot_executions: { Args: { target_portfolio: string; source_kind: string; account_hash: string; entries: Json; allow_existing: boolean; preview: boolean }; Returns: Json };
+      ibkr_flex_status: { Args: { target_portfolio: string }; Returns: Json };
+      ibkr_flex_disconnect: { Args: { target_portfolio: string }; Returns: undefined };
+      ibkr_flex_allow_validation: { Args: Record<PropertyKey, never>; Returns: boolean };
+      ibkr_flex_connect: { Args: { target_portfolio: string; source_account: string; display_account: string; sealed: string; worker_key_hash: string; expires: string; entries: Json; valuation: Json; allow_existing: boolean }; Returns: Json };
+      ibkr_flex_claim: { Args: { worker_key: string; target_portfolio?: string }; Returns: Json };
+      ibkr_flex_finish: { Args: { worker_key: string; job_lease: string; report_account: string | null; entries: Json; valuation: Json; failure: string | null }; Returns: Json };
+
       check_application_storage: { Args: { section: string }; Returns: boolean };
       create_ibkr_pairing: { Args: { target_portfolio: string; code_hash: string }; Returns: string };
       revoke_ibkr_connection: { Args: { target_portfolio: string }; Returns: undefined };

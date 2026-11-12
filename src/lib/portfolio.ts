@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { cookies } from "next/headers";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { allRows } from "./paged-query";
@@ -9,9 +11,13 @@ export async function getUserId() {
   return userId;
 }
 
-export async function getOrCreatePortfolio() {
-  const supabase = await createClient();
-  await getUserId();
+export const getOrCreatePortfolio = cache(async function getOrCreatePortfolio() {
+  const { supabase, userId } = await requireUser();
+  const selected = (await cookies()).get("depotarchitect-active-depot")?.value;
+  if (selected && /^[0-9a-f-]{36}$/i.test(selected)) {
+    const { data } = await supabase.from("portfolios").select("*").eq("user_id", userId).eq("id", selected).maybeSingle();
+    if (data) return data;
+  }
 
   const { data: portfolioId, error: initializationError } = await supabase.rpc("initialize_default_portfolio");
   if (initializationError) throw new Error("Das Portfolio konnte nicht initialisiert werden.");
@@ -19,13 +25,13 @@ export async function getOrCreatePortfolio() {
   const { data: portfolio, error: portfolioError } = await supabase
     .from("portfolios")
     .select("*")
-    .eq("id", portfolioId)
+    .eq("id", portfolioId).eq("user_id", userId)
     .single();
 
   if (portfolioError) throw new Error("Das Portfolio konnte nicht geladen werden.");
 
   return portfolio;
-}
+});
 
 export async function getPortfolioData(): Promise<{
   portfolio: Portfolio;

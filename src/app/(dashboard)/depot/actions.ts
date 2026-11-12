@@ -13,6 +13,7 @@ import { normalizeMarginInput, normalizePositionSale, validateCapitalMovement, v
 import { resolveWritableInstrumentType } from "@/lib/portfolio-write-policy";
 import { createClient } from "@/lib/supabase/server";
 import Decimal from "decimal.js";
+import { fetchHistoricalReferenceRate } from "@/lib/market-data-providers/fx-core";
 import { resolveCurrentFx } from "@/lib/market-data-providers/fx";
 import { berlinDate } from "@/lib/risk-rules";
 import { applyIbkrPortfolioQuotes, lookupIbkrQuote } from "@/lib/ibkr/server";
@@ -71,7 +72,7 @@ export async function lookupPositionMarketData(
 ): Promise<MarketDataLookupState> {
   const supabase = await createClient();
   const userId = await getUserId();
-  const searchTerm = text(formData, "ticker");
+  const searchTerm = text(formData, "search_term") || text(formData, "ticker");
   if (!searchTerm || searchTerm.length > 80) return { status: "error", message: "Bitte Ticker oder Unternehmensname eingeben." };
   const portfolio = await getOrCreatePortfolio();
   const brokerQuote = await lookupIbkrQuote(portfolio.id, searchTerm).catch(() => null);
@@ -187,6 +188,7 @@ export async function savePosition(formData: FormData) {
   const requestedInstrumentType = (text(formData, "instrument_type") || "stock") as InstrumentType;
   const quantity = nullableNumber(formData, "quantity");
   const entryPrice = nullableNumber(formData, "entry_price");
+  if (text(formData, "portfolio_id") && text(formData, "portfolio_id") !== portfolio.id) throw new Error("Das aktive Depot wurde gewechselt. Bitte das Formular neu öffnen.");
   const currentPrice = nullableNumber(formData, "current_price");
   const originalCurrentPrice = nullableNumber(formData, "original_current_price");
   const stopPrice = nullableNumber(formData, "stop_price");
@@ -194,17 +196,19 @@ export async function savePosition(formData: FormData) {
   const categoryId = text(formData, "category_id") || null;
   const notes = text(formData, "notes") || null;
   const marketDataMic = text(formData, "market_data_mic").toUpperCase() || null;
+  const marketDataSymbol = text(formData, "market_data_symbol").toUpperCase() || null;
   const entryDate = optionalIsoDate(text(formData, "entry_date"), "Das Einstiegsdatum ist ungültig.");
 
   if (!ticker || ticker.length > 40 || !DIRECTIONS.has(direction) || !INSTRUMENT_TYPES.has(requestedInstrumentType)) {
     throw new Error("Die Positionsangaben sind ungültig.");
   }
-  if (quantity === null || quantity <= 0 || entryPrice === null || entryPrice < 0 || currentPrice === null || currentPrice < 0) {
-    throw new Error("Menge, Einstandskurs und aktueller Kurs sind erforderlich und dürfen nicht negativ sein.");
+  if (quantity === null || quantity <= 0 || entryPrice === null || entryPrice < 0 || (currentPrice !== null && currentPrice < 0)) {
+    throw new Error("Bitte Stückzahl und Einstandskurs eingeben. Kurse dürfen nicht negativ sein.");
   }
   if (stopPrice !== null && stopPrice < 0) throw new Error("Der Trading-Stopp darf nicht negativ sein.");
   if (!/^[A-Z]{3}$/.test(instrumentCurrency)) throw new Error("Die Instrumentwährung ist ungültig.");
   if (notes && notes.length > 1000) throw new Error("Der Kommentar darf höchstens 1.000 Zeichen enthalten.");
+  if (marketDataSymbol && marketDataSymbol.length > 80) throw new Error("Die Kursnotierung ist ungültig.");
   if (marketDataMic && !MIC_PATTERN.test(marketDataMic)) {
     throw new Error("Der Börsenplatz muss als vierstelliger MIC angegeben werden, zum Beispiel XETR oder XNAS.");
   }
@@ -250,8 +254,15 @@ export async function savePosition(formData: FormData) {
   const suppliedFx = nullableNumber(formData, "current_fx_to_base");
   const automaticFx = instrumentCurrency !== portfolio.currency && suppliedFx === null
     ? await resolveCurrentFx(portfolio.id, userId, instrumentCurrency, portfolio.currency) : null;
-  const currentFx = instrumentCurrency === portfolio.currency ? 1 : suppliedFx ?? automaticFx?.rate ?? null;
-  const entryFx = instrumentCurrency === portfolio.currency ? 1 : nullableNumber(formData, "entry_fx_to_base") ?? (!existing && entryDate === berlinDate() ? currentFx : existing?.instrument_currency === instrumentCurrency ? existing.entry_fx_to_base : null);
+  const currentFx = instrumentCurrency === portfolio.currency ? 1 : suppliedFx ?? automaticFx?.rate ??
+    (existing?.instrument_currency === instrumentCurrency ? existing.current_fx_to_base : null);
+  const manualEntryFx = nullableNumber(formData, "entry_fx_to_base");
+  const sameCurrencyEntryFx = existing?.instrument_currency === instrumentCurrency ? existing.entry_fx_to_base : null;
+  const isImportedEntry = existing?.journal_source_key?.startsWith("execution:") ?? false;
+  const historicalFx = !isImportedEntry && instrumentCurrency !== portfolio.currency && entryDate && manualEntryFx === null && sameCurrencyEntryFx === null
+    ? await fetchHistoricalReferenceRate(instrumentCurrency, portfolio.currency, entryDate) : null;
+  const entryFx = isImportedEntry ? existing!.entry_fx_to_base :
+    instrumentCurrency === portfolio.currency ? 1 : manualEntryFx ?? sameCurrencyEntryFx ?? historicalFx?.rate ?? null;
   if ((currentFx !== null && currentFx <= 0) || (entryFx !== null && entryFx <= 0)) throw new Error("Wechselkurse müssen positiv sein.");
   const referenceMargin = nullableNumber(formData, "entry_margin_base");
   if (referenceMargin !== null && referenceMargin < 0) throw new Error("Die Einstiegsmargin darf nicht negativ sein.");
@@ -259,10 +270,10 @@ export async function savePosition(formData: FormData) {
     ? margin.marginRequirement ?? (entryFx !== null && margin.marginRate !== null ? new Decimal(quantity).mul(entryPrice).mul(multiplier).mul(entryFx).mul(margin.marginRate).toNumber() : null) : null);
   const tradingViewUrl = text(formData, "tradingview_url") || null;
   if (tradingViewUrl && !/^https:\/\/([a-z0-9-]+\.)?tradingview\.com\//.test(tradingViewUrl)) throw new Error("Bitte einen HTTPS-Link zu TradingView eingeben.");
-  const shouldWriteManualPrice = !existing
+  const shouldWriteManualPrice = currentPrice !== null && (!existing
     || existing.ticker !== ticker
     || existing.instrument_currency !== instrumentCurrency
-    || currentPrice !== originalCurrentPrice;
+    || currentPrice !== originalCurrentPrice);
 
   const payload = {
     category_id: categoryId,
@@ -301,6 +312,8 @@ export async function savePosition(formData: FormData) {
       current_price_source: "manual",
       current_price_as_of: now,
       current_price_status: "manually_updated" as const,
+    } : !existing || existing.ticker !== ticker || existing.instrument_currency !== instrumentCurrency ? {
+      current_price: null, current_price_native: null, current_price_source: null, current_price_as_of: null, current_price_status: "missing" as const,
     } : {}),
     updated_at: now,
   };
@@ -355,14 +368,14 @@ export async function savePosition(formData: FormData) {
   }
   if (result.error || !result.data) throw new Error("Die Position konnte nicht gespeichert werden.");
   const broker = sale.status === "closed" ? null : await applyIbkrPortfolioQuotes(portfolio.id, userId, result.data.id).catch(() => null);
-  const priceOutcome = broker?.matched ? "updated" : sale.status === "closed" || instrumentType === "option"
+  const priceOutcome = broker?.matched ? "updated" : sale.status === "closed" || instrumentType === "option" || (isImportedEntry && !marketDataMic)
     ? null
     : await refreshPositionFromTwelveData({
       supabase,
       userId,
       portfolioId: portfolio.id,
       positionId: result.data.id,
-      ticker,
+      ticker: marketDataSymbol ?? ticker,
       currency: instrumentCurrency,
       requestedMic: marketDataMic,
       listingUserSelected: marketDataMic !== null,
@@ -409,7 +422,7 @@ export async function refreshPositionPrice(formData: FormData) {
 
   const { data: mapping, error: mappingError } = await supabase
     .from("position_market_data_mappings")
-    .select("mic_code")
+    .select("mic_code,provider_symbol")
     .eq("position_id", position.id)
     .eq("provider", "twelve_data")
     .maybeSingle();
@@ -447,7 +460,7 @@ export async function refreshPositionPrice(formData: FormData) {
     userId,
     portfolioId: portfolio.id,
     positionId: position.id,
-    ticker: position.ticker,
+    ticker: mapping?.provider_symbol ?? position.ticker,
     currency: refreshCurrency,
     requestedMic: refreshMic,
     listingUserSelected: false,
@@ -461,17 +474,19 @@ export async function refreshActiveMarketData() {
   if (!process.env.TWELVE_DATA_API_KEY?.trim()) return { status: "provider-disabled" as const };
   const supabase = await createClient();
   const userId = await getUserId();
+  const portfolio = await getOrCreatePortfolio();
   const { data: positions, error: positionError } = await supabase
     .from("positions")
     .select("id,listing_id")
     .eq("user_id", userId)
-    .eq("status", "open")
+    .eq("portfolio_id", portfolio.id)
+    .neq("status", "closed")
     .neq("source_type", "demo")
     .neq("instrument_type", "cash");
   if (positionError && isMissingMarketDataTable(positionError)) return { status: "schema-pending" as const };
   if (positionError) return { status: "error" as const };
   const { data: brokerObservations } = await supabase.from("position_price_observations").select("position_id,observed_at,status")
-    .eq("user_id", userId).eq("source_type", "ibkr").gte("observed_at", new Date(Date.now() - 5 * 60_000).toISOString()).limit(1000);
+    .eq("user_id", userId).eq("portfolio_id", portfolio.id).eq("source_type", "ibkr").gte("observed_at", new Date(Date.now() - 5 * 60_000).toISOString()).limit(1000);
   const suppliedByBroker = new Set((brokerObservations ?? []).filter(q => ["live", "delayed", "end_of_day"].includes(q.status)).map(q => q.position_id));
   const needingProvider = (positions ?? []).filter(p => !suppliedByBroker.has(p.id));
   const unassignedPositionCount = needingProvider.filter((position) => !position.listing_id).length;

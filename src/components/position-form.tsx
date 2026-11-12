@@ -13,6 +13,7 @@ import type {
   PositionMarketDataMapping,
 } from "@/lib/database.types";
 import { isMarginAccount } from "@/lib/portfolio-entry";
+import { InfoTip } from "./info-tip";
 import { berlinDate } from "@/lib/risk-rules";
 
 type EditablePosition = Pick<Position,
@@ -20,7 +21,7 @@ type EditablePosition = Pick<Position,
   | "instrument_currency" | "entry_price" | "entry_date" | "stop_price_native"
   | "stop_price" | "status" | "notes" | "sold_quantity" | "sale_price" | "sale_date"
   | "margin_rate" | "margin_requirement" | "margin_source"
-  | "entry_margin_base" | "entry_fx_to_base" | "current_fx_to_base" | "tradingview_url" | "quantity_step" | "multiplier"
+  | "journal_source_key" | "entry_margin_base" | "entry_fx_to_base" | "current_fx_to_base" | "tradingview_url" | "quantity_step" | "multiplier"
 >;
 
 const INITIAL_LOOKUP_STATE: MarketDataLookupState = { status: "idle" };
@@ -33,8 +34,10 @@ export function PositionForm({
   currentPrice,
   currentPriceSource,
   marketDataMapping,
+  portfolioId,
 }: {
   position?: EditablePosition;
+  portfolioId: string;
   categories: PortfolioCategory[];
   accountType: PortfolioAccountType;
   baseCurrency: string;
@@ -43,7 +46,8 @@ export function PositionForm({
   marketDataMapping?: Pick<PositionMarketDataMapping, "mic_code" | "exchange"> | null;
 }) {
   const initiallyClosed = position?.status === "closed";
-  const entryLocked = Boolean(position && (position.sold_quantity > 0 || position.entry_margin_base != null));
+  const brokerEntry = position?.journal_source_key?.startsWith("execution:") ?? false;
+  const entryLocked = Boolean(position && (brokerEntry || position.sold_quantity > 0 || position.entry_margin_base != null));
   const [saveState, saveAction, savePending] = useActionState(savePositionWithFeedback, { message: "" });
   const [entryDate, setEntryDate] = useState(position ? position.entry_date ?? "" : berlinDate());
   const [lookupState, lookupAction, lookupPending] = useActionState(
@@ -53,63 +57,93 @@ export function PositionForm({
   const marginApplicable = isMarginAccount(accountType);
   const directMargin = ["manual_direct", "broker", "imported_direct"].includes(position?.margin_source ?? "");
 
+  const [security, setSecurity] = useState(position?.ticker ?? "");
+  const [searched, setSearched] = useState("");
+  const market = lookupState.status === "success" && searched === security ? lookupState : null;
+  const foundCurrency = market && (!entryLocked || market.currency === position?.instrument_currency) ? market.currency : null;
+  const manualCurrency = position?.instrument_currency ?? "";
+  const [chosenCurrency, setChosenCurrency] = useState(manualCurrency);
+  const [instrumentType, setInstrumentType] = useState(position?.instrument_type ?? "stock");
+
   return (
-    <form action={saveAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {entryLocked && <>{position && position.sold_quantity > 0 && <input type="hidden" name="category_id" value={position.category_id ?? ""} />}<input type="hidden" name="instrument_type" value={position?.instrument_type} /><input type="hidden" name="direction" value={position?.direction} /></>}
+    <form action={saveAction} className="space-y-5">
+      <input type="hidden" name="portfolio_id" value={portfolioId} />
       <input type="hidden" name="id" value={position?.id ?? ""} />
       <input type="hidden" name="position_status" value={initiallyClosed ? "closed" : "open"} />
       <input type="hidden" name="sold_quantity" value={position?.sold_quantity ?? ""} />
       <input type="hidden" name="sale_price" value={position?.sale_price ?? ""} />
       <input type="hidden" name="sale_date" value={position?.sale_date ?? ""} />
-      <label>Ticker oder Unternehmen<input key={lookupState.status === "success" ? `ticker-${lookupState.symbol}` : "ticker-initial"} name="ticker" readOnly={entryLocked} required maxLength={80} defaultValue={entryLocked ? position?.ticker ?? "" : lookupState.status === "success" ? lookupState.symbol : position?.ticker ?? ""} /><span className="mt-1 block text-[11px] text-muted">Für neue Positionen genügt ein Suchbegriff. Name, Börsenplatz, MIC, Währung und Kurs werden gemeinsam aufgelöst.</span></label>
-      <label>Kategorie<select name="category_id" disabled={Boolean(position && position.sold_quantity > 0)} defaultValue={position?.category_id ?? ""}><option value="">Keine</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
-      <label>Positionstyp<select name="instrument_type" disabled={entryLocked} defaultValue={position?.instrument_type ?? "stock"}><option value="stock">Aktie</option><option value="etf">ETF</option><option value="option">Option</option><option value="warrant">Optionsschein</option><option value="knock_out">Knock-out</option><option value="other">Sonstiges</option></select></label>
-      <label>Richtung<select name="direction" disabled={entryLocked} defaultValue={position?.direction ?? "long"}><option value="long">Long</option><option value="short">Short</option>{position?.instrument_type === "option" && <><option value="long_call">Long Call</option><option value="long_put">Long Put</option><option value="short_call">Short Call</option><option value="short_put">Short Put</option></>}</select></label>
-      <div className="rounded-xl border border-border p-3 text-xs text-muted">Verkäufe werden separat im Verkaufsjournal erfasst. Bei vorhandenen Verkäufen bleiben die Einstiegsdaten erhalten.</div>
-      <label>Menge beim Einstieg<input name="quantity" readOnly={entryLocked} required inputMode="decimal" defaultValue={position?.quantity ?? 1} /></label>
-      <label>Instrumentwährung<input key={lookupState.status === "success" ? `currency-${lookupState.currency}` : "currency-initial"} name="instrument_currency" required maxLength={3} readOnly={entryLocked || lookupState.status === "success"} defaultValue={lookupState.status === "success" ? lookupState.currency : position?.instrument_currency ?? baseCurrency} /><span className="mt-1 block text-[11px] text-muted">Wird bei erfolgreicher Notierungswahl automatisch gesetzt; ohne Anbieter bleibt die manuelle Rückfalleingabe möglich.</span></label>
-      <label>Einstandskurs<input name="entry_price" readOnly={entryLocked} required inputMode="decimal" defaultValue={position?.entry_price ?? ""} /></label>
-      <label>Aktueller Kurs<input key={lookupState.status === "success" ? `${lookupState.symbol}-${lookupState.micCode}-${lookupState.observedAt}` : "initial"} name="current_price" required inputMode="decimal" defaultValue={lookupState.status === "success" ? lookupState.price : currentPrice ?? ""} /><span className="mt-1 block text-[11px] text-muted">{currentPriceSource ? `Aktive Quelle: ${currentPriceSource}.` : "Notwendiger Rückfallkurs."} Verfügbare Brokerkurse und ergänzende Kursquellen werden automatisch geprüft.</span></label>
+      <input type="hidden" name="ticker" value={entryLocked ? position?.ticker ?? "" : market?.symbol ?? security} />
+      <input type="hidden" name="market_data_symbol" value={foundCurrency ? market?.symbol : ""} />
       <input type="hidden" name="original_current_price" value={currentPrice ?? ""} />
-      <input type="hidden" name="market_data_mic" value={lookupState.status === "success" ? lookupState.micCode : marketDataMapping?.mic_code ?? ""} />
-      {lookupState.status === "success" && lookupState.candidates.length > 1 ? <label>Alternative Notierung<select name="market_listing_selection" defaultValue={`${lookupState.symbol}@${lookupState.micCode}:${lookupState.currency}`}>
-        {lookupState.candidates.map((candidate) => <option key={`${candidate.symbol}@${candidate.micCode}:${candidate.currency}`} value={`${candidate.symbol}@${candidate.micCode}:${candidate.currency}`}>{candidate.symbol} · {candidate.exchange ?? candidate.micCode} ({candidate.micCode}) · {candidate.currency}</option>)}
-      </select><span className="mt-1 block text-[11px] text-muted">Die erste Auswahl folgt ausschließlich der Anbieterrelevanz und ist keine Aussage zur Liquidität. Alternative wählen und erneut laden.</span></label> : <div className="rounded-xl border border-border/70 bg-background/30 p-3 text-xs text-muted">{marketDataMapping?.exchange ? `Aktuelle Zuordnung: ${marketDataMapping.exchange} (${marketDataMapping.mic_code}).` : "Die Notierung wird als vollständiges Tupel aus Symbol, MIC und Währung gespeichert."}</div>}
-      <div className="flex items-end">
-        <button formAction={lookupAction} formNoValidate disabled={lookupPending} className="w-full rounded-xl border border-accent/50 px-4 py-2.5 text-sm text-accent disabled:opacity-60">
-          {lookupPending ? "Kurs wird gesucht …" : lookupState.status === "success" ? "Ausgewählte Notierung laden" : "Unternehmen & Kurs suchen"}
+      <input type="hidden" name="market_data_mic" value={foundCurrency ? market?.micCode : marketDataMapping?.mic_code ?? ""} />
+      {entryLocked && <><input type="hidden" name="instrument_type" value={position?.instrument_type} /><input type="hidden" name="direction" value={position?.direction} /></>}
+      {Boolean(position && position.sold_quantity > 0) && <input type="hidden" name="category_id" value={position?.category_id ?? ""} />}
+
+      {entryLocked && <p className="text-sm font-medium">{position?.ticker}</p>}
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="min-w-48 flex-1">{entryLocked ? "Kursnotierung suchen" : "Wertpapier"}
+          <input name="search_term" required={!entryLocked} maxLength={80} placeholder="Name oder Ticker" value={security}
+            onChange={event => { setSecurity(event.target.value); setSearched(""); }} />
+        </label>
+        <button formAction={lookupAction} formNoValidate onClick={() => setSearched(security)} disabled={lookupPending || savePending} className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:border-accent/60 disabled:opacity-45">
+          {lookupPending ? "Wird gesucht …" : market && market.candidates.length > 1 ? "Notierung laden" : "Wertpapier suchen"}
         </button>
       </div>
-      <MarketDataLookupResult state={lookupState} />
-      <label>Einstiegsdatum<input type="date" name="entry_date" readOnly={entryLocked} required={!position || position.entry_date !== null} value={entryDate} onChange={e => setEntryDate(e.target.value)} />{position?.entry_date === null && <span className="mt-1 block text-xs text-muted">Bei diesem Altbestand ist das Datum unbekannt. Für eine Stoppänderung darf es leer bleiben.</span>}</label>
-      <label>Trading-Stopp beim Broker<input name="stop_price" inputMode="decimal" defaultValue={position?.stop_price_native ?? position?.stop_price ?? ""} /><span className="mt-1 block text-xs text-muted">Den tatsächlich beim Broker gesetzten Stopp dokumentieren.</span></label>
-      <label>Aktueller Wechselkurs · 1 Instrumentwährung in {baseCurrency}<input key={`fx-${lookupState.status === "success" ? lookupState.observedAt : "stored"}`} name="current_fx_to_base" inputMode="decimal" defaultValue={lookupState.status === "success" ? lookupState.fxToBase ?? "" : position?.current_fx_to_base ?? ""} /><span className="mt-1 block text-xs text-muted">Wird bei der Kurssuche und beim Speichern automatisch geladen. Nur für einen eigenen Referenzkurs ausfüllen.</span></label>
+      {searched === security && <MarketDataLookupResult state={lookupState} />}
+      {market && entryLocked && !foundCurrency && <p className="text-sm text-amber-200">Bitte eine Notierung in {position?.instrument_currency} wählen.</p>}
+      {market && market.candidates.length > 1 && <label className="max-w-lg">Notierung<select key={market.micCode} name="market_listing_selection" defaultValue={`${market.symbol}@${market.micCode}:${market.currency}`}>
+        {market.candidates.map(candidate => <option key={`${candidate.symbol}@${candidate.micCode}:${candidate.currency}`} value={`${candidate.symbol}@${candidate.micCode}:${candidate.currency}`}>{candidate.symbol} · {candidate.exchange ?? candidate.micCode} · {candidate.currency}</option>)}
+      </select></label>}
 
-      {marginApplicable ? <>
-        <label>Marginangabe<select name="margin_input_type" defaultValue={directMargin ? "amount" : "rate"}><option value="rate">Marginquote in Prozent</option><option value="amount">Marginbetrag</option></select></label>
-        <label>Marginwert<input name="margin_value" inputMode="decimal" defaultValue={directMargin ? position?.margin_requirement ?? "" : position?.margin_rate == null ? "" : position.margin_rate * 100} /></label>
-      </> : <div className="rounded-xl border border-border/70 bg-background/30 p-3 text-sm text-muted sm:col-span-2">Margin ist für dieses Kontomodell nicht zutreffend.</div>}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label>Stückzahl<input name="quantity" readOnly={entryLocked} required inputMode="decimal" defaultValue={position?.quantity ?? ""} /></label>
+        <label>Einstiegskurs<input name="entry_price" readOnly={entryLocked} required inputMode="decimal" defaultValue={position?.entry_price ?? ""} /></label>
+        <label>Einstiegsdatum<input type="date" name="entry_date" readOnly={entryLocked} required={!position || position.entry_date !== null} value={entryDate} onChange={e => setEntryDate(e.target.value)} /></label>
+        <label>Handelswährung<input key={foundCurrency ?? "manual-currency"} name="instrument_currency" required maxLength={3} readOnly={entryLocked || Boolean(foundCurrency)}
+          value={foundCurrency ?? chosenCurrency} onChange={event => setChosenCurrency(event.target.value.toUpperCase())} /></label>
+        <label>Stopp beim Broker<input name="stop_price" inputMode="decimal" placeholder="Optional" defaultValue={position?.stop_price_native ?? position?.stop_price ?? ""} /></label>
+        <label>Kategorie<select name="category_id" disabled={Boolean(position && position.sold_quantity > 0)} defaultValue={position?.category_id ?? ""}><option value="">Ohne Kategorie</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+      </div>
 
-      <details className="sm:col-span-2 xl:col-span-4 rounded-xl border border-border p-3"><summary className="cursor-pointer text-sm">Einstiegsreferenz, Stückelung und TradingView</summary><div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <label>Wechselkurs beim Einstieg · 1 Instrumentwährung in {baseCurrency}<input key={`entry-fx-${entryDate}-${lookupState.status === "success" ? lookupState.observedAt : "stored"}`} name="entry_fx_to_base" inputMode="decimal" defaultValue={position?.entry_fx_to_base ?? (entryDate === berlinDate() && lookupState.status === "success" && !lookupState.fxStale ? lookupState.fxToBase ?? "" : "")} /><span className="mt-1 block text-xs text-muted">Bei älteren Einstiegen historischen Kurs angeben. Kein heutiger Ersatz.</span></label>
-        <label>Einstiegsmargin · {baseCurrency}<input name="entry_margin_base" inputMode="decimal" readOnly={position?.entry_margin_base != null} defaultValue={position?.entry_margin_base ?? ""} /><span className="mt-1 block text-xs text-muted">Wird einmal festgehalten. Bei einem heutigen Neueinstieg aus dessen Marginangabe und Einstieg-Wechselkurs berechnet. Ältere Einstiege benötigen eine historische Referenz.</span></label>
-        <label>Multiplikator<input name="multiplier" readOnly={entryLocked} type="number" min="0.000001" step="any" defaultValue={position?.multiplier ?? 1} /></label>
-        <label>Zulässige Stückelung<input name="quantity_step" type="number" min="0.000001" step="any" defaultValue={position?.quantity_step ?? 1} /></label>
-        <label className="sm:col-span-2">TradingView-Link<input name="tradingview_url" type="url" placeholder="https://www.tradingview.com/x/…" defaultValue={position?.tradingview_url ?? ""} /></label>
-      </div></details>
+      <details className="rounded-xl border border-border px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium">Weitere Angaben</summary>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label>Instrumenttyp<select name="instrument_type" disabled={entryLocked} value={instrumentType} onChange={event => setInstrumentType(event.target.value as EditablePosition["instrument_type"])}>
+            <option value="stock">Aktie</option><option value="etf">ETF</option><option value="option">Option</option><option value="warrant">Optionsschein</option><option value="knock_out">Knock-out</option><option value="other">Sonstiges</option>
+          </select></label>
+          <label>Richtung<select name="direction" disabled={entryLocked} defaultValue={position?.direction ?? "long"}><option value="long">Long</option><option value="short">Short</option>{instrumentType === "option" && <><option value="long_call">Long Call</option><option value="long_put">Long Put</option><option value="short_call">Short Call</option><option value="short_put">Short Put</option></>}</select></label>
+          <label>Aktueller Kurs · optional<input name="current_price" inputMode="decimal" defaultValue={currentPrice ?? ""} placeholder="Automatisch, falls verfügbar" />{currentPriceSource && <span className="text-xs text-muted">{currentPriceSource}</span>}</label>
+          {marginApplicable && <>
+            <label>Margin als<select name="margin_input_type" defaultValue={directMargin ? "amount" : "rate"}><option value="rate">Prozent</option><option value="amount">Betrag in {baseCurrency}</option></select></label>
+            <label>Margin<input name="margin_value" inputMode="decimal" defaultValue={directMargin ? position?.margin_requirement ?? "" : position?.margin_rate == null ? "" : position.margin_rate * 100} /></label>
+            <label>Einstiegsmargin in {baseCurrency}<input name="entry_margin_base" inputMode="decimal" readOnly={position?.entry_margin_base != null} defaultValue={position?.entry_margin_base ?? ""} /></label>
+          </>}
+          <label>Kontraktgröße<input name="multiplier" readOnly={entryLocked} type="number" min="0.000001" step="any" defaultValue={position?.multiplier ?? 1} /></label>
+          <label>Zulässige Stückelung<input name="quantity_step" type="number" min="0.000001" step="any" defaultValue={position?.quantity_step ?? 1} /></label>
+          <label>TradingView-Link<input name="tradingview_url" type="url" placeholder="https://www.tradingview.com/x/…" defaultValue={position?.tradingview_url ?? ""} /></label>
+          <label className="sm:col-span-2">Kommentar<textarea name="notes" rows={2} maxLength={1000} defaultValue={position?.notes ?? ""} /></label>
+        </div>
+        {Boolean(foundCurrency ?? chosenCurrency) && (foundCurrency ?? chosenCurrency) !== baseCurrency && <details className="mt-3 text-sm text-muted">
+          <summary className="cursor-pointer">Währungsumrechnung</summary>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <label>Referenzkurs für die Bewertung<input name="current_fx_to_base" inputMode="decimal" placeholder="Automatisch" /></label>
+            <label>Wechselkurs beim Einstieg<input name="entry_fx_to_base" inputMode="decimal" readOnly={brokerEntry} defaultValue={position?.entry_fx_to_base ?? ""} placeholder="Automatisch" /></label>
+          </div>
+        </details>}
+      </details>
 
-      <label className="sm:col-span-2 xl:col-span-4">Kommentar · optional<textarea name="notes" rows={3} maxLength={1000} defaultValue={position?.notes ?? ""} /></label>
-      {entryLocked && <p className="sm:col-span-2 xl:col-span-4 text-xs text-muted">Die Einstiegsreferenz ist festgehalten. Weitere Käufe als neue Teilposition erfassen; Einstiegsdatum, Kategorie, Währung und Richtung dieser Referenz bleiben erhalten.</p>}
-      <div className="sm:col-span-2 xl:col-span-4"><button disabled={savePending || lookupPending} className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-[#062218] disabled:opacity-50">{savePending ? "Wird gespeichert …" : "Position speichern"}</button></div>
-      {saveState.message && <p role="status" className="sm:col-span-2 xl:col-span-4 text-sm text-amber-200">{saveState.message}</p>}
+      <div className="flex flex-wrap items-center gap-4">
+        <button disabled={savePending || lookupPending} className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-[#062218] disabled:opacity-45">{savePending ? "Wird gespeichert …" : "Position speichern"}</button>
+        {Boolean(foundCurrency ?? chosenCurrency) && (foundCurrency ?? chosenCurrency) !== baseCurrency && <span className="flex items-center gap-1.5 text-xs text-muted">Umrechnung in {baseCurrency}<InfoTip label="Währungsumrechnung">DepotArchitect rechnet automatisch in die Depotwährung um. Der Kurs am Handelstag und der Kurs für die heutige Bewertung können sich unterscheiden.</InfoTip></span>}
+      </div>
+      {saveState.message && <p role="alert" className="text-sm text-amber-200">{saveState.message}</p>}
     </form>
   );
 }
 
 function MarketDataLookupResult({ state }: { state: MarketDataLookupState }) {
-  if (state.status === "idle") {
-    return <div className="rounded-xl border border-border/70 bg-background/30 p-3 text-xs text-muted sm:col-span-2 xl:col-span-4">Ticker oder Unternehmensname genügt. Die erste Notierung folgt der Relevanzreihenfolge des Anbieters; bis zu zwei Alternativen werden nur angeboten, wenn Symbol, MIC und Währung eindeutig vorliegen.</div>;
-  }
+  if (state.status === "idle") return null;
   if (state.status !== "success") {
     return <div role="status" aria-live="polite" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100 sm:col-span-2 xl:col-span-4">{state.message}</div>;
   }
@@ -127,7 +161,7 @@ function MarketDataLookupResult({ state }: { state: MarketDataLookupState }) {
   return <div role="status" aria-live="polite" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 sm:col-span-2 xl:col-span-4">
     <div className="font-medium text-emerald-100">{state.name ?? state.symbol}</div>
     <div className="mt-1 text-xs text-emerald-50/80">
-      {state.symbol} · {state.exchange ?? "Börse nicht benannt"} ({state.micCode}) · {state.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {state.currency} · {statusLabel} · {state.sourceName?.startsWith("IBKR") ? "Abgerufen" : state.isMarketOpen ? "Markt laut Anbieter offen" : "Markt laut Anbieter geschlossen"} · {observedAt}
+      {state.symbol} · {state.exchange ?? "Börse nicht benannt"} ({state.micCode}) · {state.price.toLocaleString("de-DE", { maximumFractionDigits: 6 })} {state.currency} · {statusLabel} · {observedAt}
     </div>
     <div className="mt-1 text-[11px] text-emerald-50/60">Quelle: {state.sourceName ?? "Twelve Data"}.</div>
   </div>;

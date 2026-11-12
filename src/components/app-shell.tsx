@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Gauge, Menu, Settings, ShieldCheck, Table2, UserRoundCog, X } from "lucide-react";
+import { BarChart3, FileUp, Gauge, Menu, Settings, ShieldCheck, Table2, UserRoundCog, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 const items = [
@@ -10,18 +10,19 @@ const items = [
   { href: "/depot", label: "Depot", icon: Table2 },
   { href: "/risiko", label: "Positionsgröße", icon: ShieldCheck },
   { href: "/performance", label: "Statistik", icon: BarChart3 },
+  { href: "/import", label: "Daten hinzufügen", icon: FileUp },
   { href: "/einstellungen", label: "Einstellungen", icon: Settings },
   { href: "/konto/datenschutz", label: "Konto & Datenschutz", icon: ShieldCheck },
 ];
 
-export function AppShell({ children, profile, isAdmin = false, accountAction }: { children: ReactNode; profile: string; isAdmin?: boolean; accountAction?: ReactNode }) {
+export function AppShell({ children, profile, depotPicker, isAdmin = false, accountAction }: { children: ReactNode; profile: string; depotPicker?: ReactNode; isAdmin?: boolean; accountAction?: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const navigationItems = isAdmin
     ? [...items, { href: "/admin", label: "Administration", icon: UserRoundCog }]
     : items;
 
-  const links = (mobile=false) => <nav aria-label={mobile?"Mobile Hauptnavigation":"Hauptnavigation"}>{navigationItems.map(({href,label,icon:Icon},index)=><div key={href}>{index===0&&<div className="nav-section">Arbeitsbereich</div>}{index===4&&<div className="nav-section">Verwaltung</div>}<Link href={href} onClick={()=>mobile&&setOpen(false)} aria-current={pathname===href?"page":undefined} className="nav-item"><Icon size={16} strokeWidth={1.6}/>{label}</Link></div>)}</nav>;
+  const links = (mobile=false) => <nav aria-label={mobile?"Mobile Hauptnavigation":"Hauptnavigation"}>{navigationItems.map(({href,label,icon:Icon},index)=><div key={href}>{index===0&&<div className="nav-section">Arbeitsbereich</div>}{index===5&&<div className="nav-section">Verwaltung</div>}<Link href={href} onClick={()=>mobile&&setOpen(false)} aria-current={pathname===href?"page":undefined} className="nav-item"><Icon size={16} strokeWidth={1.6}/>{label}</Link></div>)}</nav>;
   const footer = <div className="sidebar-footer"><div className="profile-caption">Trading-Profil</div><div className="profile-value">{profile}</div>{accountAction}</div>;
   return (
     <div className="app-frame min-h-screen text-foreground">
@@ -43,7 +44,7 @@ export function AppShell({ children, profile, isAdmin = false, accountAction }: 
             </aside>
           </div>
         )}
-        <main className="app-main">{children}</main>
+        <main className="app-main"><div className="mb-5 max-w-xs">{depotPicker}</div>{children}</main>
       </div>
     </div>
   );

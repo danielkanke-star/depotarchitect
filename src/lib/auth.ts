@@ -1,3 +1,4 @@
+import { cache } from "react";
 import "server-only";
 
 import { redirect } from "next/navigation";
@@ -6,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 
 const usableAccountStatuses: AccountStatus[] = ["active", "invited", "deletion_requested"];
 
-export async function requireUser() {
+export const requireUser = cache(async function requireUser() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
@@ -21,7 +22,7 @@ export async function requireUser() {
   await supabase.rpc("touch_user_profile");
 
   return { supabase, userId, accountStatus };
-}
+});
 
 export async function getCurrentRole(): Promise<AppRole> {
   const { supabase } = await requireUser();
