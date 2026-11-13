@@ -1,12 +1,11 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
 import { getOrCreatePortfolio, getUserId } from "@/lib/portfolio";
-import { assertBaseCurrencyChangeAllowed } from "@/lib/portfolio-write-policy";
-import { profileFactor, parseBerlinDateTime } from "@/lib/risk-rules";
+import { normalizeTradingProfile, parseBerlinDateTime } from "@/lib/risk-rules";
 import { unstable_rethrow } from "next/navigation";
 
-const num = (formData: FormData, key: string) => Number(String(formData.get(key) ?? "0").replace(",", ".")) || 0;
 const nullableNum = (formData: FormData, key: string) => {
   const raw = String(formData.get(key) ?? "").trim();
   if (!raw) return null;
@@ -14,42 +13,79 @@ const nullableNum = (formData: FormData, key: string) => {
   if (!Number.isFinite(value)) throw new Error("Bitte eine gültige Zahl ohne Tausendertrennzeichen eingeben.");
   return value;
 };
-export async function saveSettings(formData: FormData) {
-  const supabase = await createClient();
-  const portfolio = await getOrCreatePortfolio();
-  const requestedCurrency = normalizedCurrency(formData);
-  const accountType = normalizedAccountType(formData);
-  const profile = String(formData.get("risk_profile") ?? "");
-  const netLiq = nullableNum(formData, "net_liquidity");
-  if (profileFactor(profile) === null) throw new Error("Bitte ein gültiges Risikoprofil wählen.");
-  if (netLiq !== null && netLiq < 0) throw new Error("Die Nettoliquidität darf nicht negativ sein.");
-  for (const key of ["risk_per_trade_pct", "max_margin_pct", "max_position_pct"]) {
-    const value = nullableNum(formData, key);
-    if (value === null || value <= 0 || value > 100) throw new Error("Die Prozentwerte müssen größer als null und höchstens 100 sein.");
-  }
-  const [{ data: positions, error: positionError }, { data: cashBalances, error: cashError }] = await Promise.all([
-    supabase.from("positions").select("id").eq("portfolio_id", portfolio.id).limit(1),
-    supabase.from("portfolio_cash_balances").select("id").eq("portfolio_id", portfolio.id).limit(1),
-  ]);
-  if (positionError || cashError) throw new Error("Die Basiswährung konnte nicht geprüft werden.");
-  assertBaseCurrencyChangeAllowed({
-    currentCurrency: portfolio.currency,
-    requestedCurrency,
-    positionCount: positions?.length ?? 0,
-    cashBalanceCount: cashBalances?.length ?? 0,
-  });
-  const [{ error: portfolioError }, { error: settingsError }] = await Promise.all([
-    supabase.from("portfolios").update({ net_liquidity: netLiq, currency: requestedCurrency, account_type: accountType, data_as_of: normalizedDateTime(formData, "data_as_of"), margin_used_pct: null, risk_budget_used_pct: null, risk_profile: profile, updated_at: new Date().toISOString() }).eq("id", portfolio.id),
-    supabase.from("portfolio_settings").update({ risk_per_trade_pct: num(formData, "risk_per_trade_pct"), max_margin_pct: num(formData, "max_margin_pct"), max_position_pct: num(formData, "max_position_pct"), updated_at: new Date().toISOString() }).eq("portfolio_id", portfolio.id),
-  ]);
-  if (portfolioError) throw new Error("Die Portfolioeinstellungen konnten nicht gespeichert werden.");
-  if (settingsError) throw new Error("Die Risikoeinstellungen konnten nicht gespeichert werden.");
-  revalidatePath("/cockpit"); revalidatePath("/depot"); revalidatePath("/risiko"); revalidatePath("/einstellungen");
+type Feedback = { message: string; ok: boolean };
+
+function refreshDepotViews() {
+  for (const path of ["/cockpit", "/depot", "/risiko", "/einstellungen", "/import", "/performance"]) revalidatePath(path);
 }
 
-export async function saveSettingsWithFeedback(_previous: { message: string; ok: boolean }, formData: FormData) {
-  try { await saveSettings(formData); return { ok: true, message: "Einstellungen gespeichert." }; }
-  catch (error) { unstable_rethrow(error); return { ok: false, message: error instanceof Error ? error.message : "Speichern fehlgeschlagen." }; }
+async function activeDepotFor(form: FormData) {
+  const [identity, portfolio] = await Promise.all([requireUser(), getOrCreatePortfolio()]);
+  if (form.get("portfolio_id") !== portfolio.id) throw new Error("Das aktive Depot wurde gewechselt. Bitte die Ansicht neu öffnen.");
+  return { supabase: identity.supabase, portfolio };
+}
+
+export async function saveSettingsWithFeedback(_previous: Feedback, form: FormData): Promise<Feedback> {
+  try {
+    const { supabase, portfolio } = await activeDepotFor(form);
+    const accountType = normalizedAccountType(form);
+    const profile = normalizeTradingProfile(String(form.get("risk_profile") ?? ""));
+    if (!profile) throw new Error("Bitte ein Trading-Profil wählen.");
+    const { error } = await supabase.rpc("save_depot_preferences", {
+      target_portfolio: portfolio.id, base_currency: normalizedCurrency(form), depot_type: accountType, trading_profile: profile,
+      trade_pct: requiredNumber(form, "risk_per_trade_pct", "Risiko je Trade"),
+      budget_pct: nullableNum(form, "risk_budget_pct"),
+      margin_pct: nullableNum(form, "max_margin_pct"),
+      concentration_basis_pct: requiredNumber(form, "max_position_pct", "Basisgrenze Wertpapier"),
+    });
+    if (error) throw new Error(error.code === "P0001" ? error.message : "Einstellungen konnten nicht gespeichert werden.");
+    revalidatePath("/", "layout");
+    refreshDepotViews();
+    return { ok: true, message: "Einstellungen gespeichert." };
+  } catch (error) {
+    unstable_rethrow(error);
+    return { ok: false, message: error instanceof Error ? error.message : "Speichern fehlgeschlagen." };
+  }
+}
+
+export async function saveDepotValue(_previous: Feedback, form: FormData): Promise<Feedback> {
+  try {
+    const { supabase, portfolio } = await activeDepotFor(form);
+    const amount = requiredNumber(form, "net_liquidity", "Nettoliquidität");
+    const observedAt = normalizedDateTime(form, "data_as_of");
+    if (!observedAt) throw new Error("Bitte den Zeitpunkt aus dem Brokerbericht eintragen.");
+    const { data, error } = await supabase.rpc("record_depot_value", { target_portfolio: portfolio.id, amount, observed_at: observedAt });
+    if (error) throw new Error(error.code === "P0001" ? error.message : "Depotwert konnte nicht gespeichert werden.");
+    if (!data) return { ok: false, message: "Ein gleich aktueller Brokerwert oder ein neuerer Depotwert ist bereits gespeichert." };
+    refreshDepotViews();
+    return { ok: true, message: "Depotwert gespeichert." };
+  } catch (error) {
+    unstable_rethrow(error);
+    return { ok: false, message: error instanceof Error ? error.message : "Speichern fehlgeschlagen." };
+  }
+}
+
+export async function manageCategory(_previous: Feedback, form: FormData): Promise<Feedback> {
+  try {
+    const { supabase, portfolio } = await activeDepotFor(form);
+    const { data, error } = await supabase.rpc("manage_depot_category", {
+      target_portfolio: portfolio.id, operation: String(form.get("operation") ?? ""),
+      category_id: String(form.get("category_id") ?? "") || null,
+      category_name: String(form.get("name") ?? "").trim() || null,
+      goal_min: nullableNum(form, "target_min"), goal_max: nullableNum(form, "target_max"),
+    });
+    if (error?.code === "23505") throw new Error("Dieser Kategoriename ist bereits vergeben.");
+    if (error) throw new Error(error.code === "P0001" ? error.message : "Kategorie konnte nicht geändert werden.");
+    const messages: Record<string, string> = {
+      created: "Kategorie hinzugefügt.", updated: "Kategorie gespeichert.", deleted: "Kategorie gelöscht.",
+      archived: "Kategorie archiviert. Bestehende Zuordnungen bleiben erhalten.", restored: "Kategorie wieder aktiviert.",
+    };
+    refreshDepotViews();
+    return { ok: true, message: messages[data ?? ""] ?? "Kategorie gespeichert." };
+  } catch (error) {
+    unstable_rethrow(error);
+    return { ok: false, message: error instanceof Error ? error.message : "Speichern fehlgeschlagen." };
+  }
 }
 
 export async function saveCashBalance(formData: FormData) {
@@ -120,7 +156,7 @@ function normalizedDateTime(formData: FormData, key: string) {
 }
 
 function normalizedCurrency(formData: FormData, key = "currency") {
-  const currency = String(formData.get(key) ?? "EUR").trim().toUpperCase();
+  const currency = String(formData.get(key) ?? "").trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) throw new Error("Die Basiswährung ist ungültig.");
   return currency;
 }

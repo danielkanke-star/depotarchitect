@@ -103,7 +103,7 @@ export function PositionForm({
         <label>Handelswährung<input key={foundCurrency ?? "manual-currency"} name="instrument_currency" required maxLength={3} readOnly={entryLocked || Boolean(foundCurrency)}
           value={foundCurrency ?? chosenCurrency} onChange={event => setChosenCurrency(event.target.value.toUpperCase())} /></label>
         <label>Stopp beim Broker<input name="stop_price" inputMode="decimal" placeholder="Optional" defaultValue={position?.stop_price_native ?? position?.stop_price ?? ""} /></label>
-        <label>Kategorie<select name="category_id" disabled={Boolean(position && position.sold_quantity > 0)} defaultValue={position?.category_id ?? ""}><option value="">Ohne Kategorie</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+        <label>Kategorie<select name="category_id" disabled={Boolean(position && position.sold_quantity > 0)} defaultValue={position?.category_id ?? ""}><option value="">Ohne Kategorie</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}{category.is_active ? "" : " (archiviert)"}</option>)}</select></label>
       </div>
 
       <details className="rounded-xl border border-border px-4 py-3">

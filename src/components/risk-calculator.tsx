@@ -5,16 +5,16 @@ import Link from "next/link";
 import { Card } from "@/components/ui";
 import { InfoTip } from "./info-tip";
 import { RiskIndicator, formatMoney, formatPrice, formatRatio } from "@/components/risk-indicator";
-import { calculateSizing, budgetTone, depotRiskBudget } from "@/lib/risk-rules";
+import { calculateSizing, budgetTone } from "@/lib/risk-rules";
 import { lookupPositionMarketData, type MarketDataLookupState } from "@/app/(dashboard)/depot/actions";
 
 type Props = { initialNetLiquidity: number | null; initialRiskPct: number; initialMargin?: number | null; maxMargin?: number;
-  existingRisk?: number | null; riskComplete?: boolean; riskIssues?: { id: string; ticker: string; message: string }[]; profile?: string; baseCurrency?: string; demo?: boolean };
+  existingRisk?: number | null; riskComplete?: boolean; riskIssues?: { id: string; ticker: string; message: string }[]; depotBudget?: number | null; baseCurrency?: string; demo?: boolean };
 type Override = { key: string; value: number } | null;
 const listingKey = (value: { symbol: string; micCode: string; currency: string }) => `${value.symbol}@${value.micCode}:${value.currency}`;
 
 export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRisk = null, riskComplete = false,
-  riskIssues = [], profile = "Aggressiv 1,0", baseCurrency = "EUR", demo = false }: Props) {
+  riskIssues = [], depotBudget = null, baseCurrency = "EUR", demo = false }: Props) {
   const [ticker, setTicker] = useState(demo ? "AMZN" : "");
   const [loaded, setLoaded] = useState<{ term: string; state: MarketDataLookupState } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -60,14 +60,13 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
     return () => window.clearTimeout(timer);
   }, [term, demo, load]);
 
-  const budget = depotRiskBudget(initialNetLiquidity, profile);
   const result = calculateSizing({ netLiquidity: initialNetLiquidity, existingRisk, riskComplete, riskPct,
-    entry: entry ?? NaN, stop: stop ?? NaN, fxToBase: fx, step, multiplier, direction, budget });
+    entry: entry ?? NaN, stop: stop ?? NaN, fxToBase: fx, step, multiplier, direction, budget: depotBudget });
   const computed = (market || demo) && result.error === null ? result : null;
   const issue = !term ? "Gib einen Ticker ein. Kurs und Währungsumrechnung werden automatisch geladen."
     : !market && !demo ? pending || !lookup ? "Kurs und Wechselkurs werden geladen …" : lookup.status !== "success" ? lookup.message : null
     : fx === null ? "Für diese Währung ist gerade kein Wechselkurs erreichbar. Erneut laden oder unter Details einen Referenzkurs angeben."
-    : initialNetLiquidity === null ? "Bitte zuerst deine Nettoliquidität in den Einstellungen hinterlegen."
+    : initialNetLiquidity === null ? "Im Cockpit fehlt noch ein Depotwert als Berechnungsbasis."
     : result.error;
 
   return <div className="space-y-4">
@@ -76,6 +75,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
       <Fact label="Bestehendes Stopprisiko" value={riskComplete ? formatMoney(existingRisk, baseCurrency) : "Unvollständig"} />
       <Fact label="Verfügbare Berechnungsbasis" value={initialNetLiquidity !== null && existingRisk !== null && riskComplete ? formatMoney(initialNetLiquidity - existingRisk, baseCurrency) : "—"} />
     </div>
+    {initialNetLiquidity === null && <Link className="inline-block text-sm text-accent underline underline-offset-4" href="/cockpit#depotwert">Depotwert im Cockpit erfassen</Link>}
     {!riskComplete && riskIssues.length > 0 && <div role="status" className="rounded-xl border border-amber-500/40 p-4 text-sm">
       <p className="font-medium text-amber-200">Diese Angaben fehlen für die Stückzahlberechnung</p>
       <p className="mt-2 text-muted">Die Berechnungsbasis zieht das gesamte bestehende Stopprisiko ab. Bitte vervollständige dafür diese Positionen:</p>
@@ -125,7 +125,7 @@ export function RiskCalculator({ initialNetLiquidity, initialRiskPct, existingRi
           <Fact label="Anteil an NetLiq" value={formatRatio(computed?.netLiqShare)} />
           <Fact label="Tatsächliches Risiko nach Abrundung" value={formatMoney(computed?.actualRisk, baseCurrency)} />
         </div>
-        <div className="mt-4"><RiskIndicator tone={budgetTone(computed?.utilizationAfter ?? null)}>Budgetauslastung nach Trade: {formatRatio(computed?.utilizationAfter)}</RiskIndicator></div>
+        {depotBudget !== null && <div className="mt-4"><RiskIndicator tone={budgetTone(computed?.utilizationAfter ?? null)}>Budgetauslastung nach Trade: {formatRatio(computed?.utilizationAfter)}</RiskIndicator></div>}
         {computed && computed.quantity === 0 && <p className="mt-3 text-sm text-amber-300">Innerhalb dieses Risikobetrags ist mit der gewählten Stückelung keine positive Menge möglich.</p>}
         {computed?.utilizationAfter != null && computed.utilizationAfter >= 1 && <p className="mt-3 text-sm text-amber-300">Das persönliche Depotrisikobudget wäre ausgeschöpft oder überschritten. Die Stückzahl wurde deshalb nicht automatisch gekappt.</p>}
         <details className="mt-5 border-t border-border pt-3"><summary className="cursor-pointer text-sm text-muted">Ergänzende Zielkurse</summary><div className="mt-3 space-y-2">{computed?.targets.map((target, i) => <div key={i} className="flex justify-between text-sm"><span>CRV {i + 1}:1</span><span>{target >= 0 ? formatMoney(target, currency) : "Kein positiver Zielkurs"}</span></div>)}</div></details>

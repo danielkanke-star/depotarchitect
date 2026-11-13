@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, FileUp, Link2, Plus, Upload } from "lucide-react";
 import { addDepot, connectFlex, disconnectFlex, inspectTradeFile, syncFlex, type IntakeState } from "@/app/(dashboard)/import/intake-actions";
 import { csvTradeTable, MAX_REPORT_BYTES, tradeCsvFields, type TradeCsvField, type TradeCsvMapping, type TradeSource } from "@/lib/trade-import";
-import { berlinDate } from "@/lib/risk-rules";
+import { berlinDate, TRADING_PROFILES } from "@/lib/risk-rules";
 import type { FlexStatus } from "@/lib/ibkr/flex-sync";
 import { Card } from "./ui";
 import { InfoTip } from "./info-tip";
@@ -40,6 +40,9 @@ export function NewDepotForm({ initialName = "" }: { initialName?: string }) {
         {["EUR", "USD", "CHF", "GBP", "CAD", "AUD", "JPY", "DKK", "SEK", "NOK", "PLN"].map(currency => <option key={currency}>{currency}</option>)}
       </select></label>
       <label>Kontotyp<select name="account_type" defaultValue="cash_account"><option value="cash_account">Bardepot</option><option value="margin_account">Margin-Depot</option><option value="portfolio_margin_account">Portfolio-Margin</option><option value="other">Sonstiges</option></select></label>
+      <label>Trading-Profil<select name="risk_profile" defaultValue="" required><option value="" disabled>Profil wählen</option>
+        {Object.keys(TRADING_PROFILES).map(name => <option key={name}>{name}</option>)}</select></label>
+      <div className="self-end text-xs text-muted sm:col-span-2">Von frühen bis späteren Risikohinweisen. Details sind in den Einstellungen sichtbar.</div>
       <div className="sm:col-span-3"><button className={primary} disabled={pending}>{pending ? "Wird angelegt …" : "Depot anlegen"}</button></div>
       <Feedback state={state} />
     </form>

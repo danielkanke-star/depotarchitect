@@ -59,31 +59,31 @@ export type Database = {
       }>;
       position_sale_revisions: Table<{ id: string; sale_id: string; user_id: string; previous_values: Json; reason: string; created_at: string }>;
       portfolios: Table<{
-        id: string; user_id: string; name: string; currency: string; net_liquidity: number | null;
+        id: string; user_id: string; name: string; currency: string; net_liquidity: number | null; net_liquidity_source: "manual" | "ibkr_flex" | null;
         cash_balance: number | null; data_as_of: string | null;
         account_type: PortfolioAccountType;
-        margin_used_pct: number | null; risk_budget_used_pct: number | null; risk_profile: string;
+        margin_used_pct: number | null; risk_budget_used_pct: number | null; risk_profile: string; risk_profile_configured: boolean;
         created_at: string; updated_at: string;
       }, {
-        id?: string; user_id: string; name?: string; currency?: string; net_liquidity?: number | null;
+        id?: string; user_id: string; name?: string; currency?: string; net_liquidity?: number | null; net_liquidity_source?: "manual" | "ibkr_flex" | null;
         cash_balance?: number | null; data_as_of?: string | null;
         account_type?: PortfolioAccountType;
-        margin_used_pct?: number | null; risk_budget_used_pct?: number | null; risk_profile?: string;
+        margin_used_pct?: number | null; risk_budget_used_pct?: number | null; risk_profile?: string; risk_profile_configured?: boolean;
         created_at?: string; updated_at?: string;
       }>;
       portfolio_categories: Table<{
         id: string; portfolio_id: string; user_id: string; name: string; sort_order: number;
-        is_active: boolean; created_at: string;
+        is_active: boolean; target_min: number | null; target_max: number | null; created_at: string;
       }, {
         id?: string; portfolio_id: string; user_id: string; name: string; sort_order?: number;
-        is_active?: boolean; created_at?: string;
+        is_active?: boolean; target_min?: number | null; target_max?: number | null; created_at?: string;
       }>;
       portfolio_settings: Table<{
-        portfolio_id: string; user_id: string; risk_model: string; risk_per_trade_pct: number;
+        portfolio_id: string; user_id: string; risk_model: string; risk_per_trade_pct: number; risk_budget_pct: number | null;
         max_margin_pct: number; max_position_pct: number; max_sector_pct: number;
         max_drawdown_pct: number; updated_at: string;
       }, {
-        portfolio_id: string; user_id: string; risk_model?: string; risk_per_trade_pct?: number;
+        portfolio_id: string; user_id: string; risk_model?: string; risk_per_trade_pct?: number; risk_budget_pct?: number | null;
         max_margin_pct?: number; max_position_pct?: number; max_sector_pct?: number;
         max_drawdown_pct?: number; updated_at?: string;
       }>;
@@ -306,8 +306,11 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      save_depot_preferences: { Args: { target_portfolio: string; base_currency: string; depot_type: string; trading_profile: string; trade_pct: number; budget_pct: number | null; margin_pct: number | null; concentration_basis_pct: number }; Returns: undefined };
+      record_depot_value: { Args: { target_portfolio: string; amount: number; observed_at: string }; Returns: boolean };
+      manage_depot_category: { Args: { target_portfolio: string; operation: string; category_id: string | null; category_name: string | null; goal_min: number | null; goal_max: number | null }; Returns: string };
       export_my_trade_sources: { Args: Record<PropertyKey, never>; Returns: Json };
-      create_named_portfolio: { Args: { depot_name: string; base_currency: string; depot_type: string }; Returns: string };
+      create_named_portfolio: { Args: { depot_name: string; base_currency: string; depot_type: string; trading_profile?: string }; Returns: string };
       import_depot_executions: { Args: { target_portfolio: string; source_kind: string; account_hash: string; entries: Json; allow_existing: boolean; preview: boolean }; Returns: Json };
       ibkr_flex_status: { Args: { target_portfolio: string }; Returns: Json };
       ibkr_flex_disconnect: { Args: { target_portfolio: string }; Returns: undefined };

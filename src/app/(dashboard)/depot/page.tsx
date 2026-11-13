@@ -23,11 +23,11 @@ type Params = { q?: string; category?: string; view?: string; edit?: string; add
 
 export default async function DepotPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
-  const { portfolio, categories, positions, fxRates, priceObservations, capitalMovements, sales, journalAvailable, journalReferences } = await getPortfolioData();
+  const { portfolio, settings, categories, positions, fxRates, priceObservations, capitalMovements, sales, journalAvailable, journalReferences } = await getPortfolioData();
   const marketDataMappings = await getPositionMarketDataMappings(portfolio.id);
   const mappingByPositionId = new Map(marketDataMappings.map((mapping) => [mapping.position_id, mapping]));
   const activePositions = positions.filter((position) => position.status !== "closed");
-  const riskBudget = depotRiskBudget(portfolio.net_liquidity, portfolio.risk_profile);
+  const riskBudget = depotRiskBudget(portfolio.net_liquidity, settings.risk_budget_pct);
   const calculation = calculatePortfolio({
     netLiquidity: portfolio.net_liquidity,
     riskBudget,
@@ -76,7 +76,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
       <PositionForm
         portfolioId={portfolio.id}
         position={editPosition}
-        categories={categories}
+        categories={categories.filter(category => category.is_active || category.id === editPosition?.category_id)}
         accountType={portfolio.account_type}
         baseCurrency={portfolio.currency}
         currentPrice={editPosition ? pricesByPositionId.get(editPosition.id)?.price ?? null : null}
@@ -95,7 +95,7 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
       </div>
       <form className="table-toolbar">
         <div className="relative min-w-[200px] flex-1"><Search size={15} className="pointer-events-none absolute left-3 top-3 text-muted"/><input name="q" aria-label="Positionen suchen" placeholder="Ticker oder Unternehmen suchen" defaultValue={params.q??""} className="pl-9"/></div>
-        <select name="category" aria-label="Kategorie" defaultValue={params.category??""}><option value="">Alle Kategorien</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
+        <select name="category" aria-label="Kategorie" defaultValue={params.category??""}><option value="">Alle Kategorien</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}{c.is_active ? "" : " (archiviert)"}</option>)}</select>
         <select name="view" aria-label="Positionsstatus" defaultValue={view}><option value="open">Offene Positionen</option><option value="closed">Geschlossene Positionen</option><option value="all">Alle Positionen</option></select>
         <select name="sort" aria-label="Positionen sortieren" defaultValue={params.sort??"source"}><option value="source">Meine Reihenfolge</option><option value="risk">Höchstes Risiko</option><option value="stop-age">Älteste Stopps</option><option value="name">Ticker A–Z</option></select>
         <button className="toolbar-button">Anwenden</button>
@@ -112,13 +112,13 @@ export default async function DepotPage({ searchParams }: { searchParams: Promis
                 <td className="number"><span className="font-medium">{(closed?Number(position.quantity):remainingQuantity(Number(position.quantity),position.sold_quantity)).toLocaleString("de-DE",{maximumFractionDigits:6})}</span>{position.instrument_type==="option"&&<div className="secondary">Kontrakt · ×{position.multiplier}</div>}{partial&&<div className="secondary">von {Number(position.quantity).toLocaleString("de-DE")}</div>}</td>
                 <td className="number">{formatInstrumentPrice(Number(position.entry_price),position.instrument_currency)}<div className="secondary">{position.entry_date?formatDate(position.entry_date):"Datum offen"}</div></td>
                 <td className="number">{closed||legacyCash||!resolvedPrice?"—":<><span className="font-medium">{formatInstrumentPrice(resolvedPrice.price,resolvedPrice.currency)}</span>{["google_sheets","custom_csv"].includes(resolvedPrice.sourceType)&&<div className="secondary">Tabellenreferenz</div>}</>}</td>
-                <td className="depot-column-risk risk-cell">{closed||legacyCash?"—":<PositionRiskCell position={position} result={result} baseCurrency={portfolio.currency} profile={portfolio.risk_profile}/>}</td>
+                <td className="depot-column-risk risk-cell">{closed||legacyCash?"—":<PositionRiskCell position={position} result={result} baseCurrency={portfolio.currency} profile={portfolio.risk_profile_configured ? portfolio.risk_profile : ""}/>}</td>
                 <td className="number">{closed||legacyCash?"—":<><SimpleMetric metric={result?.positionValueInstrument} format={v=>formatInstrumentMoney(v,position.instrument_currency)} missing="Kurs offen"/>{position.instrument_currency!==portfolio.currency&&<div className="secondary depot-column-base-market-value"><SimpleMetric metric={result?.positionValueBase} format={v=>money.format(v)} missing="Umrechnung offen"/></div>}</>}</td>
                 <td className="number depot-column-margin">{!isMarginAccount(portfolio.account_type)||closed||legacyCash?"—":<SimpleMetric metric={result?.marginRequirement} format={v=>money.format(v)} missing="Margin offen"/>}</td>
                 <td className="depot-column-price-details">{closed||legacyCash||!resolvedPrice?"—":<PriceDetails price={resolvedPrice} exchange={mappingByPositionId.get(position.id)?.exchange??null} micCode={mappingByPositionId.get(position.id)?.mic_code??null}/>}</td>
                 <td><InfoTip menu label={"Aktionen für "+position.ticker}>{!legacyCash&&!closed&&<form action={refreshPositionPrice}><input type="hidden" name="id" value={position.id}/><button>Kurs aktualisieren</button></form>}{!legacyCash&&<Link href={"/depot?edit="+position.id}>Position bearbeiten</Link>}{Number(position.sold_quantity??0)===0&&<form action={deletePosition}><input type="hidden" name="id" value={position.id}/><button className="text-red-300">Position löschen</button></form>}</InfoTip></td>
               </>}
-              details={legacyCash?null:<PositionJournalDetails bare position={position} result={result} sales={sales} baseCurrency={portfolio.currency} profile={portfolio.risk_profile} available={journalAvailable} references={journalReferences}/>}
+              details={legacyCash?null:<PositionJournalDetails bare position={position} result={result} sales={sales} baseCurrency={portfolio.currency} profile={portfolio.risk_profile_configured ? portfolio.risk_profile : ""} available={journalAvailable} references={journalReferences}/>}
             />;
           })}</tbody></table>
       </div></DepotViewPreferences>}

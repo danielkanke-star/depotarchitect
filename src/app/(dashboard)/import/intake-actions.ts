@@ -12,7 +12,7 @@ import { parseFlexReport } from "@/lib/ibkr/flex-report";
 import { fetchFlexReport, validFlexCredentials } from "@/lib/ibkr/flex-client";
 import { brokerAccountHash, flexConfiguration, runFlexSync, sealFlex, type ImportOutcome } from "@/lib/ibkr/flex-sync";
 import { completeTradeConversions } from "@/lib/trade-conversions";
-import { berlinDate } from "@/lib/risk-rules";
+import { berlinDate, normalizeTradingProfile } from "@/lib/risk-rules";
 import { parseDate } from "@/lib/csv-import";
 import type { Json } from "@/lib/database.types";
 
@@ -45,8 +45,10 @@ export async function switchDepot(form: FormData) {
 
 export async function addDepot(_previous: IntakeState, form: FormData): Promise<IntakeState> {
   const { supabase } = await requireUser();
+  const profile = normalizeTradingProfile(value(form, "risk_profile"));
+  if (!profile) return { error: true, message: "Bitte ein Trading-Profil wählen." };
   const { data, error } = await supabase.rpc("create_named_portfolio", {
-    depot_name: value(form, "name"), base_currency: value(form, "currency"), depot_type: value(form, "account_type"),
+    depot_name: value(form, "name"), base_currency: value(form, "currency"), depot_type: value(form, "account_type"), trading_profile: profile,
   });
   if (error || !data) return { error: true, message: error?.code === "23505" ? "Dieser Depotname ist bereits vergeben." : "Depotname, Währung und Kontotyp prüfen." };
   await setActiveDepot(data);

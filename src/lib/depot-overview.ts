@@ -3,7 +3,7 @@ import type { Portfolio, PortfolioCategory, PortfolioFxRate, PortfolioSettings, 
 import { calculatePortfolio } from "./calculations/portfolio-calculations";
 import { positionToCalculationInput } from "./calculations/position-adapter";
 import { instrumentKey, calculateJournal } from "./journal";
-import { categoryTarget, concentrationTone, depotRiskBudget, riskConcentrationTone } from "./risk-rules";
+import { concentrationTone, depotRiskBudget, riskConcentrationTone } from "./risk-rules";
 import { resolvePositionPrice } from "./price-resolution";
 import { latestUsableFxRate } from "./market-data";
 import type { JournalSourceReference } from "./journal-source-reference";
@@ -13,8 +13,9 @@ export type OverviewData = { portfolio: Portfolio; settings: PortfolioSettings; 
 export function buildOverview(data: OverviewData, now = new Date()) {
   const { portfolio, positions, categories, fxRates, priceObservations, sales } = data;
   const active = positions.filter(p => p.status !== "closed" && p.instrument_type !== "cash");
-  const budget = depotRiskBudget(portfolio.net_liquidity, portfolio.risk_profile);
+  const budget = depotRiskBudget(portfolio.net_liquidity, data.settings.risk_budget_pct);
   const inputs=active.map(p => positionToCalculationInput(p, portfolio, categories, fxRates, budget, priceObservations));
+  const profile = portfolio.risk_profile_configured ? portfolio.risk_profile : "";
   const calculation = calculatePortfolio({ netLiquidity: portfolio.net_liquidity, riskBudget: budget,
     positions: inputs });
   const byId = new Map(calculation.positions.map(p => [p.id, p]));
@@ -39,13 +40,21 @@ export function buildOverview(data: OverviewData, now = new Date()) {
     const share = calculation.riskIsComplete && risk !== null && totalRisk !== null ? totalRisk === 0 ? 0 : risk / totalRisk : null;
     const netLiqShare = value !== null && portfolio.net_liquidity && portfolio.net_liquidity > 0 ? value / portfolio.net_liquidity : null;
     return { key, ticker: ps[0].ticker, count: ps.length, ids: ps.map(p => p.id), value, risk, share, netLiqShare,
-      concentration: concentrationTone(netLiqShare, portfolio.risk_profile, data.settings.max_position_pct / 100), riskConcentration: riskConcentrationTone(share, grouped.size, portfolio.risk_profile) };
+      concentration: concentrationTone(netLiqShare, profile, data.settings.max_position_pct / 100), riskConcentration: riskConcentrationTone(share, grouped.size, profile) };
   });
-  const displayCategories = active.some(p=>!p.category_id) ? [...categories,{ id:"unassigned",name:"Nicht zugeordnet",portfolio_id:portfolio.id,user_id:portfolio.user_id,sort_order:999,is_active:true,created_at:portfolio.created_at }] : categories;
-  const categoryOverview = displayCategories.map(c => {
-    const own = active.filter(p => c.id === "unassigned" ? !p.category_id : p.category_id === c.id);
-    return { ...c, count: new Set(own.map(instrumentKey)).size, rows: own.length, value: sum(own.map(p => byId.get(p.id)?.positionValueBase.value)),
-      risk: sum(own.map(p => byId.get(p.id)?.stopRisk.value)), target: categoryTarget(c.name) };
+  const usedCategories = new Set(active.map(position => position.category_id));
+  const displayCategories = categories.filter(category => category.is_active || usedCategories.has(category.id));
+  if (usedCategories.has(null)) displayCategories.push({
+    id: "unassigned", name: "Nicht zugeordnet", portfolio_id: portfolio.id, user_id: portfolio.user_id,
+    sort_order: 999, is_active: true, created_at: portfolio.created_at, target_min: null, target_max: null,
   });
-  return { budget, active, calculation, byId, instruments, categoryOverview, stalePrices, staleFx, marginLimit: data.settings.max_margin_pct / 100, journal: calculateJournal(positions, sales, now, data.journalReferences) };
+  const categoryOverview = displayCategories.map(category => {
+    const own = active.filter(position => category.id === "unassigned" ? !position.category_id : position.category_id === category.id);
+    const target = category.is_active && category.target_min !== null && category.target_max !== null
+      ? { min: category.target_min, max: category.target_max } : null;
+    return { ...category, count: new Set(own.map(instrumentKey)).size, rows: own.length,
+      value: sum(own.map(position => byId.get(position.id)?.positionValueBase.value)),
+      risk: sum(own.map(position => byId.get(position.id)?.stopRisk.value)), target };
+  });
+  return { budget, budgetPct: data.settings.risk_budget_pct, active, calculation, byId, instruments, categoryOverview, stalePrices, staleFx, marginLimit: data.settings.max_margin_pct / 100, journal: calculateJournal(positions, sales, now, data.journalReferences) };
 }

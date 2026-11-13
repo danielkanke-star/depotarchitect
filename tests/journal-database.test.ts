@@ -8,6 +8,7 @@ import { beforeAll, beforeEach, afterEach, afterAll, describe, expect, it } from
 let db: PGlite;
 const user = "10000000-0000-0000-0000-000000000001", other = "10000000-0000-0000-0000-000000000002";
 const portfolio = "20000000-0000-0000-0000-000000000001", secondPortfolio = "20000000-0000-0000-0000-000000000002";
+const legacyUser = "10000000-0000-0000-0000-000000000013", legacyPortfolio = "20000000-0000-0000-0000-000000000013";
 const position = "30000000-0000-0000-0000-000000000001", request = "40000000-0000-0000-0000-000000000001";
 const qty = async () => (await db.query<{sold_quantity:string;status:string}>("select sold_quantity,status from public.positions where id=$1",[position])).rows[0];
 async function seed() {
@@ -28,7 +29,17 @@ beforeAll(async () => {
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb) $$;
     grant usage on schema auth to anon,authenticated,service_role; grant execute on function auth.uid(),auth.jwt() to anon,authenticated,service_role;`);
-  for (const f of readdirSync("supabase/migrations").filter(f=>f.endsWith(".sql")).sort()) await db.exec(readFileSync(`supabase/migrations/${f}`,"utf8"));
+  for (const f of readdirSync("supabase/migrations").filter(f=>f.endsWith(".sql")).sort()) {
+    if (f.endsWith("_trading_profile_and_categories.sql")) {
+      await db.exec(`update public.app_runtime_settings set registration_mode='open';
+        insert into auth.users(id,email) values('${legacyUser}','synthetic-legacy@example.invalid');
+        insert into public.portfolios(id,user_id,name,currency,risk_profile,net_liquidity)
+          values('${legacyPortfolio}','${legacyUser}','Legacy','EUR','Aggro 1,2',100000);
+        insert into public.portfolio_settings(portfolio_id,user_id) values('${legacyPortfolio}','${legacyUser}');
+        insert into public.portfolio_categories(portfolio_id,user_id,name) values('${legacyPortfolio}','${legacyUser}','Hedge');`);
+    }
+    await db.exec(readFileSync(`supabase/migrations/${f}`,"utf8"));
+  }
   await db.exec(`update public.app_runtime_settings set registration_mode='open'; insert into auth.users(id,email) values('${user}','synthetic-a@example.invalid'),('${other}','synthetic-b@example.invalid');
     insert into public.portfolios(id,user_id,name,currency) values('${portfolio}','${user}','Test','EUR'),('${secondPortfolio}','${other}','Other','EUR');`);
 },60000);
@@ -264,5 +275,55 @@ describe("depot intake ledger", () => {
     const { result } = (await db.query<{result: { closed: number; error: null }}>("select public.ibkr_flex_finish($1,$2,$3,$4::jsonb,'{}',null) result",
       [worker, job.lease, hash, JSON.stringify([{ ...closing, instrument: "1234", ticker: "EX" }])])).rows[0];
     expect(result).toMatchObject({ closed: 1, error: null });
+  });
+});
+
+describe("editable depot preferences and categories", () => {
+  it("preserves the existing effective budget and category goals during migration", async () => {
+    await db.exec(`select set_config('request.jwt.claim.sub','${legacyUser}',true)`);
+    const { rows } = await db.query("select p.risk_profile,p.risk_profile_configured,s.risk_budget_pct,c.target_min,c.target_max from portfolios p join portfolio_settings s on s.portfolio_id=p.id join portfolio_categories c on c.portfolio_id=p.id where p.id=$1", [legacyPortfolio]);
+    expect(rows[0]).toEqual({ risk_profile: "Aggro", risk_profile_configured: true, risk_budget_pct: "39.60", target_min: 1, target_max: 2 });
+  });
+
+  it("creates new depots with an explicit profile and their own optional stop budget", async () => {
+    const { id } = (await db.query<{ id: string }>(
+      "select create_named_portfolio('Test Cash','EUR','cash_account','Aggro') id",
+    )).rows[0];
+    await db.query("select save_depot_preferences($1,'EUR','cash_account','Konservativ',0.4,8,null,12)", [id]);
+    const { rows } = await db.query("select p.risk_profile,p.risk_profile_configured,s.risk_budget_pct,s.risk_per_trade_pct,s.max_margin_pct from portfolios p join portfolio_settings s on s.portfolio_id=p.id where p.id=$1", [id]);
+    expect(rows[0]).toEqual({ risk_profile: "Konservativ", risk_profile_configured: true, risk_budget_pct: "8.00", risk_per_trade_pct: "0.400", max_margin_pct: "50.00" });
+    await rejected("select save_depot_preferences($1,'EUR','cash_account','Aggro',0.4,101,null,12)", [id]);
+    await rejected("select save_depot_preferences($1,'EUR','cash_account','Aggro',0.4,8,null,12)", [secondPortfolio]);
+  });
+
+  it("keeps a dated broker value when changing settings and rejects older manual data", async () => {
+    await db.query("insert into portfolio_settings(portfolio_id,user_id) values($1,$2)", [portfolio, user]);
+    await db.query("update portfolios set net_liquidity=100000,data_as_of='2026-10-10 18:00:00Z',net_liquidity_source='ibkr_flex' where id=$1", [portfolio]);
+    await db.query("select save_depot_preferences($1,'EUR','margin_account','Aggro',1.2,39.6,50,15)", [portfolio]);
+    expect((await db.query("select net_liquidity,net_liquidity_source from portfolios where id=$1", [portfolio])).rows[0])
+      .toEqual({ net_liquidity: "100000.00", net_liquidity_source: "ibkr_flex" });
+    expect((await db.query("select record_depot_value($1,95000,'2026-10-10 18:00:00Z') saved", [portfolio])).rows[0]).toEqual({ saved: false });
+    expect((await db.query("select record_depot_value($1,102000,'2026-10-11 18:00:00Z') saved", [portfolio])).rows[0]).toEqual({ saved: true });
+    await rejected("select save_depot_preferences($1,'USD','margin_account','Aggro',1.2,39.6,50,15)", [portfolio]);
+  });
+
+  it("archives a used category without altering the sale, restores it, and deletes unused categories", async () => {
+    await db.query("select manage_depot_category($1,'create',null,'Trading',4,6)", [portfolio]);
+    await rejected("select manage_depot_category($1,'create',null,'trading',null,null)", [portfolio]);
+    await rejected("select manage_depot_category($1,'create',null,'Trading',null,null)", [secondPortfolio]);
+    const { id } = (await db.query<{id: string}>("select id from portfolio_categories where portfolio_id=$1 and name='Trading'", [portfolio])).rows[0];
+    await seed();
+    await db.query("update positions set category_id=$1 where id=$2", [id, position]);
+    await record();
+    await rejected("delete from portfolio_categories where id=$1", [id]);
+    await db.query("select manage_depot_category($1,'edit',$2,'Swingtrades',5,6)", [portfolio, id]);
+    expect((await db.query("select manage_depot_category($1,'remove',$2,null,null,null) result", [portfolio, id])).rows[0]).toEqual({ result: "archived" });
+    expect((await db.query("select p.category_id,c.is_active,c.name,c.target_min,s.quantity from positions p join portfolio_categories c on c.id=p.category_id join position_sales s on s.position_id=p.id where p.id=$1", [position])).rows[0])
+      .toEqual({ category_id: id, is_active: false, name: "Swingtrades", target_min: 5, quantity: "2" });
+    await rejected("insert into positions(portfolio_id,user_id,category_id,ticker,quantity,entry_price) values($1,$2,$3,'NEW',1,5)", [portfolio, user, id]);
+    await db.query("select manage_depot_category($1,'restore',$2,null,null,null)", [portfolio, id]);
+    await db.query("insert into positions(portfolio_id,user_id,category_id,ticker,quantity,entry_price) values($1,$2,$3,'NEW',1,5)", [portfolio, user, id]);
+    await db.query("select manage_depot_category($1,'create',null,'Unused',null,null)", [portfolio]);
+    expect((await db.query("select manage_depot_category($1,'remove',id,null,null,null) result from portfolio_categories where portfolio_id=$1 and name='Unused'", [portfolio])).rows[0]).toEqual({ result: "deleted" });
   });
 });
