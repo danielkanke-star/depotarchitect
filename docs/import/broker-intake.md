@@ -21,6 +21,12 @@ Im IBKR-Portal Flex Web Service aktivieren und für genau ein Brokerkonto eine *
 
 Der Abruf läuft serverseitig einmal täglich auf dem bestehenden Vercel-Tarif und lässt sich in der App manuell anstoßen. Das Token läuft nach der im Brokerportal gewählten Dauer ab. Der Benutzer kann es erneuern oder die Verbindung trennen. Estably- bzw. IBKR-Unterkonten müssen die Flex-Funktion im jeweiligen Portal anbieten. Der vorhandene lokale Kursdienst ist für Kursabfragen weiterhin separat verfügbar. Die Web API für Drittanbieter erfordert IBKR-Freigabe. Flex bietet keinen Zugriff auf Handelsaufträge und keine Echtzeitversorgung.
 
+## Kontowerte im Cockpit
+
+Für einen reinen Kontowerte-Abruf reichen **Account Information**, **Net Asset Value Summary in Base** und **Cash Report**. Die gleichen Felder können als IBKR-Flex-XML unter **Kontowerte importieren** geladen werden. Die gesonderte Importansicht lässt enthaltene Handelsbuchungen aus. Cash Report liefert den gemeldeten Cashsaldo und gegebenenfalls den bereits abgerechneten Cashsaldo. Währungen werden einzeln gezeigt, wenn der Bericht keine Gesamtsumme ausweist.
+
+Der Auszahlungsbetrag ohne Kredit kommt aus der Auszahlungsansicht des Brokers. Er kann mit Währung und Stand über die Kontowerte-CSV erfasst werden. Cashsaldo, abgerechnetes Cash und freier Marginpuffer sind keine Ersatzwerte. Ein früherer Auszahlungsbetrag bleibt mit seinem ursprünglichen Datum sichtbar.
+
 Konfiguration: `IBKR_FLEX_SECRET` als sensible Produktionsvariable in Vercel mit 32 zufälligen Bytes in Hexdarstellung, zusätzlich das vorhandene `CRON_SECRET`. Der AES-256-GCM-Schlüssel ist vom internen Abrufschlüssel getrennt abgeleitet. Pro Depot ist der verschlüsselte Inhalt an die Depot-ID gebunden. Die Scheduler-RPCs benötigen den internen Schlüssel und einen zeitlich begrenzten Job. Der Schlüssel wird serverseitig gesichert. Ein Verlust oder eine Änderung erfordert eine erneute Einrichtung der Verbindungen.
 
 ## Währungsumrechnung

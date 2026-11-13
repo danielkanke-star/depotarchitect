@@ -37,6 +37,10 @@ type Table<Row, Insert = Partial<Row>, Update = Partial<Insert>> = {
 export type Database = {
   public: {
     Tables: {
+      depot_account_balances: Table<{
+        portfolio_id: string; user_id: string; kind: "cash_total" | "cash_currency" | "withdrawable";
+        currency: string; amount: number; settled: number | null; observed_at: string; source: "ibkr_flex" | "broker_file";
+      }>;
       journal_source_references: Table<{
         id: string; user_id: string; portfolio_id: string; position_id: string | null;
         source_key: string; source_values: Json; created_at: string;
@@ -59,13 +63,13 @@ export type Database = {
       }>;
       position_sale_revisions: Table<{ id: string; sale_id: string; user_id: string; previous_values: Json; reason: string; created_at: string }>;
       portfolios: Table<{
-        id: string; user_id: string; name: string; currency: string; net_liquidity: number | null; net_liquidity_source: "manual" | "ibkr_flex" | null;
+        id: string; user_id: string; name: string; currency: string; net_liquidity: number | null; net_liquidity_source: "manual" | "ibkr_flex" | "broker_file" | null;
         cash_balance: number | null; data_as_of: string | null;
         account_type: PortfolioAccountType;
         margin_used_pct: number | null; risk_budget_used_pct: number | null; risk_profile: string; risk_profile_configured: boolean;
         created_at: string; updated_at: string;
       }, {
-        id?: string; user_id: string; name?: string; currency?: string; net_liquidity?: number | null; net_liquidity_source?: "manual" | "ibkr_flex" | null;
+        id?: string; user_id: string; name?: string; currency?: string; net_liquidity?: number | null; net_liquidity_source?: "manual" | "ibkr_flex" | "broker_file" | null;
         cash_balance?: number | null; data_as_of?: string | null;
         account_type?: PortfolioAccountType;
         margin_used_pct?: number | null; risk_budget_used_pct?: number | null; risk_profile?: string; risk_profile_configured?: boolean;
@@ -306,6 +310,8 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      import_depot_account_balances: { Args: { target_portfolio: string; snapshots: Json }; Returns: number };
+      import_flex_account_values: { Args: { target_portfolio: string; report_account: string; snapshots: Json }; Returns: number };
       save_depot_preferences: { Args: { target_portfolio: string; base_currency: string; depot_type: string; trading_profile: string; trade_pct: number; budget_pct: number | null; margin_pct: number | null; concentration_basis_pct: number }; Returns: undefined };
       record_depot_value: { Args: { target_portfolio: string; amount: number; observed_at: string }; Returns: boolean };
       manage_depot_category: { Args: { target_portfolio: string; operation: string; category_id: string | null; category_name: string | null; goal_min: number | null; goal_max: number | null }; Returns: string };
@@ -455,3 +461,5 @@ export type PortfolioFxRate = Database["public"]["Tables"]["portfolio_fx_rates"]
 export type PortfolioCapitalMovement = Database["public"]["Tables"]["portfolio_capital_movements"]["Row"];
 export type PositionPriceObservation = Database["public"]["Tables"]["position_price_observations"]["Row"];
 export type PositionMarketDataMapping = Database["public"]["Tables"]["position_market_data_mappings"]["Row"];
+
+export type DepotAccountBalance = Database["public"]["Tables"]["depot_account_balances"]["Row"];

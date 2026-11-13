@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const { supabase, userId } = await requireUser();
-  const [profile, portfolios, categories, positions, priceObservations, marketDataMappings, cashBalances, capitalMovements, settings, legalAcceptances, importHistory, sales, saleRevisions, fxRates, ibkrConnections, ibkrQuotes, ibkrRequests, journalReferences, tradeSources] = await Promise.all([
+  const [profile, portfolios, categories, positions, priceObservations, marketDataMappings, cashBalances, capitalMovements, settings, legalAcceptances, importHistory, sales, saleRevisions, fxRates, ibkrConnections, ibkrQuotes, ibkrRequests, journalReferences, tradeSources, accountBalances] = await Promise.all([
     supabase.from("user_profiles").select("user_id, account_status, plan, created_at, updated_at, last_seen_at, onboarding_completed_at, scheduled_deletion_at").eq("user_id", userId).single(),
     supabase.from("portfolios").select("*").eq("user_id", userId),
     supabase.from("portfolio_categories").select("*").eq("user_id", userId),
@@ -25,6 +25,7 @@ export async function GET() {
     allRows((from,to)=>supabase.from("ibkr_quote_requests").select("id,connection_id,user_id,query,conid,state,result,created_at,expires_at").eq("user_id", userId).order("id").range(from,to)),
     allRows((from,to)=>supabase.from("journal_source_references").select("*").eq("user_id",userId).order("id").range(from,to)),
     supabase.rpc("export_my_trade_sources"),
+    allRows((from,to)=>supabase.from("depot_account_balances").select("*").eq("user_id",userId).order("portfolio_id").order("kind").order("currency").range(from,to)),
   ]);
   const queries = [profile, portfolios, categories, positions, cashBalances, capitalMovements, settings, legalAcceptances, importHistory, fxRates];
   const priceTableUnavailable = isMissingTable(priceObservations.error);
@@ -35,6 +36,7 @@ export async function GET() {
     || (saleRevisions.error && !isMissingTable(saleRevisions.error))
     || (priceObservations.error && !priceTableUnavailable)
     || (marketDataMappings.error && !mappingTableUnavailable)
+    || (accountBalances.error && !isMissingTable(accountBalances.error))
     || (tradeSources.error && tradeSources.error.code !== "PGRST202")
     || [ibkrConnections, ibkrQuotes, ibkrRequests, journalReferences, tradeSources].some(q => q.error && !isMissingTable(q.error))
   ) {
@@ -54,6 +56,7 @@ export async function GET() {
     position_price_observations: priceObservations.data ?? [],
     position_market_data_mappings: marketDataMappings.data ?? [],
     cash_balances: cashBalances.data ?? [],
+    depot_account_balances: accountBalances.data ?? [],
     capital_movements: capitalMovements.data ?? [],
     settings: settings.data ?? [],
     legal_acceptances: legalAcceptances.data ?? [],

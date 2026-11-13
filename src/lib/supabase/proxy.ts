@@ -12,7 +12,7 @@ const publicRoutes = new Set([
 
 export async function updateSession(request: NextRequest) {
   // Scheduled handlers authenticate their own requests.
-  if (["/api/availability", "/api/ibkr-flex-sync", "/handelsdatei.csv"].includes(request.nextUrl.pathname)) return NextResponse.next({ request });
+  if (["/api/availability", "/api/ibkr-flex-sync", "/handelsdatei.csv", "/kontowerte.csv"].includes(request.nextUrl.pathname)) return NextResponse.next({ request });
   if (request.nextUrl.pathname === "/vorschau") return process.env.NODE_ENV === "development"
     ? NextResponse.next({ request }) : new NextResponse(null, { status: 404 });
   const isLoginPage = request.nextUrl.pathname === "/login"

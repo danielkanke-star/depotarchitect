@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { AccountValueImport } from "@/components/account-value-import";
 import { CsvImporter } from "@/components/csv-importer";
 import { JournalImporter } from "@/components/journal-importer";
 import { PageHeader } from "@/components/ui";
@@ -19,15 +20,18 @@ export default async function ImportPage({ searchParams }: { searchParams: Promi
     supabase.rpc("ibkr_flex_status", { target_portfolio: portfolio.id }),
   ]);
   const status = connection as unknown as FlexStatus | null;
-  const step = via === "broker" || via === "datei";
+  const accountValues = via === "kontowerte";
+  const step = via === "broker" || via === "datei" || accountValues;
   return <>
-    <PageHeader title={via === "broker" ? "Brokerverbindung" : via === "datei" ? "Dateien importieren" : "Daten hinzufügen"}
+    <PageHeader title={via === "broker" ? "Brokerverbindung" : via === "datei" ? "Dateien importieren" : accountValues ? "Kontowerte importieren" : "Daten hinzufügen"}
       action={step ? <Link href="/import" className="inline-flex items-center gap-2 text-sm text-muted"><ArrowLeft size={16} aria-hidden="true" /> Alle Möglichkeiten</Link> : undefined} />
     <p className="-mt-3 mb-5 text-sm text-muted">Aktives Depot <span className="ml-1 font-medium text-foreground">{portfolio.name} · {portfolio.currency}</span></p>
     {via === "broker" ? <FlexConnectionForm key={portfolio.id} portfolio={portfolio.id} connected={status} available={Boolean(flexConfiguration())}
       hasPositions={positions.length > 0} currency={portfolio.currency} />
       : via === "datei" ? <TradeFileImport key={portfolio.id} portfolio={portfolio.id} hasPositions={positions.length > 0} />
+      : accountValues ? <AccountValueImport key={portfolio.id} portfolio={portfolio.id} />
       : <IntakeChoices connected={Boolean(status)} />}
+    {!accountValues && <Link href="/import?via=kontowerte" className="mt-4 inline-block text-sm font-medium text-accent hover:underline">Depotwert, Cash oder Auszahlungsbetrag importieren</Link>}
     <div className="mt-5"><NewDepotForm /></div>
     {via !== "broker" && <details className="mt-5 rounded-xl border border-border p-4">
       <summary className="cursor-pointer text-sm font-medium">Importhistorie und frühere Formate</summary>

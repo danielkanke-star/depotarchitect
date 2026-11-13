@@ -14,6 +14,7 @@ import { brokerAccountHash, flexConfiguration, runFlexSync, sealFlex, type Impor
 import { completeTradeConversions } from "@/lib/trade-conversions";
 import { berlinDate, normalizeTradingProfile } from "@/lib/risk-rules";
 import { parseDate } from "@/lib/csv-import";
+import { parseAccountBalanceCsv, statementDateTime, type AccountBalanceInput } from "@/lib/account-balances";
 import type { Json } from "@/lib/database.types";
 
 export type IntakeState = {
@@ -27,7 +28,7 @@ export type IntakeState = {
 const value = (form: FormData, name: string) => String(form.get(name) ?? "").trim();
 const importPages = ["/import", "/cockpit", "/depot", "/performance", "/risiko", "/einstellungen"];
 const refreshPages = () => importPages.forEach(page => revalidatePath(page));
-const ledgerMessage = (message: string) => /^(In diesem Depot|Dieses Depot|Dieses Brokerkonto|Eine bereits|Für |Buchung für |Datum, Stückzahl)/.test(message)
+const ledgerMessage = (message: string) => /^(In diesem Depot|Dieses Depot|Dieses Brokerkonto|Der Bericht gehört|Eine bereits|Für |Buchung für |Datum, Stückzahl)/.test(message)
   ? message : "Die Buchungen konnten nicht übernommen werden. Bitte Format und Depot prüfen.";
 const summaryMessage = (outcome: ImportOutcome) => `${outcome.opened} Eröffnungen · ${outcome.closed} Schließungen · ${outcome.skipped} bereits vorhanden`;
 
@@ -53,6 +54,44 @@ export async function addDepot(_previous: IntakeState, form: FormData): Promise<
   if (error || !data) return { error: true, message: error?.code === "23505" ? "Dieser Depotname ist bereits vergeben." : "Depotname, Währung und Kontotyp prüfen." };
   await setActiveDepot(data);
   redirect("/import");
+}
+
+export type AccountImportState = { message: string; error?: boolean; saved?: boolean; values?: AccountBalanceInput[] };
+
+export async function importAccountFile(_previous: AccountImportState, form: FormData): Promise<AccountImportState> {
+  const { supabase } = await requireUser();
+  const portfolio = await getOrCreatePortfolio();
+  if (value(form, "portfolio") !== portfolio.id) return { error: true, message: "Das aktive Depot hat sich geändert. Bitte den Import neu öffnen." };
+  const payload = String(form.get("file_data") ?? "");
+  if (!payload || Buffer.byteLength(payload) > MAX_REPORT_BYTES) return { error: true, message: "Bitte einen Bericht bis 3 MB auswählen." };
+  try {
+    let values: AccountBalanceInput[];
+    let account: string | null = null;
+    if (value(form, "format") === "xml") {
+      const report = parseFlexReport(payload, portfolio.currency, "balances");
+      account = brokerAccountHash("ibkr", report.account);
+      values = [...report.valuation.balances];
+      if (report.valuation.netAssetValue) {
+        const nav = report.valuation.netAssetValue;
+        values.unshift({ kind: "depot_value", currency: portfolio.currency, amount: nav.total, observedAt: statementDateTime(nav.date) });
+      }
+    } else if (value(form, "format") === "csv") {
+      values = parseAccountBalanceCsv(payload, portfolio.currency);
+    } else throw new Error("Bitte IBKR-Flex-XML oder eine CSV für Kontowerte auswählen.");
+    if (!values.length) throw new Error("Bitte einen IBKR-Bericht mit NAV Summary in Base oder Cash Report auswählen.");
+    if (value(form, "mode") !== "save") return { message: "", values };
+    const args = { target_portfolio: portfolio.id, snapshots: values as unknown as Json };
+    const result = account
+      ? await supabase.rpc("import_flex_account_values", { ...args, report_account: account })
+      : await supabase.rpc("import_depot_account_balances", args);
+    if (result.error) return { error: true, message: /^Der Bericht gehört|^Dieses Depot|^Dieses Brokerkonto|^Kontowert/.test(result.error.message)
+      ? result.error.message : "Die Kontowerte konnten nicht gespeichert werden." };
+    refreshPages();
+    return { saved: true, message: result.data ? `${result.data} Kontowerte übernommen.` : "Für diese Werte ist bereits derselbe oder ein neuerer Stand gespeichert." };
+  } catch (error) {
+    unstable_rethrow(error);
+    return { error: true, message: error instanceof Error ? error.message : "Die Datei konnte nicht gelesen werden." };
+  }
 }
 
 export async function inspectTradeFile(_previous: IntakeState, form: FormData): Promise<IntakeState> {
@@ -122,6 +161,7 @@ export async function connectFlex(_previous: IntakeState, form: FormData): Promi
     const label = report.account.slice(-4);
     const revision = createHash("sha256").update(JSON.stringify([accountHash, report.trades, report.valuation])).digest("hex");
     const entries = await completeTradeConversions(report.trades, portfolio.currency);
+    const onlyAccountValues = entries.length === 0 && (report.valuation.netAssetValue || report.valuation.balances.length > 0);
     const allowExisting = value(form, "allow_existing") === "yes";
     if (value(form, "mode") === "save" && value(form, "revision") === revision) {
       const { data, error } = await supabase.rpc("ibkr_flex_connect", {
@@ -132,7 +172,11 @@ export async function connectFlex(_previous: IntakeState, form: FormData): Promi
       });
       if (error) return { error: true, message: ledgerMessage(error.message) };
       refreshPages();
-      return { saved: true, message: `IBKR verbunden. ${summaryMessage(data as unknown as ImportOutcome)}` };
+      return { saved: true, message: onlyAccountValues ? "IBKR verbunden. Kontowerte wurden abgeglichen." : `IBKR verbunden. ${summaryMessage(data as unknown as ImportOutcome)}` };
+    }
+    if (onlyAccountValues) {
+      return { revision, message: "Der Bericht enthält Kontowerte ohne Handelsbuchungen.",
+        summary: makeSummary({ opened: 0, closed: 0, skipped: 0 }, entries, portfolio.currency, label) };
     }
     const { data, error } = await supabase.rpc("import_depot_executions", {
       target_portfolio: portfolio.id, source_kind: "ibkr", account_hash: accountHash,
