@@ -1,5 +1,6 @@
 import { SaxesParser } from "saxes";
 import Decimal from "decimal.js";
+import { statementDateTime, type AccountBalanceInput } from "@/lib/account-balances";
 import { exactTradeNumber, isinPattern, MAX_REPORT_BYTES, MAX_TRADES, validateTrade, type Trade } from "@/lib/trade-import";
 
 export class FlexReportError extends Error {
@@ -75,13 +76,14 @@ function execution(row: Fields, baseCurrency: string, reportCurrency: string): T
   });
 }
 
-export function parseFlexReport(xml: string, baseCurrency: string) {
+export function parseFlexReport(xml: string, baseCurrency: string, mode: "full" | "balances" = "full") {
   const trades: Trade[] = [];
   let account = "";
   let accountCurrency = "";
   let foundTrades = false;
   let nonExecutionRows = 0;
   let reportThrough = "";
+  const cashRows: Fields[] = [];
   let netAssetValue: { date: string; total: string } | undefined;
   const marks = new Map<string, { conid: string; currency: string; date: string; price: string }>();
   let root = "";
@@ -105,6 +107,12 @@ export function parseFlexReport(xml: string, baseCurrency: string) {
         netAssetValue = { date, total };
       }
     }
+    if (tag === "CashReportCurrency" && path.at(-1) === "CashReport" &&
+      !row.model && (!row.accountId || row.accountId === account) && row.endingCash) {
+      if (cashRows.length >= 1000) throw new FlexReportError("Der Cash Report enthält zu viele Zeilen.");
+      cashRows.push(row);
+    }
+    if (mode === "balances") return;
     if (tag === "OpenPosition" && path.at(-1) === "OpenPositions" && row.levelOfDetail === "SUMMARY" && !row.model &&
         (!row.accountId || row.accountId === account) && /^\d+$/.test(row.conid ?? "") && /^[A-Z]{3}$/.test(row.currency ?? "") && row.markPrice) {
       const date = compactDate(row.reportDate) || reportThrough;
@@ -123,7 +131,32 @@ export function parseFlexReport(xml: string, baseCurrency: string) {
     catch (error) { throw new FlexReportError(`Ausführung ${trades.length + 1}. ${error instanceof Error ? error.message : "Bericht prüfen."}`); }
   });
   if (root !== "FlexQueryResponse") flexResponse(xml);
-  if (!account || !foundTrades) throw new FlexReportError("Im Flex-Bericht fehlt der Bereich „Trades“. Bitte eine Activity Flex Query mit Ausführungen verwenden.");
+  const balances = cashReportBalances(cashRows, accountCurrency, reportThrough);
+  if (!account || (!foundTrades && !netAssetValue && !balances.length)) {
+    throw new FlexReportError("Im Bericht fehlen verwendbare Handels- oder Kontowerte.");
+  }
   if (nonExecutionRows && !trades.length) throw new FlexReportError("Der Bericht enthält Zusammenfassungen. Bitte den Detailgrad Ausführungen auswählen.");
-  return { account, trades, valuation: { netAssetValue, marks: [...marks.values()].slice(0, MAX_TRADES) } };
+  return { account, trades, valuation: { netAssetValue, balances, marks: [...marks.values()].slice(0, MAX_TRADES) } };
+}
+
+function cashReportBalances(rows: Fields[], baseCurrency: string, reportThrough: string) {
+  const report = new Map<string, AccountBalanceInput>();
+  for (const row of rows) {
+    const total = row.currency === "BASE_SUMMARY";
+    const currency = total ? baseCurrency : row.currency;
+    const date = compactDate(row.reportDate) || compactDate(row.toDate) || reportThrough;
+    if (!date || !/^[A-Z]{3}$/.test(currency ?? "")) continue;
+    const kind = total ? "cash_total" : "cash_currency";
+    const observedAt = statementDateTime(date);
+    const amount = exactTradeNumber(row.endingCash, "decimal", 8);
+    const settled = row.endingSettledCash ? exactTradeNumber(row.endingSettledCash, "decimal", 8) : undefined;
+    const key = `${kind}/${currency}`;
+    const existing = report.get(key);
+    if (existing && existing.observedAt === observedAt && (existing.amount !== amount || existing.settled !== settled)) {
+      throw new FlexReportError("Der Cash Report enthält widersprüchliche Beträge für denselben Stand.");
+    }
+    if (!existing || existing.observedAt < observedAt) report.set(key, { kind, currency, amount, settled, observedAt });
+  }
+  const newestDetail = [...report.values()].filter(row => row.kind === "cash_currency").map(row => row.observedAt).sort().at(-1);
+  return [...report.values()].filter(row => row.kind === "cash_total" || row.observedAt === newestDetail);
 }

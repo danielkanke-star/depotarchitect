@@ -191,7 +191,7 @@ export function FlexConnectionForm({ portfolio, connected, available, hasPositio
   return <Card>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="text-lg font-semibold">Interactive Brokers</h2><div className="mt-1 flex items-center gap-2 text-sm text-muted">
-        Täglicher Berichtsabruf <InfoTip label="Was übernimmt die Verbindung?">Flex liefert gemeldete Käufe, Verkäufe und auf Wunsch den Depotwert sowie Schlusskurse. Offene Stop-Orders und Echtzeitkurse kommen aus anderen Datenquellen.</InfoTip>
+        Täglicher Berichtsabruf <InfoTip label="Was übernimmt die Verbindung?">Flex liefert je nach Bericht gemeldete Käufe, Verkäufe, den Depotwert, Cashbestände und Schlusskurse. Der auszahlbare Betrag steht separat beim Broker.</InfoTip>
       </div></div>
       {connected && <span className={`rounded-full border px-3 py-1 text-xs ${invalid || attention ? "border-amber-400/40 text-amber-200" : "border-accent/35 text-accent"}`}>{invalid ? "Token erneuern" : attention || "Verbunden"}</span>}
     </div>
@@ -210,8 +210,9 @@ export function FlexConnectionForm({ portfolio, connected, available, hasPositio
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-xs leading-5 text-muted">
           <li>Im <a href="https://www.interactivebrokers.com/sso/Login" target="_blank" rel="noreferrer" className="text-accent">IBKR-Client-Portal</a> unter Berichte → Flex-Abfragen den Flex Web Service aktivieren. Token und Ablaufdatum übernehmen.</li>
           <li>Eine Activity Flex Query für genau ein Konto erstellen. Format XML, Bereich Trades, Detailgrad Ausführungen. Für den laufenden Abruf einen rollierenden Zeitraum wählen, etwa die letzten sieben Tage.</li>
-          <li>Alle Felder unter Trades aktivieren, besonders Trade ID, Date/Time, Open/Close Indicator, Conid, Currency und FX Rate to Base. Für den Broker-Wechselkurs zusätzlich Account Information auswählen. Depotwährung hier ist {currency}. Für Depotwert und Schlusskurse zusätzlich NAV Summary in Base und Open Positions mit Detailgrad Summary wählen.</li>
+          <li>Alle Felder unter Trades aktivieren, besonders Trade ID, Date/Time, Open/Close Indicator, Conid, Currency und FX Rate to Base. Für die Depotwährung ({currency}) und den Broker-Wechselkurs „Account Information“ wählen. Für Depotwert, Cash und Schlusskurse „NAV Summary in Base“, „Cash Report“ und „Open Positions“ mit Detailgrad „Summary“ wählen.</li>
           <li>Ältere Käufe zuerst als Flex-XML importieren. So können spätere Verkäufe den richtigen Einstiegen zugeordnet werden.</li>
+          <li>Für den Abruf reiner Kontowerte genügen „Account Information“, „NAV Summary in Base“ und „Cash Report“. Lass „Trades“ in dieser Abfrage weg.</li>
         </ol>
       </details>
       <form onSubmit={submit} className="mt-4">

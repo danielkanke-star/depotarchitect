@@ -163,6 +163,55 @@ describe("journal SQL guarantees", () => {
   });
 });
 
+describe("broker balance SQL guarantees", () => {
+  const older = "2026-01-10T00:00:00Z";
+  const latest = "2026-01-12T00:00:00Z";
+  const hash = "a".repeat(64);
+  const cash = { kind: "cash_total", currency: "EUR", amount: "-10.25", settled: "30", observedAt: latest };
+  const payout = { kind: "withdrawable", currency: "EUR", amount: "0", observedAt: latest };
+  const nav = { kind: "depot_value", currency: "EUR", amount: "-15.5", observedAt: latest };
+
+  it("preserves independent account balances, keeps the newest and enforces owner scope", async () => {
+    const upload = (rows: unknown[]) => db.query<{ count: number }>(
+      "select public.import_depot_account_balances($1,$2::jsonb) as count", [portfolio, JSON.stringify(rows)],
+    );
+    await db.query("select public.import_flex_account_values($1,$2,$3::jsonb)", [portfolio, hash, JSON.stringify([cash, nav])]);
+    expect((await db.query("select net_liquidity,net_liquidity_source from portfolios where id=$1", [portfolio])).rows).toEqual([
+      { net_liquidity: "-15.50", net_liquidity_source: "ibkr_flex" },
+    ]);
+    expect((await db.query("select kind,amount,settled,source from depot_account_balances")).rows).toEqual([
+      { kind: "cash_total", amount: "-10.25000000", settled: "30.00000000", source: "ibkr_flex" },
+    ]);
+    expect((await upload([payout])).rows[0].count).toBe(1);
+    expect((await upload([payout, { ...cash, amount: "99", observedAt: older }])).rows[0].count).toBe(0);
+    await rejected("select public.import_flex_account_values($1,$2,$3::jsonb)", [portfolio, hash, JSON.stringify([payout])]);
+    await rejected("select public.import_flex_account_values($1,$2,$3::jsonb)", [portfolio, "b".repeat(64), JSON.stringify([cash])]);
+    await rejected("update depot_account_balances set amount=99");
+    await db.query("select set_config('request.jwt.claim.sub',$1,true)", [other]);
+    expect((await db.query("select * from depot_account_balances")).rows).toHaveLength(0);
+    await rejected("select public.import_depot_account_balances($1,$2::jsonb)", [portfolio, JSON.stringify([payout])]);
+  });
+
+  it("can connect a balance-only Flex report without initializing the existing trade ledger", async () => {
+    await seed();
+    const key = "broker-balance-test-worker";
+    const workerHash = createHash("sha256").update(key).digest("hex");
+    await db.query(`select public.ibkr_flex_connect($1,$2,'9999',$3,$4,current_date+30,'[]'::jsonb,$5::jsonb,false)`,
+      [portfolio, hash, "X".repeat(60), workerHash, JSON.stringify({ balances: [cash], marks: [] })]);
+    await rejected("select public.import_depot_executions($1,'ibkr',$2,'[]'::jsonb,false,false)", [portfolio, hash]);
+    await db.exec("reset role; select set_config('request.jwt.claim.sub','',true); update app_private.ibkr_flex_connections set next_run=now()-interval '1 hour'; set local role anon");
+    const { lease } = (await db.query<{ job: { lease: string } }>("select public.ibkr_flex_claim($1,null) as job", [key])).rows[0].job;
+    const finish = await db.query<{ result: { error: string | null } }>(
+      "select public.ibkr_flex_finish($1,$2,$3,'[]'::jsonb,$4::jsonb,null) as result",
+      [key, lease, hash, JSON.stringify({ balances: [{ ...cash, amount: "99", observedAt: "2026-01-13T00:00:00Z" }] })],
+    );
+    expect(finish.rows[0].result.error).toBeNull();
+    await db.exec(`set local role authenticated; select set_config('request.jwt.claim.sub','${user}',true)`);
+    expect((await db.query("select amount from depot_account_balances")).rows).toEqual([{ amount: "99.00000000" }]);
+    expect((await db.query("select id from positions")).rows).toEqual([{ id: position }]);
+  });
+});
+
 describe("IBKR paired-device SQL boundaries", () => {
   const code = "c".repeat(43), token = "t".repeat(43);
   const codeHash = createHash("sha256").update(code).digest("hex");

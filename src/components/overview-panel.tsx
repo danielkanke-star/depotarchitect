@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { isMarginAccount } from "@/lib/portfolio-entry";
 import { ArrowUpRight, Clock3 } from "lucide-react";
 import { Card, MetricCard } from "./ui";
@@ -8,7 +7,7 @@ import { RiskIndicator,formatMoney,formatRatio } from "./risk-indicator";
 import { budgetTone,positionRiskTone,stopAge } from "@/lib/risk-rules";
 import type { buildOverview,OverviewData } from "@/lib/depot-overview";
 
-export function OverviewPanel({overview,portfolio,depotValue}:{overview:ReturnType<typeof buildOverview>;portfolio:OverviewData["portfolio"];depotValue?:ReactNode}) {
+export function OverviewPanel({overview,portfolio,showDepotValue=false}:{overview:ReturnType<typeof buildOverview>;portfolio:OverviewData["portfolio"];showDepotValue?:boolean}) {
  const c=overview.calculation,currency=portfolio.currency;
  const marginAccount = isMarginAccount(portfolio.account_type);
  const profile = portfolio.risk_profile_configured ? portfolio.risk_profile : "";
@@ -24,10 +23,10 @@ export function OverviewPanel({overview,portfolio,depotValue}:{overview:ReturnTy
  const reviewed=[...overview.instruments].sort((a,b)=>(b.risk??-1)-(a.risk??-1)).slice(0,7);
  return <div className="space-y-5">
   {(overview.stalePrices>0||overview.staleFx>0)&&<div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-xs text-amber-100"><Clock3 size={14}/><span>{overview.stalePrices} Kursreferenzen · {overview.staleFx} Währungsreferenzen älter</span><InfoTip label="Referenzalter">Bewertungen verwenden den zuletzt belegten Stand. Die Quelle und ihr Zeitpunkt sind im Depot unter Kursdetails sichtbar. Veraltete Daten werden nicht als bestätigte Echtzeitkurse ausgegeben.</InfoTip></div>}
-  <div className="metric-grid">
-   <MetricCard label="Nettoliquidität" value={formatMoney(portfolio.net_liquidity,currency)}
+  <div className={showDepotValue ? "metric-grid" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-3"}>
+   {showDepotValue && <MetricCard label="Nettoliquidität" value={formatMoney(portfolio.net_liquidity,currency)}
      help="Gesamtwert des Kontos einschließlich Cash und Verbindlichkeiten. Er dient als Bezugsgröße für Positionsgröße und Risiko."
-     note={<div className="space-y-2">{portfolio.net_liquidity !== null && <div>{valueSource}{portfolio.data_as_of && ` · ${new Intl.DateTimeFormat("de-DE",{dateStyle:"short",timeStyle:"short",timeZone:"Europe/Berlin"}).format(new Date(portfolio.data_as_of))}`}</div>}{depotValue}</div>} />
+     note={portfolio.net_liquidity !== null && <div>{valueSource}{portfolio.data_as_of && ` · ${new Intl.DateTimeFormat("de-DE",{dateStyle:"short",timeStyle:"short",timeZone:"Europe/Berlin"}).format(new Date(portfolio.data_as_of))}`}</div>} />}
    <MetricCard label="Wertpapiermarktwert" value={formatMoney(c.grossExposure.value,currency)} help="Bruttomarktwert: Long plus absoluter Short-Marktwert, ohne Cash. Optionen werden mit ihrem Marktwert und ihrem Vertragsmultiplikator berücksichtigt." note={overview.instruments.length+" Wertpapiere · "+overview.active.length+" Teilpositionen"}/>
    <MetricCard label="Risiko bis Stopp" value={formatMoney(c.totalCalculableStopRisk.value,currency)} help="Gesamtes Rückgaberisiko vom aktuellen Kurs bis zur hinterlegten Stopporder. Ein Stopp ist keine garantierte Verlustobergrenze; Kurslücken und Ausführung können abweichen." note={overdue?<Link className="text-amber-200" href="/depot?sort=stop-age">{overdue} Stopps seit mindestens 14 Tagen unverändert ↗</Link>:"Alle erfassten offenen Positionen"}/>
    <MetricCard label="Risikobudget" value={formatMoney(overview.budget,currency)} help="Deine persönliche Obergrenze für das gesamte Stopprisiko offener Positionen, als Anteil an der Nettoliquidität." note={overview.budgetPct === null ? <Link className="text-accent" href="/einstellungen#trading-profil">Risikobudget festlegen</Link> : `${formatRatio(overview.budgetPct / 100)} vom Depotwert`}/>

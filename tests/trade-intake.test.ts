@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { csvTradeTable, parseTradeCsv } from "@/lib/trade-import";
 import { parseFlatexConfirmation } from "@/lib/flatex-import";
 import { flexResponse, parseFlexReport } from "@/lib/ibkr/flex-report";
+import { parseAccountBalanceCsv } from "@/lib/account-balances";
 import { fetchHistoricalReferenceRate } from "@/lib/market-data-providers/fx-core";
 
 const flatex = `flatex
@@ -42,12 +43,39 @@ describe("broker intake formats", () => {
   it("reads IBKR executions and optional dated valuations without confusing account currencies", () => {
     const report = parseFlexReport(flex, "EUR");
     expect(report.trades).toEqual([expect.objectContaining({ reference: "209842", instrument: "1234", name: "Example & Co", direction: "short_put", effect: "open", quantity: "1", multiplier: "100", strike: "10", expiry: "2026-12-18", conversion: "0.85" })]);
-    expect(report.valuation).toEqual({ netAssetValue: { date: "2026-01-12", total: "54321.01" }, marks: [{ conid: "1234", currency: "USD", date: "2026-01-12", price: "2.45" }] });
+    expect(report.valuation).toEqual({ netAssetValue: { date: "2026-01-12", total: "54321.01" }, balances: [], marks: [{ conid: "1234", currency: "USD", date: "2026-01-12", price: "2.45" }] });
     expect(parseFlexReport(flex, "CHF").trades[0].conversion).toBeUndefined();
     expect(parseFlexReport(flex, "CHF").valuation.netAssetValue).toBeUndefined();
     expect(() => parseFlexReport(flex.replace("openCloseIndicator=\"O\"", "openCloseIndicator=\"O;C\""), "EUR")).toThrow("Eröffnung/Schließung");
     expect(() => parseFlexReport('<!DOCTYPE x [<!ENTITY foo SYSTEM "file:///etc/passwd">]>' + flex, "EUR")).toThrow("Dokumenttypen");
     expect(() => flexResponse("<FlexStatementResponse><Status>Warn</Status><ErrorCode>1019</ErrorCode></FlexStatementResponse>")).toThrow("erstellt den Bericht");
+  });
+
+  it("imports reported cash and settled cash independently, without deriving a payout", () => {
+    const cash = `<CashReport><CashReportCurrency currency="BASE_SUMMARY" endingCash="-20" endingSettledCash="15"/>
+      <CashReportCurrency currency="USD" endingCash="90" endingSettledCash="80" toDate="20260112"/>
+      <CashReportCurrency currency="CHF" endingCash="120" toDate="20260110"/></CashReport>`;
+    const statement = flex.replace("</FlexStatement>", cash + "</FlexStatement>").replace(/<Trades>[\s\S]*?<\/Trades>/, "");
+    const report = parseFlexReport(statement, "EUR", "balances");
+    expect(report.trades).toEqual([]);
+    expect(report.valuation.marks).toEqual([]);
+    expect(report.valuation.balances).toEqual([
+      { kind: "cash_total", currency: "EUR", amount: "-20", settled: "15", observedAt: "2026-01-12T00:00:00.000Z" },
+      { kind: "cash_currency", currency: "USD", amount: "90", settled: "80", observedAt: "2026-01-12T00:00:00.000Z" },
+    ]);
+    expect(parseFlexReport(statement, "EUR").valuation.balances).toHaveLength(2);
+  });
+
+  it("requires a distinct dated broker value for withdrawable cash, including a reported zero", () => {
+    const header = "Art;Währung;Betrag;Stand\n";
+    expect(parseAccountBalanceCsv(header + "Depotwert;EUR;-1,25;2026-01-12\nAuszahlbar ohne Kredit;CHF;0;2026-01-12T14:30:00+01:00", "EUR")).toEqual([
+      { kind: "depot_value", currency: "EUR", amount: "-1.25", observedAt: "2026-01-12T00:00:00.000Z" },
+      { kind: "withdrawable", currency: "CHF", amount: "0", observedAt: "2026-01-12T13:30:00.000Z" },
+    ]);
+    expect(() => parseAccountBalanceCsv(header + "Auszahlbar ohne Kredit;EUR;-5;2026-01-12", "EUR")).toThrow("negativ");
+    expect(() => parseAccountBalanceCsv(header + "Depotwert;USD;5;2026-01-12", "EUR")).toThrow("EUR");
+    expect(() => parseAccountBalanceCsv(header + "Cash gesamt;EUR;5;2099-01-12", "EUR")).toThrow("Zukunft");
+    expect(() => parseAccountBalanceCsv(header + "Cash gesamt;EUR;5;2026-02-30", "EUR")).toThrow("Berichtstag");
   });
 
   it("uses only a dated and correctly directed reference rate", async () => {
