@@ -44,14 +44,31 @@ export function flexResponse(xml: string) {
 
 const compactDate = (raw = "") => raw.match(/^(\d{4})-?(\d{2})-?(\d{2})$/)?.slice(1).join("-") ?? "";
 
+function reportedBalance(value: string, field: string, scale: number) {
+  try {
+    const amount = exactTradeNumber(value, "decimal", 18);
+    // Match the precision of the destination without rounding through an intermediate scale.
+    return new Decimal(amount).toDecimalPlaces(scale, Decimal.ROUND_HALF_UP).toFixed();
+  } catch (error) {
+    throw new FlexReportError(`${field}: ${error instanceof Error ? error.message : "Betrag prüfen."}`);
+  }
+}
+
 function execution(row: Fields, baseCurrency: string, reportCurrency: string): Trade {
   const type = row.assetCategory === "OPT" ? "option" : row.assetCategory === "STK" ? (row.subCategory === "ETF" ? "etf" : "stock") : row.assetCategory === "FUND" ? "other" : null;
   const side = row.buySell === "BUY" ? "buy" : row.buySell === "SELL" ? "sell" : null;
   const indicator = row.openCloseIndicator;
   const effect = indicator === "O" ? "open" : indicator === "C" ? "close" : null;
+  const codes = (row.notes ?? "").split(/[;, ]+/);
+  const dateTime = (row.dateTime ?? "").match(/^(\d{4}-?\d{2}-?\d{2})[;T ](\d\d):?(\d\d):?(\d\d)$/);
+  const date = compactDate(row.tradeDate || dateTime?.[1]);
+  const expiration = codes.includes("Ep");
+  const worthlessExpiration = expiration && type === "option" && effect === "close" && row.transactionType === "BookTrade" &&
+    date !== "" && date === compactDate(row.expiry) && exactTradeNumber(row.tradePrice ?? "") === "0";
   if (!type || !side || !effect || !/^\d+$/.test(row.conid ?? "") || !row.tradeID ||
-    (row.transactionType && row.transactionType !== "ExchTrade" && row.transactionType !== "Trade") ||
-    (row.notes ?? "").split(/[;, ]+/).some(code => ["Ca", "Co", "A", "Ex", "Ep"].includes(code))) {
+    (expiration && !worthlessExpiration) ||
+    (row.transactionType && row.transactionType !== "ExchTrade" && row.transactionType !== "Trade" && !worthlessExpiration) ||
+    codes.some(code => ["Ca", "Co", "A", "Ex", "AEx", "GEA"].includes(code))) {
     throw new Error("Buchungsart, Kontraktkennung oder Kennzeichnung für Eröffnung/Schließung wird nicht unterstützt.");
   }
   const long = (side === "buy") === (effect === "open");
@@ -59,9 +76,7 @@ function execution(row: Fields, baseCurrency: string, reportCurrency: string): T
   const strike = option ? exactTradeNumber(row.strike ?? "") : undefined;
   const expiry = option ? compactDate(row.expiry) : undefined;
   if (type === "option" && (!option || !expiry || !row.multiplier)) throw new Error("Optionsdaten fehlen.");
-  const dateTime = (row.dateTime ?? "").match(/^(\d{4}-?\d{2}-?\d{2})[;T ](\d\d):?(\d\d):?(\d\d)$/);
   const time = dateTime ? dateTime.slice(2).join(":") : "";
-  const date = compactDate(row.tradeDate || dateTime?.[1]);
   if (!time) throw new Error("Ausführungszeit fehlt. In der Flex-Abfrage „Date/Time“ auswählen.");
   const conversion = reportCurrency === baseCurrency && row.fxRateToBase
     ? exactTradeNumber(row.fxRateToBase, "decimal", 12) : undefined;
@@ -104,8 +119,7 @@ export function parseFlexReport(xml: string, baseCurrency: string, mode: "full" 
         (row.currency || accountCurrency) === baseCurrency && !row.model && (!row.accountId || row.accountId === account)) {
       const date = compactDate(row.reportDate);
       if (date && (!netAssetValue || date > netAssetValue.date) && row.total) {
-        const total = exactTradeNumber(row.total, "decimal", 8);
-        netAssetValue = { date, total };
+        netAssetValue = { date, total: row.total };
       }
     }
     if (tag === "CashReportCurrency" && path.at(-1) === "CashReport" &&
@@ -132,6 +146,9 @@ export function parseFlexReport(xml: string, baseCurrency: string, mode: "full" 
     catch (error) { throw new FlexReportError(`Ausführung ${trades.length + 1}. ${error instanceof Error ? error.message : "Bericht prüfen."}`); }
   });
   if (root !== "FlexQueryResponse") flexResponse(xml);
+  if (netAssetValue) {
+    netAssetValue.total = reportedBalance(netAssetValue.total, `IBKR-Nettoliquidität am ${netAssetValue.date}`, 2);
+  }
   const balances = cashReportBalances(cashRows, accountCurrency, reportThrough);
   if (!account || (!foundTrades && !netAssetValue && !balances.length)) {
     throw new FlexReportError("Im Bericht fehlen verwendbare Handels- oder Kontowerte.");
@@ -149,8 +166,10 @@ function cashReportBalances(rows: Fields[], baseCurrency: string, reportThrough:
     if (!date || !/^[A-Z]{3}$/.test(currency ?? "")) continue;
     const kind = total ? "cash_total" : "cash_currency";
     const observedAt = statementDateTime(date);
-    const amount = exactTradeNumber(row.endingCash, "decimal", 8);
-    const settled = row.endingSettledCash ? exactTradeNumber(row.endingSettledCash, "decimal", 8) : undefined;
+    const amount = reportedBalance(row.endingCash, `IBKR-Cashsaldo in ${currency} am ${date}`, 8);
+    const settled = row.endingSettledCash
+      ? reportedBalance(row.endingSettledCash, `Abgerechnetes IBKR-Cash in ${currency} am ${date}`, 8)
+      : undefined;
     const key = `${kind}/${currency}`;
     const existing = report.get(key);
     if (existing && existing.observedAt === observedAt && (existing.amount !== amount || existing.settled !== settled)) {

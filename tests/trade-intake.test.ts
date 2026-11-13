@@ -66,6 +66,31 @@ describe("broker intake formats", () => {
     expect(parseFlexReport(statement, "EUR").valuation.balances).toHaveLength(2);
   });
 
+  it("accepts nine-decimal IBKR balances and rounds directly to their storage precision", () => {
+    const cash = `<CashReport><CashReportCurrency currency="BASE_SUMMARY" endingCash="-20.123456785" endingSettledCash="15.123456781"/></CashReport>`;
+    const statement = flex.replace('total="54321.01"', 'total="1234.564999999"')
+      .replace("</EquitySummaryInBase>", '<EquitySummaryByReportDateInBase currency="EUR" total="9876.543210987" reportDate="20260111"/></EquitySummaryInBase>')
+      .replace("</FlexStatement>", cash + "</FlexStatement>");
+    const report = parseFlexReport(statement, "EUR", "balances");
+    expect(report.valuation.netAssetValue).toEqual({ date: "2026-01-12", total: "1234.56" });
+    expect(report.valuation.balances[0]).toMatchObject({ amount: "-20.12345679", settled: "15.12345678" });
+    expect(() => parseFlexReport(statement.replace('endingCash="-20.123456785"', 'endingCash="invalid"'), "EUR", "balances")).toThrow("IBKR-Cashsaldo in EUR");
+  });
+
+  it("accepts an explicitly reported worthless expiration while rejecting assignment and exercise", () => {
+    const expires = flex.replace('expiry="20261218"', 'expiry="20260105"')
+      .replace('openCloseIndicator="O"', 'openCloseIndicator="C"')
+      .replace('tradePrice="2.60"', 'tradePrice="0" transactionType="BookTrade" notes="Ep"');
+    expect(parseFlexReport(expires, "EUR").trades[0]).toMatchObject({ effect: "close", direction: "long_put", price: "0" });
+    for (const invalid of [
+      expires.replace('notes="Ep"', 'notes="Ep;A"'),
+      expires.replace('notes="Ep"', 'notes="Ex"'),
+      expires.replace('notes="Ep"', 'notes="AEx"'),
+      expires.replace('tradePrice="0"', 'tradePrice="2"'),
+      expires.replace('expiry="20260105"', 'expiry="20260106"'),
+    ]) expect(() => parseFlexReport(invalid, "EUR")).toThrow("Eröffnung/Schließung");
+  });
+
   it("requires a distinct dated broker value for withdrawable cash, including a reported zero", () => {
     const header = "Art;Währung;Betrag;Stand\n";
     expect(parseAccountBalanceCsv(header + "Depotwert;EUR;-1,25;2026-01-12\nAuszahlbar ohne Kredit;CHF;0;2026-01-12T14:30:00+01:00", "EUR")).toEqual([

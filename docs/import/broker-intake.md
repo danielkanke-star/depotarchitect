@@ -8,7 +8,7 @@ Für historische Daten beim frühesten verfügbaren Einstieg beginnen. Laufende 
 
 | Quelle | Unterstützt |
 |---|---|
-| Interactive Brokers | Activity Flex Query als XML oder täglicher Abruf mit Abfrage-ID und befristetem Berichtstoken. Ausgeführte Aktien-, Fonds- und Optionskäufe und -verkäufe mit eindeutiger Eröffnungs- oder Schließungskennzeichnung. Optional Depotwert und Schlusskurse aus dem Bericht. |
+| Interactive Brokers | Activity Flex Query als XML oder täglicher Abruf mit Abfrage-ID und befristetem Berichtstoken. Ausgeführte Aktien-, Fonds- und Optionskäufe und -verkäufe mit eindeutiger Eröffnungs- oder Schließungskennzeichnung. Eindeutig gebuchte wertlose Optionsverfälle zählen als Schließungen zum ausgewiesenen Nullpreis. Optional Depotwert und Schlusskurse aus dem Bericht. |
 | flatex | Einzelne Kauf- und Verkaufsabrechnungen mit eingebettetem Text aus demselben Verrechnungskonto. Bis zu 50 PDFs mit insgesamt 100 MB. Anleihen mit Prozentkurs, Scans, Sammelabrechnungen, Stornos, Dividenden und Kapitalmaßnahmen brauchen andere Formate oder Erfassung. |
 | CSV oder TSV | Spaltenzuordnung für Kauf/Verkauf, Wertpapier, Handelstag, Stückzahl, Stückkurs und Handelswährung. Eindeutige Buchungsnummern sind besonders bei identischen Teilausführungen wichtig. Ohne Nummer werden identische Zeilen über mehrere Exporte als dieselbe Buchung behandelt. |
 | Manuell | Einstieg mit Wertpapier, Menge, Datum, Einstiegskurs und Handelswährung. Kategorie, Stopps, Margindaten und Kommentare lassen sich ergänzen. Verkäufe werden beim jeweiligen Los erfasst. |
@@ -26,6 +26,8 @@ Der Abruf läuft serverseitig einmal täglich auf dem bestehenden Vercel-Tarif u
 ## Kontowerte im Cockpit
 
 Für einen reinen Kontowerte-Abruf reichen **Account Information**, **Net Asset Value Summary in Base** und **Cash Report**. Die gleichen Felder können als IBKR-Flex-XML unter **Kontowerte importieren** geladen werden. Die gesonderte Importansicht lässt enthaltene Handelsbuchungen aus. Cash Report liefert den gemeldeten Cashsaldo und gegebenenfalls den bereits abgerechneten Cashsaldo. Währungen werden einzeln gezeigt, wenn der Bericht keine Gesamtsumme ausweist.
+
+Der Flex-Import rundet gemeldete Werte direkt auf die gespeicherte Genauigkeit. Die Nettoliquidität wird auf zwei und der Cashsaldo auf acht Nachkommastellen gespeichert.
 
 Im Margindepot steht die Nettoliquidität im Vordergrund. Der Cashsaldo erscheint daneben als Zusatzwert mit Datum und sichtbarem Minus bei negativem Saldo. Im Bardepot heißt die Zusatzzeile „Verrechnungskonto“. Der Auszahlungsbetrag erscheint nur, wenn er ausdrücklich aus einer Brokerquelle übernommen wurde. Die Kontowerte-CSV kann diesen Betrag samt Währung und Stand erfassen. Abgerechnetes Cash und Datenquellen sind über die Kontodetails einsehbar.
 
