@@ -27,7 +27,6 @@ export type Trade = {
 };
 
 export const MAX_TRADES = 2000;
-export const MAX_REPORT_BYTES = 3_000_000;
 export const tradeCsvFields = {
   reference: "Buchungsnummer",
   date: "Handelstag",
@@ -86,9 +85,12 @@ export function validateTrade(trade: Trade): Trade {
 
 export function csvTradeTable(raw: string) {
   const input = raw.replace(/^\uFEFF/, "");
-  const delimiter = [",", ";", "\t"].map(separator => ({ separator, width: parseDelimited(input.slice(0, 4000), separator)[0]?.length ?? 0 }))
+  const delimiter = [",", ";", "\t"].map(separator => {
+    try { return { separator, width: parseDelimited(input, separator, 1, 81)[0]?.length ?? 0 }; }
+    catch { return { separator, width: 0 }; }
+  })
     .sort((a, b) => b.width - a.width)[0].separator;
-  const [headers, ...rows] = parseDelimited(input, delimiter);
+  const [headers, ...rows] = parseDelimited(input, delimiter, MAX_TRADES + 2, 80);
   if (!headers || headers.length < 2 || headers.length > 80 || !rows.length || rows.length > MAX_TRADES) {
     throw new Error("Bitte eine CSV mit Kopfzeile und bis zu 2.000 Buchungen auswählen.");
   }

@@ -1,3 +1,9 @@
+export class FlatexPdfPageLimitError extends Error {
+  constructor() {
+    super("Bitte eine einzelne Kauf- oder Verkaufsabrechnung mit bis zu fünf Seiten auswählen.");
+  }
+}
+
 export async function extractFlatexText(file: File) {
   const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
   GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
@@ -5,7 +11,7 @@ export async function extractFlatexText(file: File) {
     useWasm: false, useSystemFonts: false, disableFontFace: true, isOffscreenCanvasSupported: false });
   try {
     const document = await pdf.promise;
-    if (document.numPages > 5) throw new Error("Bitte einzelne Abrechnungen mit bis zu fünf Seiten auswählen.");
+    if (document.numPages > 5) throw new FlatexPdfPageLimitError();
     const lines: string[] = [];
     for (let index = 1; index <= document.numPages; index++) {
       const content = await (await document.getPage(index)).getTextContent();

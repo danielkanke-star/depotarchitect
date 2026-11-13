@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { importAccountFile, type AccountImportState } from "@/app/(dashboard)/import/intake-actions";
 import { accountBalanceLabels } from "@/lib/account-balances";
-import { MAX_REPORT_BYTES } from "@/lib/trade-import";
+import { importFileSizeError, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_FILE_MB, prepareImportPayload, readImportText } from "@/lib/import-file";
 import { Card } from "./ui";
 import { formatMoney } from "./risk-indicator";
 
@@ -20,24 +20,28 @@ export function AccountValueImport({ portfolio }: { portfolio: string }) {
     event.preventDefault();
     if (!file || pending || state.saved) return;
     const format = file.name.toLowerCase().split(".").at(-1) ?? "";
-    if (!["xml", "csv"].includes(format) || file.size === 0 || file.size > MAX_REPORT_BYTES) {
-      setState({ error: true, message: "Eine IBKR-Flex-XML oder Kontowerte-CSV bis 3 MB auswählen." });
+    if (!["xml", "csv"].includes(format) || file.size === 0) {
+      setState({ error: true, message: "Eine IBKR-Flex-XML oder Kontowerte-CSV auswählen." });
+      return;
+    }
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      setState({ error: true, message: importFileSizeError });
       return;
     }
     setPending(true);
     try {
-      const bytes = await file.arrayBuffer();
-      let payload: string;
-      try { payload = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
-      catch { payload = new TextDecoder("windows-1252").decode(bytes); }
+      const payload = await prepareImportPayload(await readImportText(file));
       const form = new FormData();
       form.set("portfolio", portfolio);
       form.set("format", format);
       form.set("file_data", payload);
       form.set("mode", state.values ? "save" : "preview");
-      setState(await importAccountFile(initial, form));
-    } catch {
-      setState({ error: true, message: "Der Import konnte nicht erreicht werden. Bitte erneut versuchen." });
+      const result = await importAccountFile(initial, form).catch((): AccountImportState => ({
+        error: true, message: "Der Import konnte nicht erreicht werden. Bitte erneut versuchen.",
+      }));
+      setState(result);
+    } catch (error) {
+      setState({ error: true, message: error instanceof Error ? error.message : "Die Datei konnte nicht gelesen werden." });
     } finally {
       setPending(false);
     }
@@ -77,6 +81,7 @@ export function AccountValueImport({ portfolio }: { portfolio: string }) {
     <details className="border-t border-border pt-3 text-sm text-muted">
       <summary className="cursor-pointer">Welche Werte kann ich übernehmen?</summary>
       <ul className="mt-3 list-disc space-y-2 pl-5">
+        <li>Eine Datei bis {MAX_IMPORT_FILE_MB} MB.</li>
         <li>IBKR-Flex-XML mit „Account Information“, „Net Asset Value Summary in Base“ und „Cash Report“. Handelsbuchungen werden in diesem Schritt übersprungen.</li>
         <li>Für die CSV die Art „Depotwert“, „Cash gesamt“, „Cash je Währung“ oder „Auszahlbar ohne Kredit“ verwenden. Die Werte mit Währung und Datum (JJJJ-MM-TT) aus dem Brokerbericht oder der Brokeransicht übernehmen.</li>
         <li>Beim Auszahlungsbetrag die Angabe des Brokers ohne Kredit verwenden. Die App führt keine Auszahlung aus.</li>

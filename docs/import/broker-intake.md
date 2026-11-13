@@ -9,11 +9,13 @@ Für historische Daten beim frühesten verfügbaren Einstieg beginnen. Laufende 
 | Quelle | Unterstützt |
 |---|---|
 | Interactive Brokers | Activity Flex Query als XML oder täglicher Abruf mit Abfrage-ID und befristetem Berichtstoken. Ausgeführte Aktien-, Fonds- und Optionskäufe und -verkäufe mit eindeutiger Eröffnungs- oder Schließungskennzeichnung. Optional Depotwert und Schlusskurse aus dem Bericht. |
-| flatex | Einzelne Kauf- und Verkaufsabrechnungen mit eingebettetem Text aus demselben Verrechnungskonto. Bis zu 50 PDFs gleichzeitig. Anleihen mit Prozentkurs, Scans, Sammelabrechnungen, Stornos, Dividenden und Kapitalmaßnahmen brauchen andere Formate oder Erfassung. |
+| flatex | Einzelne Kauf- und Verkaufsabrechnungen mit eingebettetem Text aus demselben Verrechnungskonto. Bis zu 50 PDFs mit insgesamt 100 MB. Anleihen mit Prozentkurs, Scans, Sammelabrechnungen, Stornos, Dividenden und Kapitalmaßnahmen brauchen andere Formate oder Erfassung. |
 | CSV oder TSV | Spaltenzuordnung für Kauf/Verkauf, Wertpapier, Handelstag, Stückzahl, Stückkurs und Handelswährung. Eindeutige Buchungsnummern sind besonders bei identischen Teilausführungen wichtig. Ohne Nummer werden identische Zeilen über mehrere Exporte als dieselbe Buchung behandelt. |
 | Manuell | Einstieg mit Wertpapier, Menge, Datum, Einstiegskurs und Handelswährung. Kategorie, Stopps, Margindaten und Kommentare lassen sich ergänzen. Verkäufe werden beim jeweiligen Los erfasst. |
 
 Wertpapierabrechnungen liefern keine vollständige Kontohistorie. Ein- und Auszahlungen, historisch angesetzte Margin, offene Stopps, Splits und sonstige Kapitalmaßnahmen ergeben sich nicht zuverlässig aus einfachen Kauf- und Verkaufsdateien. Die Vorschau übernimmt keine erfundenen Werte. Bei importierten Positionen ohne bestätigte Kurszuordnung kann im Depot die Notierung nachgetragen werden.
+
+Einzeldateien können bis zu 25 MB groß sein. PDFs werden im Browser gelesen. Größere CSV- und XML-Dateien werden im Browser komprimiert und müssen anschließend in die 3-MB-Nutzlast des Imports passen. Enthält eine Handelsdatei mehr als 2.000 Ausführungen, den Berichtszeitraum aufteilen.
 
 ## IBKR in der Private Beta
 

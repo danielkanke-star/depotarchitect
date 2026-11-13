@@ -26,7 +26,7 @@ export function statementDateTime(date: string) {
 export function parseAccountBalanceCsv(raw: string, baseCurrency: string) {
   const text = raw.replace(/^\uFEFF/, "");
   const delimiter = text.split(/\r?\n/, 1)[0].includes(";") ? ";" : ",";
-  const [header, ...rows] = parseDelimited(text, delimiter);
+  const [header, ...rows] = parseDelimited(text, delimiter, 102, 4);
   if (header?.map(field => field.trim().toLowerCase()).join("|") !== "art|währung|betrag|stand" || !rows.length || rows.length > 100) {
     throw new Error("Bitte die CSV-Vorlage für Kontowerte mit den Spalten Art, Währung, Betrag und Stand verwenden.");
   }

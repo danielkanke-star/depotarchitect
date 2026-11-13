@@ -6,7 +6,9 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { createHash } from "node:crypto";
 import { requireUser } from "@/lib/auth";
 import { getOrCreatePortfolio } from "@/lib/portfolio";
-import { parseTradeCsv, MAX_REPORT_BYTES, MAX_TRADES, type TradeCsvMapping, type Trade, type TradeSource } from "@/lib/trade-import";
+import { parseTradeCsv, MAX_TRADES, type TradeCsvMapping, type Trade, type TradeSource } from "@/lib/trade-import";
+import { MAX_PDF_FILES } from "@/lib/import-file";
+import { readImportPayload } from "@/lib/import-file-server";
 import { parseFlatexConfirmation } from "@/lib/flatex-import";
 import { parseFlexReport } from "@/lib/ibkr/flex-report";
 import { fetchFlexReport, validFlexCredentials } from "@/lib/ibkr/flex-client";
@@ -62,9 +64,8 @@ export async function importAccountFile(_previous: AccountImportState, form: For
   const { supabase } = await requireUser();
   const portfolio = await getOrCreatePortfolio();
   if (value(form, "portfolio") !== portfolio.id) return { error: true, message: "Das aktive Depot hat sich geändert. Bitte den Import neu öffnen." };
-  const payload = String(form.get("file_data") ?? "");
-  if (!payload || Buffer.byteLength(payload) > MAX_REPORT_BYTES) return { error: true, message: "Bitte einen Bericht bis 3 MB auswählen." };
   try {
+    const payload = await readImportPayload(form);
     let values: AccountBalanceInput[];
     let account: string | null = null;
     if (value(form, "format") === "xml") {
@@ -98,9 +99,8 @@ export async function inspectTradeFile(_previous: IntakeState, form: FormData): 
   const { supabase } = await requireUser();
   const portfolio = await getOrCreatePortfolio();
   if (value(form, "portfolio") !== portfolio.id) return { error: true, message: "Das aktive Depot hat sich geändert. Bitte den Import neu öffnen." };
-  const payload = String(form.get("file_data") ?? "");
-  if (!payload || Buffer.byteLength(payload) > MAX_REPORT_BYTES) return { error: true, message: "Bitte eine Datei bis 3 MB auswählen." };
   try {
+    const payload = await readImportPayload(form);
     const kind = value(form, "source") as TradeSource;
     let account: string;
     let trades: Trade[];
@@ -108,7 +108,9 @@ export async function inspectTradeFile(_previous: IntakeState, form: FormData): 
       ({ account, trades } = parseFlexReport(payload, portfolio.currency));
     } else if (kind === "flatex") {
       const texts = JSON.parse(payload) as unknown;
-      if (!Array.isArray(texts) || !texts.length || texts.length > 50 || texts.some(text => typeof text !== "string")) throw new Error("Bitte bis zu 50 flatex-Abrechnungen auswählen.");
+      if (!Array.isArray(texts) || !texts.length || texts.length > MAX_PDF_FILES || texts.some(text => typeof text !== "string")) {
+        throw new Error(`Bitte bis zu ${MAX_PDF_FILES} flatex-Abrechnungen auswählen.`);
+      }
       const documents = texts.map((text: string, index) => {
         try { return parseFlatexConfirmation(text, portfolio.currency); }
         catch (error) { throw new Error(`Beleg ${index + 1}. ${error instanceof Error ? error.message : "Datei prüfen."}`); }
