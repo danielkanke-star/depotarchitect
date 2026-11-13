@@ -25,7 +25,17 @@ Der Abruf läuft serverseitig einmal täglich auf dem bestehenden Vercel-Tarif u
 
 Für einen reinen Kontowerte-Abruf reichen **Account Information**, **Net Asset Value Summary in Base** und **Cash Report**. Die gleichen Felder können als IBKR-Flex-XML unter **Kontowerte importieren** geladen werden. Die gesonderte Importansicht lässt enthaltene Handelsbuchungen aus. Cash Report liefert den gemeldeten Cashsaldo und gegebenenfalls den bereits abgerechneten Cashsaldo. Währungen werden einzeln gezeigt, wenn der Bericht keine Gesamtsumme ausweist.
 
-Der Auszahlungsbetrag ohne Kredit kommt aus der Auszahlungsansicht des Brokers. Er kann mit Währung und Stand über die Kontowerte-CSV erfasst werden. Cashsaldo, abgerechnetes Cash und freier Marginpuffer sind keine Ersatzwerte. Ein früherer Auszahlungsbetrag bleibt mit seinem ursprünglichen Datum sichtbar.
+Im Margindepot steht die Nettoliquidität im Vordergrund. Der Cashsaldo erscheint daneben als Zusatzwert mit Datum und sichtbarem Minus bei negativem Saldo. Im Bardepot heißt die Zusatzzeile „Verrechnungskonto“. Der Auszahlungsbetrag erscheint nur, wenn er ausdrücklich aus einer Brokerquelle übernommen wurde. Die Kontowerte-CSV kann diesen Betrag samt Währung und Stand erfassen. Abgerechnetes Cash und Datenquellen sind über die Kontodetails einsehbar.
+
+## Grundlage für die eigene historische Auswertung
+
+DepotArchitect soll die Kennzahlen aus gebuchten Bewegungen und eigenen Tagesbewertungen berechnen. Dafür reicht als Einstieg ein belegter Anfangsbestand mit Cash je Währung zum selben Stichtag. Für spätere Tage braucht die App die Änderungen seit diesem Stichtag und historische Bewertungen. Je nach Instrument gehören dazu auch Dividenden, Zinsen, Gebühren, Steuern, Depotüberträge, Splits und Optionsereignisse.
+
+- **Estably/IBKR.** Trades und Cash Report sind bereits unterstützt. Als nächster Schritt werden detaillierte Geldbuchungen und relevante Kapitalmaßnahmen benötigt. Dafür kommen Activity-Flex-Abschnitte wie Statement of Funds, Cash Transactions, Transfers und Corporate Actions infrage. Überschneidende Abschnitte müssen vor der Verbuchung abgeglichen werden. Ein berichteter NAV ist ein Abgleichswert.
+- **flatex.** Der vorhandene Import liest einzelne Kauf- und Verkaufsabrechnungen. Für den vollständigen Einstieg kommen ein Depotauszug mit Anfangsbestand und der Verrechnungskontoauszug mit Anfangssaldo und Buchungen hinzu. Der Kontoauszug führt Buchungstag und Wertstellung. Für die automatische Übernahme müssen die tatsächlichen Dokumentformate geprüft werden.
+- **Kurse.** Historische Schlusskurse gehören zur eindeutigen Notierung aus Wertpapier, Börse und Währung. Historische Währungsbewertungen können EZB-Tagesreferenzen verwenden. Für tatsächliche Geldbuchungen gilt der abgerechnete Betrag aus dem Beleg. Vor automatischem Einsatz einer Kursquelle sind Abdeckung, Speicherung und Anzeige für das jeweilige Nutzungsmodell zu prüfen.
+
+Tageswerte, Vermögensänderung, Rendite und Drawdown sollen aus dieser Datenbasis entstehen. Für geschlossene Tage gilt der letzte belegte Schlusskurs. Fehlende Notierungen an erwarteten Handelstagen unterbrechen die belegte Bewertung. Eine Abweichung zum Brokerwert bleibt als solche sichtbar.
 
 Konfiguration: `IBKR_FLEX_SECRET` als sensible Produktionsvariable in Vercel mit 32 zufälligen Bytes in Hexdarstellung, zusätzlich das vorhandene `CRON_SECRET`. Der AES-256-GCM-Schlüssel ist vom internen Abrufschlüssel getrennt abgeleitet. Pro Depot ist der verschlüsselte Inhalt an die Depot-ID gebunden. Die Scheduler-RPCs benötigen den internen Schlüssel und einen zeitlich begrenzten Job. Der Schlüssel wird serverseitig gesichert. Ein Verlust oder eine Änderung erfordert eine erneute Einrichtung der Verbindungen.
 
@@ -37,8 +47,10 @@ Bewertungen rechnen den Kurs aus der Handelswährung in die Depotwährung um. Be
 
 - [IBKR Flex Token](https://www.interactivebrokers.com/docs/web-api/flex-web-service/client-portal-configuration/enable-and-create-access-token)
 - [IBKR Activity Flex Query Reference](https://www.ibkrguides.com/reportingreference/reportguide/activity%20flex%20query%20reference.htm)
+- [IBKR Cash Report](https://www.ibkrguides.com/reportingreference/reportguide/cash%20reportfq.htm) und [Auszahlungen beim Barkonto](https://www.interactivebrokers.com/support/faq/content/determines-much-cash-available-withdrawal-32647712)
 - [IBKR Web-API-Authentifizierung](https://www.interactivebrokers.com/docs/web-api/authentication/introduction)
 - [flatex Wertpapierabrechnung](https://www.flatex.de/barrierefreiheit/)
+- [flatex Verrechnungskonto und Kontoauszüge](https://konto.flatex.de/formularcenter_bank/public/1305006.pdf)
 - [Portfolio Performance PDF-Import](https://help.portfolio-performance.info/en/reference/file/import/pdf-import/)
 - [GOV.UK File Upload](https://design-system.service.gov.uk/components/file-upload/) und [Check Answers](https://design-system.service.gov.uk/patterns/check-answers/)
 - [NN/g Progressive Disclosure](https://www.nngroup.com/articles/progressive-disclosure/)

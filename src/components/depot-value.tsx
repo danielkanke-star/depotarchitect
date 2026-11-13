@@ -9,7 +9,7 @@ import { InfoTip } from "./info-tip";
 export function DepotValue({ portfolio, inline = false }: { portfolio: Portfolio; inline?: boolean }) {
   const [state, action, pending] = useActionState(saveDepotValue, { message: "", ok: false });
   const [open, setOpen] = useState(false);
-  return <div id="depotwert" className={inline ? "text-xs" : "rounded-xl border border-border px-4 py-3"}>
+  return <div className={inline ? "text-xs" : "rounded-xl border border-border px-4 py-3"}>
     <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="text-sm font-medium text-accent hover:underline">
       {open ? "Manuelle Eingabe schließen" : portfolio.net_liquidity === null ? "Depotwert erfassen" : "Depotwert manuell erfassen"}
     </button>
