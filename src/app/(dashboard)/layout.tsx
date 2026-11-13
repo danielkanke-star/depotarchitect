@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
 import { MarketDataHeartbeat } from "@/components/market-data-heartbeat";
 import { getCurrentRole, requireUser } from "@/lib/auth";
+import { tradingProfileName } from "@/lib/risk-rules";
 import { getOrCreatePortfolio } from "@/lib/portfolio";
 import { signOut } from "./actions";
 import { switchDepot } from "./import/intake-actions";
@@ -19,7 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     </select></label>
     <button className="rounded-lg border border-border px-2.5 py-2 text-xs">Wechseln</button>
   </form>;
-  return <AppShell depotPicker={depotPicker} profile={portfolio.risk_profile} isAdmin={role === "admin"} accountAction={<form action={signOut}><button>Abmelden</button></form>}>
+  return <AppShell depotPicker={depotPicker} profile={tradingProfileName(portfolio.risk_profile, portfolio.risk_profile_configured)} isAdmin={role === "admin"} accountAction={<form action={signOut}><button>Abmelden</button></form>}>
     <MarketDataHeartbeat key={portfolio.id} />
     {children}
   </AppShell>;

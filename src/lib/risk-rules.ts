@@ -4,29 +4,54 @@ const BERLIN_DATE_FORMAT = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/
 const BERLIN_TIME_FORMAT = new Intl.DateTimeFormat("en-GB", { timeZone:"Europe/Berlin", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hourCycle:"h23" });
 
 export const TRADING_PROFILES = {
-  "Stockkonservativ 0,4": 0.4,
-  "Konservativ 0,6": 0.6,
-  "Normal 0,8": 0.8,
-  "Aggressiv 1,0": 1,
-  "Aggro 1,2": 1.2,
+  "Sehr konservativ": 0.4,
+  Konservativ: 0.6,
+  Normal: 0.8,
+  Aggressiv: 1,
+  Aggro: 1.2,
 } as const;
 export type TradingProfile = keyof typeof TRADING_PROFILES;
 export type RiskTone = "neutral" | "good" | "watch" | "high" | "danger";
-export const CATEGORY_TARGETS: Record<string, { min: number; max: number }> = {
-  kerninvestment: { min: 8, max: 8 }, momentumtrade: { min: 9, max: 9 },
-  taktischebeimischung: { min: 4, max: 4 }, hedge: { min: 1, max: 2 },
+
+const legacyProfiles: Record<string, TradingProfile> = {
+  "Stockkonservativ 0,4": "Sehr konservativ",
+  "Konservativ 0,6": "Konservativ",
+  "Normal 0,8": "Normal",
+  "Aggressiv 1,0": "Aggressiv",
+  "Aggro 1,2": "Aggro",
 };
-export function categoryTarget(name: string) {
-  return CATEGORY_TARGETS[name.toLowerCase().replace(/[\s_-]/g, "")] ?? null;
+
+export function normalizeTradingProfile(profile: string): TradingProfile | null {
+  return Object.hasOwn(TRADING_PROFILES, profile) ? profile as TradingProfile
+    : Object.hasOwn(legacyProfiles, profile) ? legacyProfiles[profile] : null;
 }
-export function profileFactor(profile: string): number | null {
-  return TRADING_PROFILES[profile as TradingProfile] ?? null;
+
+export function tradingProfileName(profile: string, configured = true) {
+  return configured ? normalizeTradingProfile(profile) ?? "Profil wählen" : "Profil wählen";
 }
-export function depotRiskBudget(netLiquidity: number | null, profile: string) {
+
+function profileFactor(profile: string): number | null {
+  const normalized = normalizeTradingProfile(profile);
+  return normalized ? TRADING_PROFILES[normalized] : null;
+}
+
+export function depotRiskBudget(netLiquidity: number | null, budgetPct: number | null) {
+  return netLiquidity !== null && Number.isFinite(netLiquidity) && netLiquidity > 0 &&
+    budgetPct !== null && Number.isFinite(budgetPct) && budgetPct > 0 && budgetPct <= 100
+    ? new Decimal(netLiquidity).mul(budgetPct).div(100).toNumber() : null;
+}
+
+export function riskReviewLimits(profile: string, concentrationBasisPct: number) {
   const factor = profileFactor(profile);
-  return netLiquidity !== null && Number.isFinite(netLiquidity) && netLiquidity > 0 && factor !== null
-    ? new Decimal(netLiquidity).mul("0.33").mul(factor).toNumber() : null;
+  if (factor === null) return null;
+  return {
+    watch: new Decimal("0.005").mul(factor).toNumber(),
+    high: new Decimal("0.011").mul(factor).toNumber(),
+    danger: new Decimal("0.02").mul(factor).toNumber(),
+    concentration: new Decimal(concentrationBasisPct).div(100).mul(factor).toNumber(),
+  };
 }
+
 export function berlinDate(date: Date = new Date()) {
   return BERLIN_DATE_FORMAT.format(date);
 }
@@ -60,16 +85,16 @@ export function budgetTone(utilization: number | null): RiskTone {
   return utilization === null ? "neutral" : utilization >= 1 ? "danger" : utilization >= 0.9 ? "high" : utilization >= 0.6 ? "watch" : "good";
 }
 export function positionRiskTone(riskToNetLiq: number | null, profile: string): RiskTone {
-  const factor = profileFactor(profile);
-  if (riskToNetLiq === null || factor === null) return "neutral";
-  return riskToNetLiq >= 0.02 * factor ? "danger" : riskToNetLiq >= 0.011 * factor ? "high" : riskToNetLiq >= 0.005 * factor ? "watch" : "good";
+  const limits = riskReviewLimits(profile, 15);
+  if (riskToNetLiq === null || !limits) return "neutral";
+  return riskToNetLiq >= limits.danger ? "danger" : riskToNetLiq >= limits.high ? "high" : riskToNetLiq >= limits.watch ? "watch" : "good";
 }
 // Concentration is independent of stop protection. Thresholds are personal review rules.
 export function concentrationTone(netLiqShare: number | null, profile: string, baseThreshold = 0.15): RiskTone {
-  const factor = profileFactor(profile);
-  return netLiqShare === null || factor === null ? "neutral" : netLiqShare >= baseThreshold * factor ? "watch" : "good";
+  const limits = riskReviewLimits(profile, new Decimal(baseThreshold).mul(100).toNumber());
+  return netLiqShare === null || !limits ? "neutral" : netLiqShare >= limits.concentration ? "watch" : "good";
 }
-export function riskConcentrationTone(share: number | null, instrumentCount: number, profile = "Aggressiv 1,0"): RiskTone {
+export function riskConcentrationTone(share: number | null, instrumentCount: number, profile = "Aggressiv"): RiskTone {
   const factor=profileFactor(profile);
   if (share === null || instrumentCount <= 1 || factor === null) return "neutral";
   const multiple = share * instrumentCount;

@@ -1,9 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { calculateSizing, depotRiskBudget, TRADING_PROFILES, stopAge, positionRiskTone, concentrationTone, riskConcentrationTone, calendarDays, berlinDateTime, parseBerlinDateTime } from "../src/lib/risk-rules";
+import { calculateSizing, depotRiskBudget, tradingProfileName, riskReviewLimits, stopAge, positionRiskTone, concentrationTone, riskConcentrationTone, calendarDays, berlinDateTime, parseBerlinDateTime } from "../src/lib/risk-rules";
 import { calculatePortfolio } from "../src/lib/calculations/portfolio-calculations";
 const input = { netLiquidity: 100000, existingRisk: 10000, riskComplete: true, riskPct: 1.2, entry: 100, stop: 90, fxToBase: 0.9, step: 0.01 };
 describe("personal risk and sizing rules", () => {
-  it.each(Object.entries(TRADING_PROFILES))("uses 33 percent times %s", (profile, factor) => expect(depotRiskBudget(100000, profile)).toBe(33000*factor));
+  it("uses the configured budget without multiplying it by the profile", () => {
+    expect(depotRiskBudget(100000, 39.6)).toBe(39600);
+    expect(depotRiskBudget(100000, 5)).toBe(5000);
+    expect(depotRiskBudget(100000, null)).toBeNull();
+    expect(depotRiskBudget(null, 5)).toBeNull();
+  });
+  it("shows only the profile name and applies the same limits as the risk indicators", () => {
+    expect(tradingProfileName("Aggro 1,2")).toBe("Aggro");
+    expect(tradingProfileName("Normal", false)).toBe("Profil wählen");
+    expect(riskReviewLimits("Aggro", 15)).toMatchObject({ watch: 0.006, concentration: 0.18 });
+    expect(positionRiskTone(0.006, "Aggro")).toBe("watch");
+    expect(concentrationTone(0.18, "Aggro", 0.15)).toBe("watch");
+  });
   it("deducts current total stop risk and rounds down fractional units", () => {
     const r = calculateSizing({ ...input, stop: 89 });
     expect(r).toMatchObject({ error: null, basis: 90000, plannedRisk: 1080, quantity: 109.09 });

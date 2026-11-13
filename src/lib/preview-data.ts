@@ -22,11 +22,11 @@ export function exampleSale(positionId: string, overrides: Partial<PositionSale>
 export function createPreviewData(now = new Date()): OverviewData {
   const iso = now.toISOString(); const age = (days: number) => new Date(now.getTime() - days * 86400000).toISOString();
   return {
-    portfolio: { id: "example-portfolio", user_id: "example-user", name: "Beispieldepot", currency: "EUR", net_liquidity: 100000, cash_balance: null,
-      data_as_of: iso, account_type: "margin_account", margin_used_pct: null, risk_budget_used_pct: null, risk_profile: "Aggressiv 1,0", created_at: iso, updated_at: iso },
-    settings: { portfolio_id: "example-portfolio", user_id: "example-user", risk_model: "risk_per_trade", risk_per_trade_pct: 1.2, max_margin_pct: 50,
+    portfolio: { id: "example-portfolio", user_id: "example-user", name: "Beispieldepot", currency: "EUR", net_liquidity: 100000, net_liquidity_source: "manual", cash_balance: null,
+      data_as_of: iso, account_type: "margin_account", margin_used_pct: null, risk_budget_used_pct: null, risk_profile: "Aggro", risk_profile_configured: true, created_at: iso, updated_at: iso },
+    settings: { portfolio_id: "example-portfolio", user_id: "example-user", risk_model: "risk_per_trade", risk_per_trade_pct: 1.2, risk_budget_pct: 39.6, max_margin_pct: 50,
       max_position_pct: 15, max_sector_pct: 50, max_drawdown_pct: 8, updated_at: iso },
-    categories: ["Kerninvestment", "Momentumtrade", "taktische Beimischung", "Hedge"].map((name,i) => ({ id: ["core", "momentum", "tactical", "hedge"][i], portfolio_id: "example-portfolio", user_id: "example-user", name, sort_order: i, is_active: true, created_at: iso })),
+    categories: ["Kerninvestment", "Momentumtrade", "taktische Beimischung", "Hedge"].map((name,i) => ({ id: ["core", "momentum", "tactical", "hedge"][i], portfolio_id: "example-portfolio", user_id: "example-user", name, sort_order: i, is_active: true, target_min: [8, 9, 4, 1][i], target_max: [8, 9, 4, 2][i], created_at: iso })),
     positions: [
       examplePosition({ id: "amzn1", quantity: 100, entry_margin_base: 1320, stop_updated_at: age(16), current_price_as_of: iso, current_fx_as_of: iso }),
       examplePosition({ id: "amzn2", quantity: 80, entry_date: "2026-10-05", entry_margin_base: 1056, stop_price: 118, stop_price_native: 118, stop_updated_at: age(3), current_price_as_of: iso, current_fx_as_of: iso }),

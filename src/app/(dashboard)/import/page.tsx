@@ -40,7 +40,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Promi
       <details className="mt-4"><summary className="cursor-pointer text-sm text-muted">Bestand aus früherem Format ersetzen</summary>
         <p className="my-3 text-xs text-amber-200">Dieser frühere Import ersetzt offene Snapshotpositionen. Positionen mit Verkaufshistorie sind geschützt.</p>
         <CsvImporter currentPositionCount={positions.filter(position => position.status !== "closed").length}
-          categoryNames={categories.map(category => category.name)} baseCurrency={portfolio.currency} imports={imports ?? []} />
+          categoryNames={categories.filter(category => category.is_active).map(category => category.name)} baseCurrency={portfolio.currency} imports={imports ?? []} />
       </details>
     </details>}
   </>;
