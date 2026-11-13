@@ -1,9 +1,9 @@
 import "server-only";
 import { get } from "node:https";
 import { FlexReportError, flexResponse } from "./flex-report";
-import { MAX_REPORT_BYTES } from "@/lib/trade-import";
 
 const baseUrl = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/";
+const MAX_FLEX_RESPONSE_BYTES = 3_000_000;
 export type FlexCredentials = { query: string; token: string };
 
 export function validFlexCredentials({ query, token }: FlexCredentials) {
@@ -28,7 +28,7 @@ function requestFlex(url: URL) {
       let total = 0;
       response.on("data", (chunk: Buffer) => {
         total += chunk.length;
-        if (total > MAX_REPORT_BYTES) {
+        if (total > MAX_FLEX_RESPONSE_BYTES) {
           reject(new FlexReportError("Der Flex-Bericht ist zu groß. Bitte den Zeitraum verkürzen."));
           response.destroy();
         } else chunks.push(chunk);

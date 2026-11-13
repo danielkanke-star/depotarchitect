@@ -187,7 +187,7 @@ function normalizeLabel(value: string) {
     .toLowerCase();
 }
 
-export function parseDelimited(text: string, delimiter: string) {
+export function parseDelimited(text: string, delimiter: string, rowLimit = Infinity, columnLimit = Infinity) {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -211,10 +211,12 @@ export function parseDelimited(text: string, delimiter: string) {
       quoted = true;
     } else if (character === delimiter) {
       row.push(cell.trim());
+      if (row.length >= columnLimit) throw new Error(`Die CSV-Datei enthält mehr als ${columnLimit} Spalten.`);
       cell = "";
     } else if (character === "\n") {
       row.push(cell.trim());
-      rows.push(row);
+      if (row.some(Boolean)) rows.push(row);
+      if (rows.length === rowLimit) return rows;
       row = [];
       cell = "";
     } else if (character !== "\r") {
@@ -225,10 +227,10 @@ export function parseDelimited(text: string, delimiter: string) {
   if (quoted) throw new Error("Die CSV-Datei enthält ein nicht geschlossenes Anführungszeichen.");
   if (cell.length > 0 || row.length > 0) {
     row.push(cell.trim());
-    rows.push(row);
+    if (row.some(Boolean)) rows.push(row);
   }
 
-  return rows.filter((candidate) => candidate.some((value) => value.trim() !== ""));
+  return rows;
 }
 
 function delimiterScore(rows: string[][]) {

@@ -4,7 +4,8 @@ import { startTransition, useActionState, useRef, useState, type DragEvent, type
 import Link from "next/link";
 import { ArrowRight, FileUp, Link2, Plus, Upload } from "lucide-react";
 import { addDepot, connectFlex, disconnectFlex, inspectTradeFile, syncFlex, type IntakeState } from "@/app/(dashboard)/import/intake-actions";
-import { csvTradeTable, MAX_REPORT_BYTES, tradeCsvFields, type TradeCsvField, type TradeCsvMapping, type TradeSource } from "@/lib/trade-import";
+import { csvTradeTable, tradeCsvFields, type TradeCsvField, type TradeCsvMapping, type TradeSource } from "@/lib/trade-import";
+import { importFileSizeError, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_FILE_MB, MAX_PDF_BATCH_MB, MAX_PDF_FILES, prepareImportPayload, readImportText } from "@/lib/import-file";
 import { berlinDate, TRADING_PROFILES } from "@/lib/risk-rules";
 import type { FlexStatus } from "@/lib/ibkr/flex-sync";
 import { Card } from "./ui";
@@ -49,7 +50,7 @@ export function NewDepotForm({ initialName = "" }: { initialName?: string }) {
   </details>;
 }
 
-type LoadedFile = { source: TradeSource; data: string; names: string[]; headers?: string[]; mapping?: TradeCsvMapping };
+type LoadedFile = { source: TradeSource; data: string | Blob; names: string[]; headers?: string[]; mapping?: TradeCsvMapping };
 
 export function TradeFileImport({ portfolio, hasPositions }: { portfolio: string; hasPositions: boolean }) {
   const input = useRef<HTMLInputElement>(null);
@@ -71,28 +72,31 @@ export function TradeFileImport({ portfolio, hasPositions }: { portfolio: string
     setLoading(true);
     try {
       if (!files.length) return;
-      if (files.length > 50 || files.some(file => file.size === 0 || file.size > MAX_REPORT_BYTES) ||
-        files.reduce((total, file) => total + file.size, 0) > 18_000_000) throw new Error("Bis zu 50 Dateien mit je maximal 3 MB und zusammen maximal 18 MB auswählen.");
+      if (files.some(file => file.size === 0)) throw new Error("Die Auswahl enthält eine leere Datei.");
+      if (files.some(file => file.size > MAX_IMPORT_FILE_BYTES)) throw new Error(importFileSizeError);
       const names = files.map(file => file.name);
       const extension = (name: string) => name.toLowerCase().split(".").at(-1);
       let next: LoadedFile;
       if (names.every(name => extension(name) === "pdf")) {
-        const { extractFlatexText } = await import("@/lib/flatex-pdf");
+        if (files.length > MAX_PDF_FILES || files.reduce((total, file) => total + file.size, 0) > MAX_PDF_BATCH_MB * 1_000_000) {
+          throw new Error(`Bis zu ${MAX_PDF_FILES} PDF-Belege mit insgesamt höchstens ${MAX_PDF_BATCH_MB} MB auswählen.`);
+        }
+        const { extractFlatexText, FlatexPdfPageLimitError } = await import("@/lib/flatex-pdf");
         const texts: string[] = [];
         for (const [index, file] of files.entries()) {
           try { texts.push(await extractFlatexText(file)); }
-          catch { throw new Error(`Beleg ${index + 1} konnte nicht gelesen werden. Bitte ein Original-PDF mit Text auswählen.`); }
+          catch (error) {
+            if (error instanceof FlatexPdfPageLimitError) throw new Error(`Beleg ${index + 1}. ${error.message}`);
+            throw new Error(`Beleg ${index + 1} konnte nicht gelesen werden. Bitte ein Original-PDF mit Text auswählen.`);
+          }
         }
-        next = { source: "flatex", data: JSON.stringify(texts), names };
+        next = { source: "flatex", data: await prepareImportPayload(JSON.stringify(texts)), names };
       } else if (files.length === 1 && extension(names[0]) === "xml") {
-        next = { source: "ibkr", data: await files[0].text(), names };
+        next = { source: "ibkr", data: await prepareImportPayload(await readImportText(files[0])), names };
       } else if (files.length === 1 && ["csv", "tsv"].includes(extension(names[0]) ?? "")) {
-        const bytes = await files[0].arrayBuffer();
-        let data: string;
-        try { data = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
-        catch { data = new TextDecoder("windows-1252").decode(bytes); }
+        const data = await readImportText(files[0]);
         const { headers, mapping } = csvTradeTable(data);
-        next = { source: "csv", data, names, headers, mapping };
+        next = { source: "csv", data: await prepareImportPayload(data), names, headers, mapping };
       } else throw new Error("Eine CSV- oder XML-Datei oder mehrere flatex-PDFs auswählen.");
       if (version === loadVersion.current) setLoaded(next);
     } catch (error) {
@@ -160,7 +164,8 @@ export function TradeFileImport({ portfolio, hasPositions }: { portfolio: string
     </div>}
     <details className="mt-5 text-sm text-muted"><summary className="cursor-pointer">Unterstützte Dateien</summary>
       <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
-        <li>flatex · einzelne Kauf- und Verkaufsabrechnungen aus dem Postfach. Mehrere PDFs können gemeinsam ausgewählt werden.</li>
+        <li>Bis zu {MAX_IMPORT_FILE_MB} MB je Datei.</li>
+        <li>flatex · bis zu {MAX_PDF_FILES} einzelne Kauf- und Verkaufsabrechnungen als PDF mit insgesamt {MAX_PDF_BATCH_MB} MB.</li>
         <li>CSV · Käufe und Verkäufe mit Stückkurs, Handelstag und Handelswährung. Spaltenüberschriften dürfen abweichen.</li>
         <li>IBKR · Activity Flex Query im XML-Format mit ausgeführten Trades.</li>
       </ul>

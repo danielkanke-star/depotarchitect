@@ -1,7 +1,8 @@
 import { SaxesParser } from "saxes";
 import Decimal from "decimal.js";
 import { statementDateTime, type AccountBalanceInput } from "@/lib/account-balances";
-import { exactTradeNumber, isinPattern, MAX_REPORT_BYTES, MAX_TRADES, validateTrade, type Trade } from "@/lib/trade-import";
+import { exactTradeNumber, isinPattern, MAX_TRADES, validateTrade, type Trade } from "@/lib/trade-import";
+import { MAX_IMPORT_FILE_BYTES } from "@/lib/import-file";
 
 export class FlexReportError extends Error {
   constructor(message: string, readonly status: "pending" | "credentials" | "report" | "unavailable" = "report") {
@@ -12,7 +13,7 @@ export class FlexReportError extends Error {
 type Fields = Record<string, string>;
 
 function xmlRead(xml: string, open: (tag: string, fields: Fields, path: readonly string[]) => void, value?: (tag: string, text: string) => void) {
-  if (xml.length > MAX_REPORT_BYTES || !xml.trimStart().startsWith("<")) throw new FlexReportError("Bitte einen Flex-Bericht im XML-Format verwenden.");
+  if (xml.length > MAX_IMPORT_FILE_BYTES || !xml.trimStart().startsWith("<")) throw new FlexReportError("Bitte einen Flex-Bericht im XML-Format verwenden.");
   const parser = new SaxesParser({ xmlns: false });
   const stack: string[] = [];
   parser.on("doctype", () => { throw new FlexReportError("XML-Dokumenttypen sind nicht zulässig."); });
